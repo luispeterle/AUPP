@@ -1,2 +1,0 @@
-* Added new Material Design
-* Add light/dark/system theme

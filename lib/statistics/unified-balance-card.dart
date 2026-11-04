@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:community_charts_flutter/community_charts_flutter.dart'
-    as charts;
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/statistics/overview-card.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
-import 'package:piggybank/statistics/balance-chart-models.dart';
-import 'package:piggybank/statistics/balance-comparison-chart.dart';
-import 'package:piggybank/statistics/record-filters.dart';
-import '../i18n.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/statistics/overview-card.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
+import 'package:aupp/statistics/balance-chart-models.dart';
+import 'package:aupp/components/time-chart.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/statistics/period-chart-format.dart';
+import 'package:aupp/statistics/record-filters.dart';
 
 /// A card displaying balance overview with an interactive comparison chart.
 ///
 /// Features:
-/// - Toggle between net savings view and separate income/expense bars
-/// - Optional cumulative savings line overlay
+/// - Income and expense bars side by side, or the cumulative savings as a
+///   line
 /// - Interactive period selection
 /// - Overview card integration showing totals for selected period
 class UnifiedBalanceCard extends StatefulWidget {
@@ -24,7 +23,6 @@ class UnifiedBalanceCard extends StatefulWidget {
   final DateTime? to;
   final Function(DateTime?)? onSelectionChanged;
   final DateTime? selectedDate;
-  final Map<int, String?> walletCurrencyMap;
 
   const UnifiedBalanceCard(
     this.from,
@@ -33,7 +31,6 @@ class UnifiedBalanceCard extends StatefulWidget {
     this.aggregationMethod, {
     this.onSelectionChanged,
     this.selectedDate,
-    this.walletCurrencyMap = const {},
   }) : super();
 
   @override
@@ -43,11 +40,8 @@ class UnifiedBalanceCard extends StatefulWidget {
 class _UnifiedBalanceCardState extends State<UnifiedBalanceCard> {
   late Map<String, ComparisonData> comparisonData;
   late ChartDateRangeConfig dateConfig;
-  late BalanceChartTickGenerator tickGenerator;
 
   String? _selectedPeriodKey;
-  bool _animate = true;
-  bool _showNetView = true;
   bool _showCumulativeLine = false;
 
   @override
@@ -61,12 +55,10 @@ class _UnifiedBalanceCardState extends State<UnifiedBalanceCard> {
     super.didUpdateWidget(oldWidget);
 
     if (_shouldReinitializeData(oldWidget)) {
-      _animate = true;
       _initializeData();
     }
 
     if (widget.selectedDate != oldWidget.selectedDate) {
-      _animate = false;
       _updateSelectionFromDate();
     }
   }
@@ -85,10 +77,8 @@ class _UnifiedBalanceCardState extends State<UnifiedBalanceCard> {
       widget.to,
     );
 
-    final aggregator = ComparisonDataAggregator(widget.aggregationMethod!,
-        walletCurrencyMap: widget.walletCurrencyMap);
+    final aggregator = ComparisonDataAggregator(widget.aggregationMethod!);
     comparisonData = aggregator.aggregate(widget.records, dateConfig);
-    tickGenerator = BalanceChartTickGenerator(widget.aggregationMethod!);
 
     _updateSelectionFromDate();
   }
@@ -104,45 +94,20 @@ class _UnifiedBalanceCardState extends State<UnifiedBalanceCard> {
     }
   }
 
-  void _onSelectionChanged(charts.SelectionModel<dynamic> model) {
+  void _onSelect(DateTime? date) {
     setState(() {
-      _animate = false;
-
-      if (!model.hasDatumSelection) {
+      if (date == null) {
         _clearSelection();
         return;
       }
-
-      // Filter out the cumulative line series from selection
-      final barDatums = model.selectedDatum
-          .where((d) => d.series.id != 'CumulativeBalance')
-          .toList();
-
-      if (barDatums.isEmpty) return;
-
-      final selectedDatum = barDatums.first;
-      final data = selectedDatum.datum as ComparisonData;
-
-      if (_selectedPeriodKey == data.period) {
-        // Toggle off if already selected
-        _clearSelection();
-      } else {
-        _selectedPeriodKey = data.period;
-        widget.onSelectionChanged?.call(data.dateTime);
-      }
+      _selectedPeriodKey = dateConfig.getKey(date);
+      widget.onSelectionChanged?.call(date);
     });
   }
 
   void _clearSelection() {
     _selectedPeriodKey = null;
     widget.onSelectionChanged?.call(null);
-  }
-
-  void _toggleViewMode() {
-    setState(() {
-      _showNetView = !_showNetView;
-      _initializeData();
-    });
   }
 
   void _toggleCumulativeLine() {
@@ -175,42 +140,58 @@ class _UnifiedBalanceCardState extends State<UnifiedBalanceCard> {
           _getFilteredRecords(),
           widget.aggregationMethod,
           isBalance: true,
-          walletCurrencyMap: widget.walletCurrencyMap,
           actions: [
             OverviewCardAction(
-              icon: _showNetView
-                  ? Icons.compare_arrows
-                  : Icons.account_balance_wallet,
-              onTap: _toggleViewMode,
-              tooltip: _showNetView
-                  ? "Switch to separate income and expense bars".i18n
-                  : "Switch to net savings view".i18n,
-            ),
-            OverviewCardAction(
               icon: _showCumulativeLine
-                  ? Icons.horizontal_rule
+                  ? Icons.compare_arrows
                   : Icons.show_chart,
               onTap: _toggleCumulativeLine,
               tooltip: _showCumulativeLine
-                  ? "Hide cumulative balance line".i18n
-                  : "Show cumulative balance line".i18n,
+                  ? 'Separar barras de renda e despesas'
+                  : 'Ver o saldo acumulado',
             ),
           ],
         ),
         const Divider(height: 1, indent: 24, endIndent: 24),
-        Container(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          height: 300,
-          child: BalanceComparisonChart(
-            data: comparisonData,
-            showNetView: _showNetView,
-            showCumulativeLine: _showCumulativeLine,
-            selectedPeriodKey: _selectedPeriodKey,
-            animate: _animate,
-            onSelectionChanged: _onSelectionChanged,
-          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: _chart(context),
         ),
       ],
+    );
+  }
+
+  Widget _chart(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final periods = comparisonData.values.toList()
+      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    final format = PeriodChartFormat(widget.aggregationMethod);
+    final List<TimeSeries> series;
+    if (_showCumulativeLine) {
+      series = [
+        TimeSeries('Saldo acumulado', Theme.of(context).colorScheme.primary,
+            [for (final p in periods) (p.dateTime, p.cumulativeSavings)]),
+      ];
+    } else {
+      series = [
+        TimeSeries('Receitas', incomeAmountColor(brightness),
+            [for (final p in periods) (p.dateTime, p.income)]),
+        TimeSeries('Despesas', expenseAmountColor(brightness),
+            [for (final p in periods) (p.dateTime, p.expenses)]),
+      ];
+    }
+    final pinned = _selectedPeriodKey == null
+        ? null
+        : comparisonData[_selectedPeriodKey!]?.dateTime;
+    return TimeChart(
+      bars: !_showCumulativeLine,
+      area: _showCumulativeLine,
+      series: series,
+      format: formatMoney,
+      dateLabel: format.box.format,
+      axisLabel: format.axis.format,
+      pinned: pinned,
+      onSelect: _onSelect,
     );
   }
 }

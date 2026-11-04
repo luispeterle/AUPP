@@ -73,7 +73,9 @@ __pycache__/
 !**/ios/**/default.pbxuser
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
-/android/key.properties
+android/key.properties
+*.jks
+*.keystore
 /assets/adi-registration.properties
 /build-debug-files/
 /store-assets/
@@ -85,3 +87,11 @@ macos/Flutter/ephemeral/flutter_export_environment.sh
 macos/Flutter/ephemeral/Flutter-Generated.xcconfig
 
 dist/
+# Personal data, keys and extensions; plugged in by scripts/link-private.sh.
+/private
+/pubspec_overrides.yaml
+*_obackup.json
+.vscode/launch.json
+/android/build/
+
+android/.kotlin/

@@ -1,11 +1,8 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-import 'package:piggybank/components/wallet_icon_square.dart';
-import 'package:piggybank/helpers/amount-input-utils.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/wallets/wallet-picker-page.dart';
+import 'package:aupp/components/wallet_icon_square.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/wallets/wallet-picker-page.dart';
 
 /// Displays source wallet and optional transfer destination in a single row.
 /// When [showTransferSide] is true, shows both source and destination with an
@@ -16,6 +13,10 @@ class WalletTransferRow extends StatelessWidget {
   final bool showTransferSide;
   final bool requireDestination;
   final bool readOnly;
+
+  /// Fork: new records always start from the default wallet ("Conta
+  /// corrente"); the source cannot be changed, the transfer target can.
+  final bool sourceLocked;
   final AutoSizeGroup walletNameSizeGroup;
   final ValueChanged<Wallet?> onSourceChanged;
   final ValueChanged<Wallet?> onDestinationChanged;
@@ -27,14 +28,14 @@ class WalletTransferRow extends StatelessWidget {
     required this.showTransferSide,
     this.requireDestination = false,
     required this.readOnly,
+    this.sourceLocked = false,
     required this.walletNameSizeGroup,
     required this.onSourceChanged,
     required this.onDestinationChanged,
   }) : super(key: key);
 
   Future<void> _pickSourceWallet(BuildContext context) async {
-    if (readOnly) return;
-    dismissInAppKeyboard();
+    if (readOnly || sourceLocked) return;
     final selected = await Navigator.push<Wallet>(
       context,
       MaterialPageRoute(builder: (_) => WalletPickerPage()),
@@ -46,7 +47,6 @@ class WalletTransferRow extends StatelessWidget {
 
   Future<void> _pickDestinationWallet(BuildContext context) async {
     if (readOnly) return;
-    dismissInAppKeyboard();
     final selected = await Navigator.push<Wallet>(
       context,
       MaterialPageRoute(
@@ -78,8 +78,7 @@ class WalletTransferRow extends StatelessWidget {
               child: Container(
                 margin: EdgeInsets.fromLTRB(20, 10, 10, 10),
                 child: AutoSizeText(
-                  formatWalletDisplay(selectedWallet,
-                      emptyLabel: "Select wallet".i18n),
+                  (selectedWallet?.name ?? 'Selecionar carteira'),
                   style: TextStyle(
                       fontSize: 18,
                       color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -119,8 +118,7 @@ class WalletTransferRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AutoSizeText(
-                      formatWalletDisplay(selectedDestinationWallet,
-                          emptyLabel: "No transfer".i18n),
+                      (selectedDestinationWallet?.name ?? 'Sem transferência'),
                       style: TextStyle(
                           fontSize: 18,
                           color: selectedDestinationWallet != null
@@ -135,7 +133,7 @@ class WalletTransferRow extends StatelessWidget {
                     ),
                     if (selectedDestinationWallet?.isArchived == true)
                       Text(
-                        "Archived".i18n,
+                        'Arquivado',
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context).colorScheme.error,

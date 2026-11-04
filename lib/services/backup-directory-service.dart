@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/services/logger.dart';
+import 'package:aupp/services/logger.dart';
+import 'package:aupp/services/service-config.dart';
 
 /// Outcome of a backup directory pick.
 enum BackupDirectoryPickOutcome {
@@ -59,7 +59,7 @@ class BackupDirectoryService {
   static final _logger = Logger.withClass(BackupDirectoryService);
 
   static const MethodChannel _channel =
-      MethodChannel('oinkoin/backup_directory');
+      MethodChannel('aupp/backup_directory');
 
   /// Test-only platform overrides. `Platform` cannot be faked on a desktop
   /// test host, so Android-specific behavior (SAF picker, probe, grants) is
@@ -83,7 +83,13 @@ class BackupDirectoryService {
   /// Opens the platform directory picker and verifies that the app can
   /// actually write into the chosen folder. Returns cancelled on platforms
   /// without custom-folder support, so callers keep the default folder.
-  static Future<BackupDirectoryPick> pickDirectory() async {
+  ///
+  /// Android only: [initialFolder] (relative to the storage root) is where the
+  /// picker opens, and a pick drops the grants of other folders except the
+  /// ones still in use, so backup and sync folders never revoke each other.
+  static Future<BackupDirectoryPick> pickDirectory({
+    String? initialFolder,
+  }) async {
     if (kIsWeb || _isIOS) {
       return const BackupDirectoryPick(
           BackupDirectoryPickOutcome.cancelled, null, null);
@@ -92,15 +98,24 @@ class BackupDirectoryService {
     String? uri;
     try {
       if (_isAndroid) {
-        final result =
-            await _channel.invokeMethod<dynamic>('pickBackupDirectory');
+        final prefs = ServiceConfig.sharedPreferences;
+        final result = await _channel.invokeMethod<dynamic>(
+          'pickBackupDirectory',
+          {
+            'keepUris': [
+              if (prefs?.getString('hybridSyncFolderUri')?.isNotEmpty ?? false)
+                prefs!.getString('hybridSyncFolderUri')!,
+            ],
+            if (initialFolder != null) 'initialFolder': initialFolder,
+          },
+        );
         if (result is Map) {
           path = result['path'] as String?;
           uri = result['uri'] as String?;
         }
       } else {
         path = await FilePicker.getDirectoryPath(
-            dialogTitle: "Select the destination folder".i18n);
+            dialogTitle: 'Selecione a pasta de destino');
       }
     } catch (e, st) {
       // A missing channel (e.g. outdated native side) or a picker failure
@@ -177,6 +192,22 @@ class BackupDirectoryService {
     }
   }
 
+  /// Copies the document [fileName] of the folder identified by [uri] to
+  /// [targetPath]. Returns false when there is no such document. Unlike the
+  /// other calls this one throws on failure: "could not read" must not look
+  /// like "nothing there".
+  static Future<bool> readBackupFile(
+    String uri,
+    String fileName,
+    String targetPath,
+  ) async =>
+      await _channel.invokeMethod<bool>('readFile', {
+        'uri': uri,
+        'fileName': fileName,
+        'targetPath': targetPath,
+      }) ??
+      false;
+
   /// Deletes the document named [fileName] from the folder identified by
   /// [uri]. Returns false when no such document exists or the folder is
   /// no longer accessible.
@@ -223,7 +254,7 @@ class BackupDirectoryService {
     try {
       final directory = Directory(path);
       if (!await directory.exists()) return false;
-      final probe = File('${directory.path}/.oinkoin_write_probe');
+      final probe = File('${directory.path}/.aupp_write_probe');
       await probe.writeAsString('');
       await probe.delete();
       return true;

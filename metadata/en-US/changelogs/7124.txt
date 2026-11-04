@@ -1,2 +1,0 @@
-- Wallet amount in the homepage now take in consideration planned future records
-- Introduce quick-actions (shortcut) when long-pressing the icon

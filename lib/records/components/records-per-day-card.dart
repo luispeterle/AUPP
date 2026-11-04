@@ -1,19 +1,22 @@
+import 'package:aupp/components/known-tags.dart';
+import 'package:aupp/components/missing-payment-code-icon.dart';
+import 'package:aupp/components/due-date-badge.dart';
+import 'package:aupp/desktop/record-popup.dart';
+import 'package:aupp/dinzo/dinzo-sync-service.dart';
+import 'package:aupp/dinzo/estimate-link.dart';
+import 'package:aupp/dinzo/payment-launcher.dart';
 import 'package:flutter/material.dart';
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/records-per-day.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/records/edit-record-page.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/services/transfer-icon-service.dart';
+import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/records-per-day.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/records/edit-record-page.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/services/transfer-icon-service.dart';
 
 import '../../components/category_icon_circle.dart';
 import '../../services/database/database-interface.dart';
-import '../../settings/constants/preferences-keys.dart';
-import '../../settings/preferences-utils.dart';
 
 class RecordsPerDayCard extends StatefulWidget {
   /// RecordsCard renders a MovementPerDay object as a Card
@@ -25,7 +28,6 @@ class RecordsPerDayCard extends StatefulWidget {
 
   final Function? onListBackCallback;
   final RecordsPerDay _movementDay;
-  final Map<int, String?> walletCurrencyMap;
   final bool isSelectMode;
   final Set<int> selectedRecordIds;
   final void Function(int)? onRecordLongPressed;
@@ -35,14 +37,26 @@ class RecordsPerDayCard extends StatefulWidget {
   /// start a new entry pre-dated to that day). Null means no action.
   final void Function(DateTime date)? onDateTapped;
 
+  /// Estimate occurrence being linked (see EstimateLink): it shows selected
+  /// and tapping a real record calls [onLinkTarget].
+  final Record? linkingEstimate;
+
+  /// Long press on an estimate occurrence (starts linking it).
+  final void Function(Record estimate)? onEstimateLongPressed;
+  final void Function(Record target)? onLinkTarget;
+  final void Function(Record estimate)? onLinkMatch;
+
   const RecordsPerDayCard(this._movementDay,
       {this.onListBackCallback,
-      this.walletCurrencyMap = const {},
       this.isSelectMode = false,
       this.selectedRecordIds = const {},
       this.onRecordLongPressed,
       this.onRecordTapped,
-      this.onDateTapped});
+      this.onDateTapped,
+      this.linkingEstimate,
+      this.onEstimateLongPressed,
+      this.onLinkTarget,
+      this.onLinkMatch});
 
   @override
   _RecordsPerDayCardState createState() => _RecordsPerDayCardState();
@@ -50,47 +64,27 @@ class RecordsPerDayCard extends StatefulWidget {
 
 class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     with AutomaticKeepAliveClientMixin {
-  final _titleFontStyle = const TextStyle(fontSize: 18.0);
-  final _currencyFontStyle =
-      const TextStyle(fontSize: 18.0, fontWeight: FontWeight.normal);
+  // Fork: denser rows (smaller fonts, icon further left, less spacing).
+  // The amount leads the row: bigger and bold, tabular figures so amounts
+  // line up; the name is plain and smaller.
+  final _titleFontStyle =
+      const TextStyle(fontSize: 15.0, fontWeight: FontWeight.normal);
+  final _currencyFontStyle = const TextStyle(
+    fontSize: 18.0,
+    fontWeight: FontWeight.w700,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
 
-  late int _numberOfNoteLinesToShow;
-  late bool _visualiseTags;
-  late bool _showWalletInRecordList;
   Map<int, Wallet> _walletsById = {};
   final DatabaseInterface _database = ServiceConfig.database;
 
   @override
   bool get wantKeepAlive => true;
 
-  /// Effective wallet→currency map: uses the passed-in map when non-empty,
-  /// otherwise falls back to each wallet's own currency from _walletsById.
-  Map<int, String?> get _effectiveCurrencyMap {
-    if (widget.walletCurrencyMap.isNotEmpty) return widget.walletCurrencyMap;
-    final defaultCurrency = getDefaultCurrency();
-    return {
-      for (final entry in _walletsById.entries)
-        entry.key:
-            (entry.value.currency != null && entry.value.currency!.isNotEmpty)
-                ? entry.value.currency
-                : defaultCurrency,
-    };
-  }
-
   @override
   void initState() {
     super.initState();
     _loadWallets();
-  }
-
-  void _loadPreferences() {
-    final prefs = ServiceConfig.sharedPreferences!;
-    _numberOfNoteLinesToShow = PreferencesUtils.getOrDefault<int>(
-        prefs, PreferencesKeys.homepageRecordNotesVisible)!;
-    _visualiseTags = PreferencesUtils.getOrDefault<bool>(
-        prefs, PreferencesKeys.visualiseTagsInMainPage)!;
-    _showWalletInRecordList = PreferencesUtils.getOrDefault<bool>(
-        prefs, PreferencesKeys.showWalletInRecordList)!;
   }
 
   Future<void> _loadWallets() async {
@@ -102,8 +96,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
       }
       return;
     }
-    final wallets = await _database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
+    final wallets = await _database.getAllWallets();
     if (!mounted) return;
     setState(() {
       _walletsById = {
@@ -117,131 +110,112 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
       getRecordAmountColor(record, Theme.of(context).brightness);
 
   Widget _buildRecordAmountWidget(Record record) {
-    final wallet =
-        record.walletId != null ? _walletsById[record.walletId] : null;
-
-    final effectiveMap = _effectiveCurrencyMap;
-    // For destination-view copies, the received amount is in the destination
-    // wallet's currency, so look up transferWalletId instead of walletId.
-    final currencyWalletId = record.isDestinationTransferView
-        ? record.transferWalletId
-        : record.walletId;
-    final recordCurrency = currencyWalletId != null
-        ? effectiveMap[currencyWalletId]
-        : wallet?.currency;
-
     final color = _amountColor(record);
     final style = color != null
         ? _currencyFontStyle.copyWith(color: color)
         : _currencyFontStyle;
-
-    // No currency info at all — fall back to plain number
-    final Widget content;
-    final transferContent = buildTransferAmountWidget(record, effectiveMap,
-        mainStyle: style);
-    if (transferContent != null) {
-      content = transferContent;
-    } else if (recordCurrency == null || recordCurrency.isEmpty) {
-      content = Text(getCurrencyValueString(record.value), style: style);
-    } else {
-      content = buildAmountWithCurrencyWidget(record.value!, recordCurrency,
-          mainStyle: style,
-          brightness: Theme.of(context).brightness,
-          neutralColor: color == null);
-    }
-
-    return ValueListenableBuilder<bool>(
-      valueListenable: ServiceConfig.privacyModeHiddenNotifier,
-      builder: (context, hidden, _) =>
-          hidden ? obscuredAmountTextWidget(style) : content,
-    );
+    return Text(formatMoney(record.value!),
+        style: style, textAlign: TextAlign.right);
   }
 
-  bool _dayHasMixedCurrencies(List<Record?> records) {
-    final effectiveMap = _effectiveCurrencyMap;
-    final currencies = <String?>{};
-    for (final r in records) {
-      if (r == null) continue;
-      final c = effectiveMap[r.walletId];
-      if (c != null && c.isNotEmpty) {
-        currencies.add(c);
-        if (currencies.length > 1) return true;
-      }
-    }
-    return currencies.length > 1;
-  }
-
-  double _dayBalanceNumeric() {
-    final records = balanceRelevantRecords(widget._movementDay.records ?? []);
-    if (records.isEmpty) return 0.0;
-    final effectiveMap = _effectiveCurrencyMap;
-    if (!_dayHasMixedCurrencies(records)) {
-      return computeConvertedTotal(records, effectiveMap).total;
-    }
-    final defaultCurrency = getDefaultCurrency();
-    if (defaultCurrency != null) {
-      return computeTotalInCurrency(records, effectiveMap, defaultCurrency)
-          .total;
-    }
-    return computeConvertedTotal(records, effectiveMap).total;
-  }
+  double _dayBalanceNumeric() =>
+      recordsTotal(balanceRelevantRecords(widget._movementDay.records ?? []));
 
   String _formatDayBalance() {
     final records = balanceRelevantRecords(widget._movementDay.records ?? []);
     // A day made up entirely of transfers has nothing to sum into a
     // meaningful balance — leave the header blank rather than show 0.
     if (records.isEmpty) return '';
+    return formatMoney(recordsTotal(records));
+  }
 
-    final effectiveMap = _effectiveCurrencyMap;
-    final allSameCurrency = !_dayHasMixedCurrencies(records);
-
-    if (allSameCurrency) {
-      final result = computeConvertedTotal(records, effectiveMap);
-      if (result.currency != null && result.currency!.isNotEmpty) {
-        return formatAmountWithCurrency(result.total, result.currency!);
-      }
-      final defaultCurrency = getDefaultCurrency();
-      if (defaultCurrency != null && defaultCurrency.isNotEmpty) {
-        return formatAmountWithCurrency(result.total, defaultCurrency);
-      }
-      return getCurrencyValueString(result.total);
-    } else {
-      // Mixed currencies — show only in default currency
-      final defaultCurrency = getDefaultCurrency();
-      if (defaultCurrency != null) {
-        final result =
-            computeTotalInCurrency(records, effectiveMap, defaultCurrency);
-        return formatCurrencyAmount(result.total, defaultCurrency);
-      }
-      return formatRecordsTotalResult(
-          computeConvertedTotal(records, effectiveMap));
-    }
+  /// Fork: the part of a purchase paid with a caixinha (Record.splitPrefix)
+  /// is shown on the purchase itself (icon + "R\$ 600 por: Caixinha"), not
+  /// as a row of its own — only when the purchase is in this same list (a
+  /// view of the caixinha alone still lists its outgoing part).
+  Map<String, Record> get _splitParts {
+    final records = widget._movementDay.records!.whereType<Record>();
+    final purchases = {
+      for (final r in records)
+        if (r.dinzoId != null && !r.isSplitPart) r.dinzoId!,
+    };
+    return {
+      for (final r in records)
+        if (r.isSplitPart && purchases.contains(r.splitParentDinzoId))
+          r.splitParentDinzoId!: r,
+    };
   }
 
   Widget _buildMovements() {
     /// Returns a ListView with all the movements contained in the MovementPerDay object
+    final parts = _splitParts;
+    final rows = [
+      for (final r in widget._movementDay.records!.whereType<Record>())
+        if (!(r.isSplitPart && parts.containsKey(r.splitParentDinzoId))) r,
+    ];
+    // An estimate right above the real record it matches.
+    for (final estimate in rows.where((r) => r.estimateMatch != null).toList()) {
+      if (!rows.contains(estimate.estimateMatch)) continue;
+      rows.remove(estimate);
+      rows.insert(rows.indexOf(estimate.estimateMatch!), estimate);
+    }
     return ListView.separated(
         physics: const NeverScrollableScrollPhysics(),
         shrinkWrap: true,
-        itemCount: widget._movementDay.records!.length,
+        itemCount: rows.length,
         separatorBuilder: (context, index) {
+          if (identical(rows[index].estimateMatch, rows[index + 1]) &&
+              widget.onLinkMatch != null) {
+            return _buildMatchLink(rows[index]);
+          }
           return Divider(
+            height: 1,
             thickness: 0.5,
             endIndent: 10,
             indent: 10,
           );
         },
-        padding: const EdgeInsets.all(6.0),
+        padding: const EdgeInsets.symmetric(vertical: 2.0),
         itemBuilder: /*1*/ (context, i) {
-          return _buildMovementRow(widget._movementDay.records![i]!);
+          return _buildMovementRow(rows[i], splitPart: parts[rows[i].dinzoId]);
         });
   }
 
-  Widget _buildLeading(Record movement, bool isSelected) {
+  /// The dot joining an estimate to the real record of the same day and amount.
+  Widget _buildMatchLink(Record estimate) {
+    final scheme = Theme.of(context).colorScheme;
+    final busy = widget.isSelectMode || widget.linkingEstimate != null;
+    return Row(
+      children: [
+        const Expanded(child: Divider(height: 1, thickness: 0.5, indent: 10)),
+        Tooltip(
+          message: 'Vincular estimativa',
+          child: Material(
+            color: scheme.primary,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: busy ? null : () => widget.onLinkMatch!(estimate),
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: Icon(Icons.link, size: 18, color: scheme.onPrimary),
+              ),
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(height: 1, thickness: 0.5, endIndent: 10)),
+      ],
+    );
+  }
+
+  Widget _buildLeading(Record movement, bool isSelected, {Record? splitPart}) {
     final transferIcon = TransferIconService.icon;
     final transferEmoji = TransferIconService.iconEmoji;
     final isUncategorizedTransfer = movement.isTransfer && movement.category == null;
     final base = CategoryIconCircle(
+      circleSize: 36,
+      mainIconSize: 18,
+      overlayIconSize: 13,
       iconEmoji: isUncategorizedTransfer
           ? transferEmoji
           : movement.category?.iconEmoji,
@@ -252,18 +226,34 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
           ? TransferIconService.color
           : movement.category?.color,
       overlayIcon: movement.recurrencePatternId != null ? Icons.repeat : null,
-      topOverlayIcon: movement.isTransfer && movement.category != null &&
-              transferEmoji == null
-          ? transferIcon
-          : null,
+      topOverlayIcon: splitPart != null
+          ? Icons.savings
+          : movement.isTransfer && movement.category != null &&
+                  transferEmoji == null
+              ? transferIcon
+              : null,
       topOverlayEmoji: movement.isTransfer && movement.category != null
           ? transferEmoji
           : null,
-      topOverlayBackgroundColor: movement.isTransfer && movement.category != null
-          ? TransferIconService.color
-          : null,
+      topOverlayBackgroundColor: splitPart != null
+          ? Colors.purple
+          : movement.isTransfer && movement.category != null
+              ? TransferIconService.color
+              : null,
+      badgeIcon: movement.tags.contains(DinzoSyncService.estimateTag)
+          ? Icons.query_stats
+          : movement.tags.contains(DinzoSyncService.virtualTag)
+              ? Icons.savings
+              : movement.tags.contains(DinzoSyncService.manualTag)
+                  ? Icons.edit
+                  : null,
+      badgeColor: movement.tags.contains(DinzoSyncService.estimateTag)
+          ? const Color(0xFFF9A825)
+          : movement.tags.contains(DinzoSyncService.virtualTag)
+              ? Colors.purple
+              : null,
     );
-    if (!widget.isSelectMode) return base;
+    if (!widget.isSelectMode && widget.linkingEstimate == null) return base;
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -272,8 +262,8 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
           opacity: isSelected ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 150),
           child: Container(
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color:
@@ -286,111 +276,157 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     );
   }
 
-  Widget _buildMovementRow(Record movement) {
+  Widget _buildMovementRow(Record movement, {Record? splitPart}) {
     /// Returns a ListTile rendering the single movement row
 
-    final isSelected = widget.isSelectMode &&
-        movement.id != null &&
-        widget.selectedRecordIds.contains(movement.id);
+    final linking = widget.linkingEstimate != null;
+    final isEstimate = EstimateLink.isOccurrence(movement);
+    final isSelected = linking
+        ? EstimateLink.sameOccurrence(movement, widget.linkingEstimate)
+        : widget.isSelectMode &&
+            movement.id != null &&
+            widget.selectedRecordIds.contains(movement.id);
     final canSelect = !movement.isFutureRecord && movement.id != null;
 
+    final VoidCallback? holdAction = !widget.isSelectMode &&
+            !linking &&
+            isEstimate &&
+            widget.onEstimateLongPressed != null
+        ? () => widget.onEstimateLongPressed!(movement)
+        : widget.isSelectMode ||
+                linking ||
+                movement.isFutureRecord ||
+                movement.id == null
+            ? null
+            : () => widget.onRecordLongPressed?.call(movement.id!);
+
     final listTile = ListTile(
-      onTap: widget.isSelectMode && canSelect
+      contentPadding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+      horizontalTitleGap: 10,
+      minLeadingWidth: 36,
+      minVerticalPadding: 8,
+      visualDensity: const VisualDensity(vertical: -1),
+      onTap: linking
+          ? isEstimate
+              ? () => widget.onEstimateLongPressed?.call(movement)
+              : EstimateLink.canBeLinked(movement)
+                  ? () => widget.onLinkTarget?.call(movement)
+                  : null
+          : widget.isSelectMode && canSelect
           ? () => widget.onRecordTapped?.call(movement.id!)
           : !widget.isSelectMode
               ? () async {
-                  // Destination-view copies carry a modified value (received
-                  // amount, not original) — always edit the canonical DB record.
-                  final recordToEdit =
-                      movement.isDestinationTransferView && movement.id != null
-                          ? (await _database.getRecordById(movement.id!)) ??
-                              movement
-                          : movement;
-                  await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => EditRecordPage(
-                                passedRecord: recordToEdit,
-                                readOnly: movement.isFutureRecord,
-                              )));
+                  // Lists may show view copies (destination side of a
+                  // transfer, subcategory rolled up into its parent in the
+                  // statistics) — always edit the canonical DB record.
+                  final recordToEdit = movement.id != null
+                      ? (await _database.getRecordById(movement.id!)) ??
+                          movement
+                      : movement;
+                  if (!mounted) return;
+                  await openRecord(
+                    context,
+                    (context) => EditRecordPage(
+                      passedRecord: recordToEdit,
+                      readOnly: movement.isFutureRecord,
+                    ),
+                  );
                   if (widget.onListBackCallback != null)
                     await widget.onListBackCallback!();
                 }
               : null,
-      onLongPress:
-          widget.isSelectMode || movement.isFutureRecord || movement.id == null
-              ? null
-              : () => widget.onRecordLongPressed?.call(movement.id!),
+      onLongPress: holdAction,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             movement.title == null || movement.title!.trim().isEmpty
-                ? movement.category?.name ?? "Transfer".i18n
+                ? movement.category?.name ?? 'Transferência'
                 : movement.title!,
             style: _titleFontStyle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          if (_numberOfNoteLinesToShow > 0 &&
-              movement.description != null &&
-              movement.description!.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(
-                movement.description!,
-                style: TextStyle(
-                  fontSize: 15.0, // Slightly smaller than title
-                  color: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.color, // Lighter color
-                ),
-                softWrap: true,
-                maxLines:
-                    _numberOfNoteLinesToShow, // if index is 4, do not wrap
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          if (ServiceConfig.walletsEnabled &&
-              _showWalletInRecordList &&
-              !movement.isFutureRecord &&
-              movement.walletId != null &&
-              _walletsById.containsKey(movement.walletId))
-            Padding(
-              padding: const EdgeInsets.only(top: 2.0),
-              child: Text(
-                movement.isTransfer &&
-                        movement.transferWalletId != null &&
-                        _walletsById.containsKey(movement.transferWalletId)
-                    ? "${_walletsById[movement.walletId]!.name} → ${_walletsById[movement.transferWalletId]!.name}"
-                    : _walletsById[movement.walletId]!.name,
-                style: TextStyle(
-                  fontSize: 13.0,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
-              ),
-            ),
-          if (_visualiseTags && movement.tags.isNotEmpty)
-            _buildTagChipsRow(movement.tags),
+          if (movement.isHidden) _buildHiddenNote(),
+          if (movement.tags.any((t) => t != Record.hiddenTag))
+            _buildTagChipsRow(
+                movement.tags.where((t) => t != Record.hiddenTag).toSet()),
         ],
       ),
-      trailing: _buildRecordAmountWidget(movement),
-      leading: _buildLeading(movement, isSelected),
+      // Fork: paying opens the bank apps of the phone; a boleto / Pix
+      // occurrence still without its code blinks red until it gets one.
+      trailing: movement.markedPaid
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Tooltip(
+                  message: 'Já pago, esperando chegar da Dinzo',
+                  child: Icon(Icons.check_circle, color: Colors.green),
+                ),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
+          : movement.needsPaymentCode
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MissingPaymentCodeIcon(Record.billingKindOf(movement.tags)!),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
+          : movement.paymentCode != null
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DueDateBadge(
+                  show: movement.dueDateUnknown,
+                  child: _buildPayButton(movement.paymentCode!),
+                ),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
+          : movement.dueDateUnknown
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const DueDateBadge(show: true, child: SizedBox(width: 8)),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
+          : splitPart == null
+          ? _buildRecordAmountWidget(movement)
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildRecordAmountWidget(movement),
+                _buildSplitNote(splitPart),
+              ],
+            ),
+      leading: _buildLeading(movement, isSelected, splitPart: splitPart),
     );
 
-    Widget result = Container(
-      color: isSelected
-          ? Theme.of(context)
-              .colorScheme
-              .primaryContainer
-              .withValues(alpha: 0.4)
-          : null,
-      child: listTile,
+    Widget result = GestureDetector(
+      // Right click does what holding does on the phone.
+      onSecondaryTap: holdAction,
+      child: Material(
+        color: isSelected
+            ? Theme.of(context)
+                .colorScheme
+                .primaryContainer
+                .withValues(alpha: 0.4)
+            : Colors.transparent,
+        child: listTile,
+      ),
     );
 
-    // Apply reduced opacity for future records
-    if (movement.isFutureRecord) {
+    // Apply reduced opacity for future and hidden records
+    if ((movement.isFutureRecord || movement.isHidden) && !isSelected) {
       return Opacity(
         opacity: 0.5,
         child: result,
@@ -400,56 +436,130 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     return result;
   }
 
-  Widget _buildTagChipsRow(Set<String> tags) {
+  /// "Oculto" under the title of a record hidden from the Extrato, listed
+  /// only because "Exibir ocultos" is on.
+  Widget _buildHiddenNote() {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
     return Padding(
-      padding: const EdgeInsets.only(top: 6.0),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          List<Widget> tagChips = [];
-          for (final tag in tags) {
-            final chip = Container(
-                margin: EdgeInsets.symmetric(horizontal: 1),
-                child: Chip(
-                  label: Text(tag, style: TextStyle(fontSize: 12.0)),
-                  visualDensity: VisualDensity.compact,
-                ));
-            tagChips.add(chip);
-          }
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: tagChips,
+      padding: const EdgeInsets.only(top: 2.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.visibility_off, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            'Oculto do Extrato',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontStyle: FontStyle.italic,
+              color: color,
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
+
+  /// "R\$ 600,00 por: Caixinha Saude" under the purchase amount.
+  Widget _buildSplitNote(Record part) {
+    final amount = (part.value ?? 0).abs();
+    final payer = _walletsById[part.walletId]?.name ?? 'caixinha';
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: Text(
+        '${getCurrencyValueString(amount)} '
+        'por: $payer',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10.5,
+          color: Theme.of(context).textTheme.bodySmall?.color,
+        ),
+      ),
+    );
+  }
+
+  /// Fork: an estimate with a payment code ([Record.paymentCode]): amber
+  /// Pix / boleto button left of the amount; tap copies the code and offers
+  /// the bank apps ([PaymentLauncher]).
+  Widget _buildPayButton(String code) {
+    final kind = Record.paymentCodeKind(code);
+    final IconData icon = kind == 'Pix'
+        ? KnownTag.of('Pix')!.icon!
+        : kind == 'Boleto'
+            ? KnownTag.of('Boleto')!.icon!
+            : Icons.qr_code_2;
+    return Tooltip(
+      message: 'Pagar $kind',
+      child: Material(
+        color: const Color(0xFFF9A825),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: widget.isSelectMode
+              ? null
+              : () => PaymentLauncher.open(context, code),
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(icon, size: 17, color: Colors.black87),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tags under the title: a known tag (bank, payment method, origin) is
+  /// just its icon, without a border; any other tag is a small outlined pill.
+  Widget _buildTagChipsRow(Set<String> tags) {
+    const height = 22.0;
+    final outline = Theme.of(context).colorScheme.outlineVariant;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final tag in KnownTag.sortForDisplay(tags))
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: KnownTag.of(tag) != null
+                    ? TagLabel(tag,
+                        size: height, textStyle: const TextStyle(fontSize: 11))
+                    : Container(
+                        height: height,
+                        padding: const EdgeInsets.symmetric(horizontal: 7),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: outline, width: 0.8),
+                          borderRadius: BorderRadius.circular(height / 2),
+                        ),
+                        child: Text(tag, style: const TextStyle(fontSize: 11)),
+                      ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Day header (day number plus weekday/month). Tapping it starts a new
   /// entry pre-dated to that day when [RecordsPerDayCard.onDateTapped] is set.
   Widget _buildDateHeader() {
+    // One line ("28  terça-feira, outubro 2026") to keep the header short.
     final content = Row(
       children: [
         Text(
           widget._movementDay.dateTime!.day.toString(),
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
-        Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(extractWeekdayString(widget._movementDay.dateTime!),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.right),
-                Text(
-                    extractMonthString(widget._movementDay.dateTime!) +
-                        ' ' +
-                        extractYearString(widget._movementDay.dateTime!),
-                    style: TextStyle(fontSize: 13),
-                    textAlign: TextAlign.right)
-              ],
-            ))
+        const SizedBox(width: 8),
+        Text(
+          '${extractWeekdayString(widget._movementDay.dateTime!)}, '
+          '${extractMonthString(widget._movementDay.dateTime!)} '
+          '${extractYearString(widget._movementDay.dateTime!)}',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        ),
       ],
     );
     final onDateTapped = widget.onDateTapped;
@@ -464,43 +574,33 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    _loadPreferences();
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 5, 0, 5),
+      margin: const EdgeInsets.fromLTRB(0, 2, 0, 2),
       child: Container(
           child: Column(
         children: <Widget>[
           Padding(
-              padding: const EdgeInsets.fromLTRB(15, 8, 8, 0),
+              padding: const EdgeInsets.fromLTRB(12, 6, 8, 0),
               child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _buildDateHeader(),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(0, 0, 22, 0),
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: ServiceConfig.privacyModeHiddenNotifier,
-                        builder: (context, hidden, _) {
-                          final dayBalance = _formatDayBalance();
-                          final style = TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.normal,
-                              color: getAmountColor(_dayBalanceNumeric(),
-                                  Theme.of(context).brightness));
-                          // Transfer-only days have no balance; keep them blank.
-                          if (hidden && dayBalance.isNotEmpty) {
-                            return obscuredAmountTextWidget(style);
-                          }
-                          return Text(
-                            dayBalance,
-                            style: style,
-                            overflow: TextOverflow.ellipsis,
-                          );
-                        },
+                      child: Text(
+                        _formatDayBalance(),
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                            color: getAmountColor(_dayBalanceNumeric(),
+                                Theme.of(context).brightness)),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     )
                   ])),
-          new Divider(
+          const Divider(
+            height: 8,
             thickness: 0.5,
           ),
           _buildMovements(),

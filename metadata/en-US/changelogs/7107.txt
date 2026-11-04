@@ -1,3 +1,0 @@
-- Bug fix
-- Add All to choose the number of categories for pie-chart
-- Change the behavior of the back-button press in the navbar

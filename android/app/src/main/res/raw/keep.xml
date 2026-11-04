@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fork: resource shrinking would drop the sync notification icon (only
+     referenced by name from Dart), and the notifications plugin then fails
+     to initialize in release builds. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_sync" />

@@ -10,6 +10,10 @@ class CategoryIconCircle extends StatelessWidget {
   final IconData? topOverlayIcon;
   final String? topOverlayEmoji;
   final Color? topOverlayBackgroundColor;
+
+  /// Small badge on the top-left corner (e.g. records entered by hand).
+  final IconData? badgeIcon;
+  final Color? badgeColor;
   final double mainIconSize;
   final double overlayIconSize;
   final double circleSize;
@@ -22,6 +26,8 @@ class CategoryIconCircle extends StatelessWidget {
     this.topOverlayIcon = null,
     this.topOverlayEmoji,
     this.topOverlayBackgroundColor,
+    this.badgeIcon,
+    this.badgeColor,
     this.mainIconSize = 20.0,
     this.overlayIconSize = 15.0,
     this.circleSize = 40.0,
@@ -134,7 +140,30 @@ class CategoryIconCircle extends StatelessWidget {
         if (topOverlayIcon != null || topOverlayEmoji != null)
           _buildTopOverlayIcon(context, topOverlayIcon, topOverlayEmoji,
               backgroundColor != null),
+        if (badgeIcon != null) _buildBadge(context),
       ],
+    );
+  }
+
+  Widget _buildBadge(BuildContext context) {
+    final size = circleSize * 0.42;
+    return Transform.translate(
+      offset: Offset(-size / 4, -size / 4),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: badgeColor ?? Theme.of(context).colorScheme.tertiary,
+          border: Border.all(
+              color: Theme.of(context).colorScheme.surface, width: 1.5),
+        ),
+        child: Icon(badgeIcon,
+            size: size * 0.6,
+            color: badgeColor != null
+                ? Colors.white
+                : Theme.of(context).colorScheme.onTertiary),
+      ),
     );
   }
 

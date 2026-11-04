@@ -1,37 +1,28 @@
-import 'dart:developer';
-import 'dart:io';
 
+import 'package:aupp/accounts/money-accounts.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:piggybank/utils/constants.dart';
-import 'package:piggybank/statistics/statistics-page.dart';
+import 'package:aupp/statistics/statistics-page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../categories/categories-tab-page-view.dart';
 import '../../helpers/alert-dialog-builder.dart';
 import '../../helpers/datetime-utility-functions.dart';
 import '../../helpers/records-utility-functions.dart';
-import '../../i18n.dart';
 import '../../models/category.dart';
 import '../../models/record.dart';
 import '../../models/wallet.dart';
-import '../../premium/splash-screen.dart';
 import '../../wallets/wallet-picker-page.dart';
-import '../../services/backup-service.dart';
-import '../../services/csv-service.dart';
 import '../../services/database/database-interface.dart';
-import '../../services/pdf-service.dart';
-import '../../services/platform-file-service.dart';
-import '../../services/profile-service.dart';
 import '../../services/recurrent-record-service.dart';
 import '../../services/service-config.dart';
+import '../../services/total-wallets.dart';
 import '../../settings/constants/homepage-time-interval.dart';
 import '../../settings/constants/overview-time-interval.dart';
 import '../../settings/constants/preferences-keys.dart';
-import '../../settings/preferences-utils.dart';
 import '../components/filter_modal_content.dart';
-import '../components/pdf_export_sections_dialog.dart';
+import '../components/tab_records_date_picker.dart' show shownPeriodOf;
+import 'package:aupp/dinzo/estimate-link.dart';
 
 class TabRecordsController {
   final VoidCallback onStateChanged;
@@ -56,11 +47,28 @@ class TabRecordsController {
   // Wallet filter state
   List<Wallet> allWallets = [];
   List<Wallet> selectedWallets = [];
+
+  /// Fork: wallets counted in the top totals and balance; empty = the
+  /// listed ones ([selectedWallets]).
+  List<Wallet> totalWallets = [];
+
+  /// Records after search/category/tag filters but before the wallet filter,
+  /// and the overview records unfiltered: the totals filter them by
+  /// [totalWallets].
+  List<Record?> _beforeWalletFilter = [];
+
+  /// Fork: whether the list also shows records tagged [Record.hiddenTag].
+  bool showHidden = ServiceConfig.sharedPreferences
+          ?.getBool(PreferencesKeys.extratoShowHidden) ??
+      false;
+
+  /// The list before hidden records are dropped: hiding only takes them off
+  /// the list, the totals still count them.
+  List<Record?> _listedWithHidden = [];
+  List<Record?>? _overviewAll;
   bool _walletPrefsLoaded = false;
-  int? _walletPrefsProfileId;
 
   // Future records state (for adjusting wallet balances)
-  bool _showFutureRecords = true;
   List<Record> _futureRecords = [];
 
   // Point-in-time balance state: when the selected period has fully elapsed
@@ -69,7 +77,6 @@ class TabRecordsController {
   DateTime? _balanceAsOfDate;
 
   String header = "";
-  String _activeProfileName = '';
   int backgroundImageIndex = DateTime.now().month;
   DateTime? customIntervalFrom;
   DateTime? customIntervalTo;
@@ -81,27 +88,14 @@ class TabRecordsController {
   }
 
   Future<void> initialize() async {
-    await reloadProfileName();
     await updateRecurrentRecordsAndFetchRecords();
     await _fetchCategories();
     await _loadWallets();
   }
 
-  Future<void> reloadProfileName() async {
-    final profileId = ProfileService.instance.activeProfileId;
-    if (profileId == null) {
-      _activeProfileName = '';
-      return;
-    }
-    final profile = await _database.getProfileById(profileId);
-    _activeProfileName = profile?.name ?? '';
-    onStateChanged();
-  }
-
   Future<void> onResume() async {
     await updateRecurrentRecordsAndFetchRecords();
     await _loadWallets();
-    runAutomaticBackup(null);
   }
 
   Future<void> onTabChange() async {
@@ -195,17 +189,38 @@ class TabRecordsController {
       }).toList();
     }
 
+    _beforeWalletFilter = tempRecords;
     // Wallet filter
     if (selectedWallets.isNotEmpty) {
       final selectedIds = selectedWallets.map((w) => w.id).toSet();
       tempRecords = applyTransferAwareWalletFilter(tempRecords, selectedIds);
     }
 
+    _listedWithHidden = tempRecords;
+    if (!showHidden) tempRecords = withoutHidden(tempRecords);
+
     if (!const DeepCollectionEquality().equals(filteredRecords, tempRecords)) {
       filteredRecords = tempRecords;
       onStateChanged();
     }
   }
+
+  /// [records] without the hidden ones. A purchase's caixinha part
+  /// ([Record.isSplitPart]) goes with it.
+  static List<Record?> withoutHidden(List<Record?> records) {
+    final hiddenDinzoIds = {
+      for (final r in records)
+        if (r != null && r.isHidden && r.dinzoId != null) r.dinzoId,
+    };
+    return records
+        .where((r) =>
+            r == null ||
+            !(r.isHidden || hiddenDinzoIds.contains(r.splitParentDinzoId)))
+        .toList();
+  }
+
+  /// Records in the period tagged [Record.hiddenTag].
+  int get hiddenCount => records.where((r) => r?.isHidden ?? false).length;
 
   /// Filters [records] to those belonging to [selectedWalletIds], treating
   /// transfers as visible from both source and destination perspectives.
@@ -222,7 +237,7 @@ class TabRecordsController {
   /// match above did NOT also match the destination, or vice versa. The UI
   /// uses this to color the amount by sign (this side's perspective) instead
   /// of the neutral color a fully-visible (or unfiltered) transfer gets.
-  @visibleForTesting
+  /// Also used by the home screen's month totals (fork).
   static List<Record?> applyTransferAwareWalletFilter(
     List<Record?> records,
     Set<int?> selectedWalletIds,
@@ -293,9 +308,8 @@ class TabRecordsController {
 
   // Data fetching
   Future<void> updateRecurrentRecordsAndFetchRecords() async {
-    final activeProfileId = ProfileService.instance.activeProfileId;
     var recurrentRecordService =
-        RecurrentRecordService(profileId: activeProfileId);
+        RecurrentRecordService();
     final int startDay = getHomepageRecordsMonthStartDay();
     HomepageTimeInterval hti = getHomepageTimeIntervalEnumSetting();
 
@@ -322,54 +336,19 @@ class TabRecordsController {
       header = getHeaderFromHomepageTimeInterval(hti);
     }
 
-    // Wallet balance display mode preference:
-    //   - 0 ("Always the latest value", default): never snapshot. Wallet
-    //     balances always show the live total, even for past periods.
-    //   - 1 ("Value at the end of the time interval"): past periods show a
-    //     point-in-time snapshot as of the end of the period (see _loadWallets).
-    final prefs = await SharedPreferences.getInstance();
-    final walletBalanceMode = PreferencesUtils.getOrDefault<int>(
-            prefs, PreferencesKeys.walletBalanceMode) ??
-        0;
-    if (walletBalanceMode == 1) {
-      _balanceAsOfDate =
-          isPastPeriodEnd(intervalTo, DateTime.now()) ? intervalTo : null;
-    } else {
-      _balanceAsOfDate = null;
-    }
-
-    // Check if future records should be shown
-    final showFutureRecords = PreferencesUtils.getOrDefault<bool>(
-            prefs, PreferencesKeys.showFutureRecords) ??
-        true;
-
-    // Calculate the view end date based on the current interval and preference
-    DateTime viewEndDate;
-    if (showFutureRecords) {
-      if (customIntervalFrom != null) {
-        viewEndDate = customIntervalTo!;
-      } else {
-        var hti = getHomepageTimeIntervalEnumSetting();
-        var interval =
-            await getTimeIntervalFromHomepageTimeInterval(_database, hti);
-        viewEndDate = interval[1]; // End date of the interval
-      }
-    } else {
-      // If future records are disabled, only generate up to end of today
-      final nowUtc = DateTime.now().toUtc();
-      viewEndDate = DateTime.utc(nowUtc.year, nowUtc.month, nowUtc.day)
-          .add(DateTimeConstants.END_OF_DAY)
-          .add(const Duration(milliseconds: 999));
-    }
+    // Fork: wallet balances are always the balance at the end of the shown
+    // period (the upstream "Wallet balance" option is ignored): past periods
+    // are a snapshot, current and future ones add every scheduled occurrence
+    // up to the period end (see _loadWallets).
+    _balanceAsOfDate = ServiceConfig.walletsEnabled ? intervalTo : null;
 
     // Update recurrent records and get future records
     List<Record> futureRecords =
-        await recurrentRecordService.updateRecurrentRecords(viewEndDate);
+        await recurrentRecordService.updateRecurrentRecords(intervalTo);
 
     // Fetch records from database
     List<Record?> newRecords;
-    newRecords = await getRecordsByInterval(_database, intervalFrom, intervalTo,
-        profileId: activeProfileId);
+    newRecords = await getRecordsByInterval(_database, intervalFrom, intervalTo);
     backgroundImageIndex = isFullYear(intervalFrom, intervalTo)
         ? DateTime.now().month
         : intervalFrom.month;
@@ -388,18 +367,18 @@ class TabRecordsController {
       return !recordDate.isBefore(fromDate) && !recordDate.isAfter(toDate);
     }).toList();
 
-    // Store future records within the current view interval for wallet balance
-    // adjustment. We use filteredFutureRecords (only those visible in the current
-    // interval) rather than the full futureRecords list, so the wallet balance
-    // at the top of the summary card stays consistent with the records shown
-    // in the income/expenses/balance section below.
-    _showFutureRecords = showFutureRecords;
-    _futureRecords = filteredFutureRecords;
+    // Every occurrence not stored yet, up to the period end: the wallet
+    // balance at the end of a current or future period includes them all,
+    // not only the ones inside the period.
+    _futureRecords = futureRecords;
 
-    // Merge future records with database records (only if enabled)
-    List<Record?> allRecords = showFutureRecords
-        ? [...newRecords, ...filteredFutureRecords]
-        : newRecords;
+    // The same money twice counts once, whatever the period shows.
+    EstimateLink.markMatches([...newRecords, ...futureRecords]);
+
+    // Merge future records with database records.
+    // Fork: only the accounts switched on (person button).
+    List<Record?> allRecords =
+        MoneyAccounts.shown([...newRecords, ...filteredFutureRecords]);
 
     records = allRecords;
     filteredRecords = allRecords;
@@ -413,6 +392,7 @@ class TabRecordsController {
     if (overviewTimeIntervalEnum == OverviewTimeInterval.DisplayedRecords) {
       // When set to DisplayedRecords, use the filtered records
       overviewRecords = null;
+      _overviewAll = null;
     } else {
       HomepageTimeInterval recordTimeIntervalEnum =
           mapOverviewTimeIntervalToHomepageTimeInterval(
@@ -422,13 +402,12 @@ class TabRecordsController {
       var overviewFrom = overviewInterval[0];
       var overviewTo = overviewInterval[1];
       var overviewDbRecords = await getRecordsByInterval(
-          _database, overviewFrom, overviewTo,
-          profileId: activeProfileId);
+          _database, overviewFrom, overviewTo);
 
-      // When showFutureRecords is enabled, also merge future records
+      // Also merge future records
       // that fall within the overview interval, keeping the wallet balance
       // consistent with the income/expenses displayed in the summary card.
-      if (showFutureRecords && futureRecords.isNotEmpty) {
+      if (futureRecords.isNotEmpty) {
         final fromDate =
             DateTime(overviewFrom.year, overviewFrom.month, overviewFrom.day);
         final toDate =
@@ -439,10 +418,12 @@ class TabRecordsController {
               DateTime(recordLocal.year, recordLocal.month, recordLocal.day);
           return !recordDate.isBefore(fromDate) && !recordDate.isAfter(toDate);
         }).toList();
-        overviewRecords = [...overviewDbRecords, ...matchingFuture];
+        overviewRecords =
+            MoneyAccounts.shown([...overviewDbRecords, ...matchingFuture]);
       } else {
-        overviewRecords = overviewDbRecords;
+        overviewRecords = MoneyAccounts.shown(overviewDbRecords);
       }
+      _overviewAll = overviewRecords;
     }
 
     // Refresh wallet balances since records have changed
@@ -487,53 +468,16 @@ class TabRecordsController {
       return;
     }
 
-    final wallets = await _database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
+    final wallets = await _database.getAllWallets();
     allWallets = wallets.where((w) => !w.isArchived).toList();
 
-    // When showFutureRecords is enabled, adjust wallet balances to include
-    // future (planned) record amounts that are generated in-memory but not
-    // persisted to the database. This ensures the wallet balance displayed
-    // on the homepage matches what users see in the record list.
-    if (_showFutureRecords && _futureRecords.isNotEmpty) {
-      // Compute future record sums per wallet
-      final futureSumByWallet = <int, double>{};
-      for (final record in _futureRecords) {
-        if (record.walletId != null) {
-          futureSumByWallet.update(
-            record.walletId!,
-            (sum) => sum + (record.value ?? 0.0),
-            ifAbsent: () => (record.value ?? 0.0),
-          );
-        }
-        // For transfers, also adjust the destination wallet's balance
-        if (record.transferWalletId != null && record.transferValue != null) {
-          futureSumByWallet.update(
-            record.transferWalletId!,
-            (sum) => sum + record.transferValue!.abs(),
-            ifAbsent: () => record.transferValue!.abs(),
-          );
-        }
-      }
-
-      // Apply future record adjustments to wallet balances
-      for (final wallet in allWallets) {
-        if (wallet.id != null && futureSumByWallet.containsKey(wallet.id)) {
-          wallet.balance =
-              (wallet.balance ?? 0.0) + futureSumByWallet[wallet.id]!;
-        }
-      }
-    }
-
-    // For a fully-elapsed period, replace the live balance with a
-    // point-in-time snapshot as of the end of that period. Future records
-    // never apply here: a future record is by definition dated after "end of
-    // today", which can't fall inside a period that already ended before
-    // today, so the adjustment above is always a no-op in this branch.
+    // Balance at the end of the shown period: what is stored up to then, plus,
+    // for a period not over yet, every occurrence not stored yet (recurrences,
+    // estimates still unlinked) dated up to its end. A period already over is
+    // only what really happened.
     if (_balanceAsOfDate != null) {
       final asOfWallets = await _database.getWalletsBalanceAsOf(
-          _balanceAsOfDate!,
-          profileId: ProfileService.instance.activeProfileId);
+          _balanceAsOfDate!);
       final asOfBalanceById = {
         for (final w in asOfWallets)
           if (w.id != null) w.id!: w.balance
@@ -543,27 +487,32 @@ class TabRecordsController {
           wallet.balance = asOfBalanceById[wallet.id];
         }
       }
+      if (!isPastPeriodEnd(_balanceAsOfDate!, DateTime.now())) {
+        final asOfUtc = _balanceAsOfDate!.toUtc();
+        _addFutureRecords(
+            _futureRecords.where(
+              (r) => !r.utcDateTime.isAfter(asOfUtc) && r.estimateMatch == null,
+            ));
+      }
     }
 
+    if (totalWallets.isNotEmpty) {
+      final totalIds = totalWallets.map((w) => w.id).toSet();
+      totalWallets = allWallets.where((w) => totalIds.contains(w.id)).toList();
+    }
     if (selectedWallets.isNotEmpty) {
       // Re-sync selectedWallets so balances stay fresh after external edits
       final selectedIds = selectedWallets.map((w) => w.id).toSet();
       selectedWallets =
           allWallets.where((w) => selectedIds.contains(w.id)).toList();
-    } else if (!_walletPrefsLoaded ||
-        _walletPrefsProfileId != ProfileService.instance.activeProfileId) {
-      // First load, or profile switched: restore saved selection for this profile
+    } else if (!_walletPrefsLoaded) {
+      // First load: restore the saved selection
       _walletPrefsLoaded = true;
-      _walletPrefsProfileId = ProfileService.instance.activeProfileId;
       selectedWallets = [];
-      final profileId = ProfileService.instance.activeProfileId;
-      if (profileId == null) {
-        onStateChanged();
-        return;
-      }
       final prefs = await SharedPreferences.getInstance();
+      totalWallets = TotalWallets.chosenIn(allWallets);
       final savedIds = prefs
-              .getStringList(PreferencesKeys.homePageWalletFilter(profileId)) ??
+              .getStringList(PreferencesKeys.homePageWalletFilter) ??
           [];
       if (savedIds.isNotEmpty) {
         final idSet = savedIds.map(int.tryParse).toSet();
@@ -582,20 +531,66 @@ class TabRecordsController {
     onStateChanged();
   }
 
+  /// Adds generated (never stored) records to the wallet balances.
+  void _addFutureRecords(Iterable<Record> records) {
+    final futureSumByWallet = <int, double>{};
+    for (final record in records) {
+      if (record.walletId != null) {
+        futureSumByWallet.update(
+          record.walletId!,
+          (sum) => sum + (record.value ?? 0.0),
+          ifAbsent: () => (record.value ?? 0.0),
+        );
+      }
+      // For transfers, also credit the destination wallet. Same-currency
+      // transfers store no transferValue: fall back to abs(value), like the
+      // persisted-balance query (ABS(COALESCE(transfer_value, value))).
+      if (record.transferWalletId != null) {
+        final received = record.transferValue ?? record.value;
+        if (received != null) {
+          futureSumByWallet.update(
+            record.transferWalletId!,
+            (sum) => sum + received.abs(),
+            ifAbsent: () => received.abs(),
+          );
+        }
+      }
+    }
+    for (final wallet in allWallets) {
+      if (wallet.id != null && futureSumByWallet.containsKey(wallet.id)) {
+        wallet.balance = (wallet.balance ?? 0.0) + futureSumByWallet[wallet.id]!;
+      }
+    }
+  }
+
   Future<void> navigateToWalletPicker(BuildContext context) async {
-    final result = await Navigator.push<List<Wallet>>(
+    final picked = await Navigator.push<WalletPickerResult>(
       context,
       MaterialPageRoute(
         builder: (_) => WalletPickerPage(
           multiSelect: true,
           initiallySelected: selectedWallets,
-          preferencesKey: PreferencesKeys.homePageWalletFilter(
-              ProfileService.instance.activeProfileId!),
+          preferencesKey: PreferencesKeys.homePageWalletFilter,
           asOfDate: _balanceAsOfDate,
+          balances: {
+            for (final w in allWallets)
+              if (w.id != null) w.id!: w.balance ?? 0.0
+          },
+          initiallyCounted: totalWallets,
+          initiallyShowHidden: showHidden,
+          hiddenCount: hiddenCount,
         ),
       ),
     );
-    if (result != null) {
+    if (picked != null) {
+      final result = picked.listed;
+      // The totals choice is a display setting: always kept.
+      totalWallets =
+          picked.counted.length == allWallets.length ? [] : picked.counted;
+      final prefs = await SharedPreferences.getInstance();
+      showHidden = picked.showHidden;
+      await prefs.setBool(PreferencesKeys.extratoShowHidden, showHidden);
+      await TotalWallets.save(totalWallets);
       // If every wallet is selected, treat it the same as "All accounts"
       selectedWallets = result.length == allWallets.length ? [] : result;
       filterRecords();
@@ -634,8 +629,19 @@ class TabRecordsController {
     }
   }
 
-  void navigateToStatisticsPage(BuildContext context) {
-    final currencyMap = walletCurrencyMap;
+  /// The period on screen.
+  Future<(DateTime, DateTime)> currentInterval() async {
+    if (customIntervalFrom != null && customIntervalTo != null) {
+      return (customIntervalFrom!, customIntervalTo!);
+    }
+    final interval = await getTimeIntervalFromHomepageTimeInterval(
+      _database,
+      getHomepageTimeIntervalEnumSetting(),
+    );
+    return (interval[0], interval[1]);
+  }
+
+  void navigateToStatisticsPage(BuildContext context, {StatisticsTab? tab}) {
     final wallets = walletMap;
     if (customIntervalTo == null) {
       var hti = getHomepageTimeIntervalEnumSetting();
@@ -645,7 +651,10 @@ class TabRecordsController {
                 MaterialPageRoute(
                   builder: (context) => StatisticsPage(userDefinedInterval[0],
                       userDefinedInterval[1], filteredRecords,
-                      walletCurrencyMap: currencyMap, walletMap: wallets),
+                      walletMap: wallets,
+                      showBudget: true,
+                      navigation: this,
+                      initialTab: tab),
                 ),
               ));
     } else {
@@ -654,18 +663,12 @@ class TabRecordsController {
         MaterialPageRoute(
           builder: (context) => StatisticsPage(
               customIntervalFrom, customIntervalTo, filteredRecords,
-              walletCurrencyMap: currencyMap, walletMap: wallets),
+              walletMap: wallets,
+              showBudget: true,
+              navigation: this,
+              initialTab: tab),
         ),
       );
-    }
-  }
-
-  // Menu and modal actions
-  Future<void> handleMenuAction(BuildContext context, int index) async {
-    if (index == 1) {
-      await _exportToCSV();
-    } else if (index == 2) {
-      await _exportToPDF(context);
     }
   }
 
@@ -709,122 +712,15 @@ class TabRecordsController {
 
   Future<void> _showNoCategoryDialog(BuildContext context) async {
     AlertDialogBuilder noCategoryDialog = AlertDialogBuilder(
-            "No Category is set yet.".i18n)
+            'Nenhuma Categoria foi definida ainda.')
         .addTrueButtonName("OK")
         .addSubtitle(
-            "You need to set a category first. Go to Category tab and add a new category."
-                .i18n);
+            'Você precisa definir uma categoria primeiro. Vá para a aba Categoria e adicione uma nova categoria.');
 
     await showDialog(
       context: context,
       builder: (context) => noCategoryDialog.build(context),
     );
-  }
-
-  Future<void> _exportToCSV() async {
-    // Build wallet name lookup: ID → name
-    final allWallets = await _database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
-    final walletNames = <int, String>{};
-    for (final w in allWallets) {
-      walletNames[w.id!] = w.name;
-    }
-
-    var csvStr = CSVExporter.createCSVFromRecordList(
-      filteredRecords,
-      walletNames: walletNames,
-    );
-    final path = await getApplicationDocumentsDirectory();
-    var csvFile = File(path.path + "/records.csv");
-    await csvFile.writeAsString(csvStr);
-
-    // Use platform-aware service (share on mobile, save-as on desktop)
-    await PlatformFileService.shareOrSaveFile(
-      filePath: csvFile.path,
-      suggestedName: 'oinkoin_records.csv',
-    );
-  }
-
-  Future<void> _exportToPDF(BuildContext context) async {
-    // PDF export is a Pro feature.
-    if (!ServiceConfig.isPremium) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => PremiumSplashScreen()),
-      );
-      return;
-    }
-
-    // Let the user pick which sections to include before generating.
-    final sections = await showDialog<Set<PdfSection>>(
-      context: context,
-      builder: (context) => const PdfExportSectionsDialog(),
-    );
-    if (sections == null || sections.isEmpty) {
-      return;
-    }
-
-    // Build wallet lookups: ID → name and ID → currency
-    final allWallets = await _database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
-    final walletNames = <int, String>{};
-    for (final w in allWallets) {
-      walletNames[w.id!] = w.name;
-    }
-
-    // Determine the currently viewed date range, mirroring the statistics page
-    DateTime from;
-    DateTime to;
-    if (customIntervalTo == null) {
-      final interval = await getTimeIntervalFromHomepageTimeInterval(
-          _database, getHomepageTimeIntervalEnumSetting());
-      from = interval[0];
-      to = interval[1];
-    } else {
-      from = customIntervalFrom!;
-      to = customIntervalTo!;
-    }
-
-    final bytes = await PDFExporter.createPdfFromRecordList(
-      filteredRecords,
-      from: from,
-      to: to,
-      walletNames: walletNames,
-      walletCurrencyMap: walletCurrencyMap,
-      sections: sections,
-    );
-    final path = await getApplicationDocumentsDirectory();
-    var pdfFile = File(path.path + "/records.pdf");
-    await pdfFile.writeAsBytes(bytes);
-
-    // Use platform-aware service (share on mobile, save-as on desktop)
-    await PlatformFileService.shareOrSaveFile(
-      filePath: pdfFile.path,
-      suggestedName: 'oinkoin_records.pdf',
-    );
-  }
-
-  void runAutomaticBackup(BuildContext? context) {
-    log("Checking if automatic backup should be fired!");
-    Future.wait([
-      BackupService.shouldCreateAutomaticBackup(),
-      BackupService.shouldCreateAutomaticDatabaseCopy(),
-    ]).then((results) {
-      if (results.any((shouldRun) => shouldRun)) {
-        log("Automatic backup fired!");
-        BackupService.createAutomaticBackup().then((operationSuccess) {
-          if (!operationSuccess && context != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(BackupService.ERROR_MSG)),
-            );
-          } else {
-            BackupService.removeOldAutomaticBackups();
-          }
-        });
-      } else {
-        log("Automatic backup not needed.");
-      }
-    });
   }
 
   // Date manipulation methods
@@ -853,7 +749,8 @@ class TabRecordsController {
   /// 4. Triggers a database fetch for the new date range.
   Future<void> shiftInterval(int shift) async {
     final int startDay = getHomepageRecordsMonthStartDay();
-    final HomepageTimeInterval hti = getHomepageTimeIntervalEnumSetting();
+    final HomepageTimeInterval hti =
+        _navPeriod ?? getHomepageTimeIntervalEnumSetting();
 
     DateTime baseDate = customIntervalFrom ?? DateTime.now();
 
@@ -871,8 +768,64 @@ class TabRecordsController {
           DateTime(baseDate.year, baseDate.month, baseDate.day + 7 * shift);
     }
 
-    List<DateTime> newInterval =
-        calculateInterval(hti, targetRef, monthStartDay: startDay);
+    await _showPeriod(hti, targetRef);
+  }
+
+  /// Fork: the switch next to the arrows. Month → the year containing it;
+  /// year → the month seen before switching (if in that year), else the
+  /// current month (this year) or January.
+  Future<void> toggleMonthYear() async {
+    final now = DateTime.now();
+    final base = customIntervalFrom ?? now;
+    if (_navPeriod == HomepageTimeInterval.CurrentMonth) {
+      // The cycle's end (a cycle from the 25th is the next month's).
+      _monthBeforeYear = customIntervalTo ?? now;
+      await _showPeriod(
+        HomepageTimeInterval.CurrentYear,
+        DateTime(base.year, 1, 1),
+      );
+      return;
+    }
+    final year = base.year;
+    final remembered = _monthBeforeYear;
+    final DateTime month = remembered != null && remembered.year == year
+        ? remembered
+        : year == now.year
+        ? now
+        : DateTime(year, 1, 1);
+    // The month (cycle) containing that date.
+    await _showPeriod(HomepageTimeInterval.CurrentMonth, month);
+  }
+
+  DateTime? _monthBeforeYear;
+
+  /// Fork: whether the switch month ↔ year is shown (month or year on screen).
+  bool get canToggleMonthYear =>
+      _navPeriod == HomepageTimeInterval.CurrentMonth ||
+      _navPeriod == HomepageTimeInterval.CurrentYear;
+
+  bool get showsYear => _navPeriod == HomepageTimeInterval.CurrentYear;
+
+  /// The period the arrows move by: the one on screen (fork: a year picked
+  /// while the setting is "month" moves by year), else the setting. Null =
+  /// not navigable ("All" or a picked range under the "All" setting).
+  HomepageTimeInterval? get _navPeriod {
+    final setting = getHomepageTimeIntervalEnumSetting();
+    final shown = shownPeriodOf(customIntervalFrom, customIntervalTo, setting);
+    if (shown == HomepageTimeInterval.CurrentMonth ||
+        shown == HomepageTimeInterval.CurrentYear) {
+      return shown;
+    }
+    return setting == HomepageTimeInterval.All ? null : setting;
+  }
+
+  Future<void> _showPeriod(HomepageTimeInterval hti, DateTime targetRef) async {
+    final int startDay = getHomepageRecordsMonthStartDay();
+    List<DateTime> newInterval = calculateInterval(
+      hti,
+      targetRef,
+      monthStartDay: startDay,
+    );
 
     // Update the state
     customIntervalFrom = newInterval[0];
@@ -906,14 +859,12 @@ class TabRecordsController {
   bool canShiftForward() => isNavigable;
 
   /// Shifting is disabled only for the [HomepageTimeInterval.All] view.
-  bool get isNavigable =>
-      getHomepageTimeIntervalEnumSetting() != HomepageTimeInterval.All;
+  bool get isNavigable => _navPeriod != null;
 
   TextEditingController get searchController => _searchController;
 
   DatabaseInterface get database => _database;
 
-  String get activeProfileName => _activeProfileName;
 
   get hasActiveFilters =>
       selectedTags.isNotEmpty || selectedCategories.isNotEmpty;
@@ -922,19 +873,39 @@ class TabRecordsController {
   double get totalWalletsBalance =>
       allWallets.fold(0.0, (sum, w) => sum + (w.balance ?? 0.0));
 
+  /// The wallets behind the top totals: [totalWallets] when set, else the
+  /// listed ones.
+  List<Wallet> get _countedWallets =>
+      totalWallets.isNotEmpty ? totalWallets : selectedWallets;
+
+  /// Fork: whether some wallet is outside the ones behind the totals (money
+  /// can be invested / set aside / taken back from it).
+  bool get hasWalletsOutsideTotal {
+    final counted = {for (final w in _countedWallets) w.id};
+    if (counted.isEmpty) return false;
+    return allWallets.any((w) => !w.isArchived && !counted.contains(w.id));
+  }
+
   double get selectedWalletsBalance {
-    if (selectedWallets.isEmpty) return totalWalletsBalance;
-    return selectedWallets.fold(0.0, (sum, w) => sum + (w.balance ?? 0.0));
+    if (_countedWallets.isEmpty) return totalWalletsBalance;
+    return _countedWallets.fold(0.0, (sum, w) => sum + (w.balance ?? 0.0));
   }
 
   String get selectedWalletsBalanceString {
-    final wallets = selectedWallets.isEmpty
+    final wallets = _countedWallets.isEmpty
         ? allWallets.where((w) => !w.isArchived).toList()
-        : selectedWallets;
-    return computeCombinedBalanceString(wallets);
+        : _countedWallets;
+    return formatMoney(walletsTotal(wallets));
   }
 
-  Map<int, String?> get walletCurrencyMap => buildWalletCurrencyMap(allWallets);
+  /// Records behind the top totals (income, expenses, balance).
+  List<Record?> get summaryRecords {
+    if (totalWallets.isEmpty) return overviewRecords ?? _listedWithHidden;
+    return applyTransferAwareWalletFilter(
+      _overviewAll ?? _beforeWalletFilter,
+      totalWallets.map((w) => w.id).toSet(),
+    );
+  }
 
   Map<int, Wallet> get walletMap => {
         for (final w in allWallets)
@@ -945,9 +916,25 @@ class TabRecordsController {
   /// null when showing the live balance (current/future period).
   DateTime? get balanceAsOfDate => _balanceAsOfDate;
 
+  /// The wallets behind the top balance, in wallet order, when there are two
+  /// to five: the wallet row shows each balance instead of a label. More
+  /// than that would not fit, so the label stays.
+  List<Wallet> get walletBreakdown {
+    if (_countedWallets.length < 2 || _countedWallets.length > 5) {
+      return const [];
+    }
+    final ids = _countedWallets.map((w) => w.id).toSet();
+    return allWallets.where((w) => ids.contains(w.id)).toList();
+  }
+
   String get walletRowLabel {
-    if (selectedWallets.isEmpty) return "All accounts".i18n;
+    if (totalWallets.isNotEmpty) {
+      return totalWallets.length <= 2
+          ? totalWallets.map((w) => w.name).join(' + ')
+          : '${totalWallets.length} carteiras no total';
+    }
+    if (selectedWallets.isEmpty) return 'Todas as contas';
     if (selectedWallets.length == 1) return selectedWallets.first.name;
-    return "%s Wallets".i18n.fill([selectedWallets.length.toString()]);
+    return '${selectedWallets.length.toString()} Carteiras';
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/recurrent-period.dart';
+import 'package:aupp/models/recurrent-period.dart';
 
 /// The value confirmed by [CustomIntervalDialog]'s Save button.
 class CustomIntervalSelection {
@@ -59,7 +58,7 @@ class _CustomIntervalDialogState extends State<CustomIntervalDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text("Custom".i18n),
+      title: Text('Personalizado'),
       content: Form(
         key: _formKey,
         child: Row(
@@ -78,7 +77,7 @@ class _CustomIntervalDialogState extends State<CustomIntervalDialog> {
                   validator: (v) {
                     final n = int.tryParse(v ?? '');
                     if (n == null || n <= 0) {
-                      return "Enter a valid number".i18n;
+                      return 'Insira um número válido';
                     }
                     return null;
                   },
@@ -114,13 +113,13 @@ class _CustomIntervalDialogState extends State<CustomIntervalDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Semantics(
               identifier: 'custom-interval-dialog-cancel',
-              child: Text("Cancel".i18n)),
+              child: Text('Cancelar')),
         ),
         TextButton(
           onPressed: _save,
           child: Semantics(
               identifier: 'custom-interval-dialog-save',
-              child: Text("Save".i18n)),
+              child: Text('Salvar')),
         ),
       ],
     );

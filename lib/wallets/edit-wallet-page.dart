@@ -1,26 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:piggybank/services/logger.dart';
+import 'package:aupp/services/logger.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:piggybank/components/wallet_icon_square.dart';
-import 'package:piggybank/components/icon_color_picker_section.dart';
-import 'package:piggybank/helpers/alert-dialog-builder.dart';
-import 'package:piggybank/components/amount_input_field.dart';
-import 'package:piggybank/helpers/amount-input-utils.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/style.dart';
-import 'package:piggybank/models/currency.dart';
-import 'package:piggybank/settings/currencies-page.dart';
-import 'package:piggybank/wallets/currency-picker-page.dart';
-import 'package:piggybank/wallets/wallet-picker-page.dart';
-import 'package:piggybank/premium/splash-screen.dart';
-import 'package:piggybank/premium/util-widgets.dart';
+import 'package:aupp/components/wallet_icon_square.dart';
+import 'package:aupp/components/icon_color_picker_section.dart';
+import 'package:aupp/helpers/alert-dialog-builder.dart';
+import 'package:aupp/components/amount_input_field.dart';
+import 'package:aupp/helpers/amount-input-utils.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/style.dart';
+import 'package:aupp/services/total-wallets.dart';
+import 'package:aupp/wallets/wallet-picker-page.dart';
+import 'package:aupp/wallets/wallet-sections.dart';
+import 'package:aupp/dinzo/dinzo-sync-service.dart';
 
 enum _WalletDeletionChoice { deleteAll, moveToWallet, keepInDefault }
 
@@ -45,16 +41,36 @@ class _EditWalletPageState extends State<EditWalletPage> {
   DatabaseInterface database = ServiceConfig.database;
 
   String? walletName;
-  String? _selectedCurrency;
   final _formKey = GlobalKey<FormState>();
   final _balanceController = TextEditingController();
   Timer? _mathDebounce;
 
   _EditWalletPageState(this.passedWallet);
 
+  /// With the bank sync, the wallet to invest is what the others leave: it
+  /// always exists, and stays that wallet.
+  bool get _managed =>
+      passedWallet?.isInvestmentReserve == true &&
+      DinzoSyncService.apiKey != null;
+
+  /// There is one wallet to invest.
+  bool _otherToInvest = false;
+
   @override
   void initState() {
     super.initState();
+    ServiceConfig.database.getAllWallets().then((wallets) {
+      if (!mounted) return;
+      setState(() {
+        _otherToInvest = wallets.any(
+          (w) => w.isInvestmentReserve && w.id != passedWallet?.id,
+        );
+        // Fork: a new one goes after the caixinhas there are.
+        if (passedWallet == null) {
+          wallet.sortOrder = WalletSection.nextSortOrder(wallets);
+        }
+      });
+    });
 
     if (passedWallet == null) {
       wallet = Wallet(
@@ -64,16 +80,10 @@ class _EditWalletPageState extends State<EditWalletPage> {
         isDefault: false,
         sortOrder: 0,
       );
-      final defaultCurrencyPref = ServiceConfig.sharedPreferences
-          ?.getString(PreferencesKeys.defaultCurrency);
-      if (defaultCurrencyPref != null && defaultCurrencyPref.isNotEmpty) {
-        _selectedCurrency = defaultCurrencyPref;
-      }
     } else {
       wallet = Wallet.fromMap(
           passedWallet!.toMap()..['balance'] = passedWallet!.balance);
       walletName = passedWallet!.name;
-      _selectedCurrency = passedWallet!.currency;
     }
 
     if (passedWallet == null) {
@@ -146,7 +156,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
           onChanged: (text) => setState(() => walletName = text),
           validator: (value) {
             if (value == null || value.isEmpty) {
-              return "Please enter the wallet name".i18n;
+              return 'Por favor, insira o nome da carteira';
             }
             return null;
           },
@@ -154,7 +164,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
           style: TextStyle(
               fontSize: 22.0, color: Theme.of(context).colorScheme.onSurface),
           decoration: InputDecoration(
-            hintText: "Wallet name".i18n,
+            hintText: 'Nome da carteira',
             errorStyle: TextStyle(fontSize: 16.0),
           ),
         ),
@@ -167,18 +177,15 @@ class _EditWalletPageState extends State<EditWalletPage> {
       margin: const EdgeInsets.fromLTRB(15, 5, 15, 5),
       child: AmountInputField(
         controller: _balanceController,
-        labelText: "Balance".i18n,
+        labelText: 'Saldo',
         allowNegative: true,
         autofocus: false,
-        currencyCode: _selectedCurrency,
         validator: (value) {
           // Empty is allowed — defaults to 0
           if (value == null || value.isEmpty) return null;
           var numericValue = tryParseSignedCurrencyString(value);
           if (numericValue == null) {
-            return amountFormatErrorMessage(
-              decimalDigits: resolveDecimalDigits(null, currencyCode: _selectedCurrency),
-            );
+            return amountFormatErrorMessage();
           }
           return null;
         },
@@ -186,96 +193,32 @@ class _EditWalletPageState extends State<EditWalletPage> {
     );
   }
 
-  Widget _getCurrencySection() {
-    final currencyInfo = _selectedCurrency != null
-        ? CurrencyInfo.byCode(_selectedCurrency!)
-        : null;
-    final currencyLabel = currencyInfo != null
-        ? '${currencyInfo.symbol}  ${currencyInfo.isoCode} - ${currencyInfo.name}'
-        : (_selectedCurrency != null ? _selectedCurrency! : "No currency".i18n);
-
-    final isProUser = ServiceConfig.isPremium;
+  Widget _getKindSection() {
     final isDefaultWallet = passedWallet?.isDefault ?? false;
-    final isRestricted = !isProUser && isDefaultWallet;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _getPageSeparatorLabel("Currency".i18n),
-        Divider(thickness: 0.5),
-        ListTile(
-          leading: Icon(Icons.currency_exchange,
-              color: Theme.of(context).colorScheme.onSurface),
-          title: Text(
-            currencyLabel,
-            style: TextStyle(
-              fontSize: 16,
-              color: _selectedCurrency != null
-                  ? Theme.of(context).colorScheme.onSurface
-                  : Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.5),
+        // Fork: what is created here is a caixinha; the reserves exist
+        // already, and an existing wallet can still change what it is for.
+        if (!isDefaultWallet && !_managed && passedWallet != null) ...[
+          _getPageSeparatorLabel('Para que serve'),
+          Divider(thickness: 0.5),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: DropdownButtonFormField<WalletKind>(
+              initialValue: wallet.kind,
+              items: [
+                for (final kind in WalletKind.values)
+                  if (kind != WalletKind.toInvest || !_otherToInvest)
+                    DropdownMenuItem(value: kind, child: Text(kind.label)),
+              ],
+              onChanged: (kind) {
+                if (kind != null) setState(() => wallet.kind = kind);
+              },
             ),
           ),
-          trailing: isRestricted
-              ? getProLabel(labelFontSize: 10.0)
-              : _selectedCurrency != null
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => setState(() => _selectedCurrency = null),
-                    )
-                  : null,
-          onTap: isRestricted
-              ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PremiumSplashScreen(),
-                    ),
-                  );
-                }
-              : () async {
-                  final result = await Navigator.push<String?>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CurrencyPickerPage(
-                        selectedCurrency: _selectedCurrency,
-                      ),
-                    ),
-                  );
-                  // null = user pressed back (no change)
-                  // '' (empty string) = user tapped "No currency" (clear)
-                  // 'USD' etc = user picked a currency
-                  if (result == null) return; // back pressed, no change
-                  final newCurrency = result.isEmpty ? null : result;
-                  if (passedWallet != null &&
-                      passedWallet!.currency != newCurrency &&
-                      mounted) {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: Text("Change Currency".i18n),
-                        content: Text(
-                            "Changing the currency does not convert existing record amounts. Are you sure?"
-                                .i18n),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            child: Text("Cancel".i18n),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            child: Text("Change".i18n),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed != true) return;
-                  }
-                  setState(() => _selectedCurrency = newCurrency);
-                },
-        ),
+        ],
       ],
     );
   }
@@ -283,25 +226,25 @@ class _EditWalletPageState extends State<EditWalletPage> {
   AppBar _getAppBar() {
     return AppBar(
       title:
-          Text(passedWallet == null ? "New Wallet".i18n : "Edit Wallet".i18n),
+          Text(passedWallet == null ? 'Nova caixinha' : 'Editar carteira'),
       leading: BackButton(onPressed: () => Navigator.pop(context)),
       actions: [
-        if (passedWallet != null)
+        if (passedWallet != null && !_managed)
           IconButton(
             icon: passedWallet!.isArchived
                 ? const Icon(Icons.unarchive)
                 : const Icon(Icons.archive),
             tooltip:
-                passedWallet!.isArchived ? "Unarchive".i18n : "Archive".i18n,
+                passedWallet!.isArchived ? 'Desarquivar' : 'Arquivar',
             onPressed: () async {
               bool isCurrentlyArchived = passedWallet!.isArchived;
               String message = isCurrentlyArchived
-                  ? "Do you really want to unarchive this wallet?".i18n
-                  : "Do you really want to archive this wallet?".i18n;
+                  ? 'Você realmente quer desarquivar esta carteira?'
+                  : 'Você realmente quer arquivar esta carteira?';
 
               AlertDialogBuilder dialog = AlertDialogBuilder(message)
-                  .addTrueButtonName("Yes".i18n)
-                  .addFalseButtonName("No".i18n);
+                  .addTrueButtonName('Sim')
+                  .addFalseButtonName('Não');
 
               var confirmed = await showDialog<bool>(
                 context: context,
@@ -315,7 +258,9 @@ class _EditWalletPageState extends State<EditWalletPage> {
               }
             },
           ),
-        if (passedWallet != null && !passedWallet!.isDefault)
+        if (passedWallet != null &&
+            !passedWallet!.isDefault &&
+            !_managed)
           PopupMenuButton<int>(
             icon: Icon(Icons.more_vert),
             shape: RoundedRectangleBorder(
@@ -329,7 +274,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
               PopupMenuItem<int>(
                 padding: EdgeInsets.all(20),
                 value: 1,
-                child: Text("Delete".i18n, style: TextStyle(fontSize: 16)),
+                child: Text('Excluir', style: TextStyle(fontSize: 16)),
               ),
             ],
           ),
@@ -341,29 +286,28 @@ class _EditWalletPageState extends State<EditWalletPage> {
     final choice = await showDialog<_WalletDeletionChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("Delete Wallet".i18n),
+        title: Text('Excluir carteira'),
         content: Text(
-            "What should happen to the records in this wallet? Transfer records involving this wallet will always be deleted."
-                .i18n),
+            'O que deveria acontecer com os registros nesta carteira? Os registros de transferência envolvendo esta carteira sempre serão excluídos.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx, rootNavigator: true)
                 .pop(_WalletDeletionChoice.deleteAll),
-            child: Text("Delete all records".i18n),
+            child: Text('Excluir todos os registros'),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx, rootNavigator: true)
                 .pop(_WalletDeletionChoice.moveToWallet),
-            child: Text("Move records to another wallet".i18n),
+            child: Text('Mover registros para outra carteira'),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx, rootNavigator: true)
                 .pop(_WalletDeletionChoice.keepInDefault),
-            child: Text("Keep records in default wallet".i18n),
+            child: Text('Manter registros na carteira padrão'),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(null),
-            child: Text("Cancel".i18n),
+            child: Text('Cancelar'),
           ),
         ],
       ),
@@ -398,7 +342,6 @@ class _EditWalletPageState extends State<EditWalletPage> {
     if (!_formKey.currentState!.validate()) return;
 
     wallet.name = walletName!;
-    wallet.currency = _selectedCurrency;
 
     // Calculate initial_amount from the entered balance
     final enteredBalanceText = _balanceController.text;
@@ -416,54 +359,12 @@ class _EditWalletPageState extends State<EditWalletPage> {
       _logger.info('Creating new wallet "${wallet.name}" (currency: ${wallet.currency ?? 'none'}, initialAmount: ${wallet.initialAmount})');
       await database.addWallet(wallet);
     } else {
-      _logger.info('Updating wallet "${wallet.name}" (ID ${passedWallet!.id}, currency: ${wallet.currency ?? 'none'}, initialAmount: ${wallet.initialAmount})');
+      _logger.info('Updating wallet "${wallet.name}" (ID ${passedWallet!.id}, initialAmount: ${wallet.initialAmount})');
       await database.updateWallet(passedWallet!.id!, wallet);
+      await TotalWallets.rename(passedWallet!.name, wallet.name);
     }
 
-    await _checkMixedCurrencyPrompt();
-
     if (mounted) Navigator.of(context).pop();
-  }
-
-  Future<void> _checkMixedCurrencyPrompt() async {
-    if (!mounted) return;
-    if (wallet.currency == null || wallet.currency!.isEmpty) return;
-
-    // Cheap check first — skip DB query if default is already configured
-    final defaultCurrency = ServiceConfig.sharedPreferences!
-        .getString(PreferencesKeys.defaultCurrency);
-    if (defaultCurrency != null && defaultCurrency.isNotEmpty) return;
-
-    final allWallets = await database.getAllWallets();
-    if (!mounted) return;
-
-    final activeCurrencies = allWallets
-        .where((w) =>
-            !w.isArchived && w.currency != null && w.currency!.isNotEmpty)
-        .map((w) => w.currency!)
-        .toSet();
-
-    if (activeCurrencies.length <= 1) return;
-
-    // Capture messenger before pop — ScaffoldMessenger persists above the navigator
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-            "You have wallets with different currencies. Set up conversion rates."
-                .i18n),
-        action: SnackBarAction(
-          label: "Set up".i18n,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => CurrenciesPage()),
-            );
-          },
-        ),
-        duration: const Duration(seconds: 6),
-      ),
-    );
   }
 
   @override
@@ -477,7 +378,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
           child: Column(
             children: [
               // Name + preview
-              _getPageSeparatorLabel("Name".i18n),
+              _getPageSeparatorLabel('Nome'),
               Divider(thickness: 0.5),
               Row(
                 children: [
@@ -486,11 +387,10 @@ class _EditWalletPageState extends State<EditWalletPage> {
                 ],
               ),
               // Balance
-              _getPageSeparatorLabel("Balance".i18n),
+              _getPageSeparatorLabel('Saldo'),
               Divider(thickness: 0.5),
               _getBalanceField(),
-              // Currency
-              _getCurrencySection(),
+              _getKindSection(),
               // Color + Icon (shared component, sections are collapsible internally)
               IconColorPickerSection(
                 initialIconEmoji: wallet.iconEmoji,
@@ -511,18 +411,11 @@ class _EditWalletPageState extends State<EditWalletPage> {
           ),
         ),
       ),
-      floatingActionButton: ValueListenableBuilder<double>(
-        valueListenable: inAppKeyboardHeight,
-        builder: (context, kbHeight, child) => Padding(
-          padding: EdgeInsets.only(bottom: kbHeight),
-          child: child,
-        ),
-        child: FloatingActionButton(
-          heroTag: null,
-          onPressed: _saveWallet,
-          tooltip: "Save".i18n,
-          child: const Icon(Icons.save),
-        ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: null,
+        onPressed: _saveWallet,
+        tooltip: 'Salvar',
+        child: const Icon(Icons.save),
       ),
     );
   }

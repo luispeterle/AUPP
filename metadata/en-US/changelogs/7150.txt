@@ -1,4 +1,0 @@
-- Add home widget
-- Add custom folder backup for database
-- Click on the date to add a record
-

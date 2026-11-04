@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
+  "site_webviews.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
@@ -22,5 +23,12 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+
+# Fork: sites inside the app. Optional: without WebKit they open in the browser.
+pkg_check_modules(WEBKIT IMPORTED_TARGET webkit2gtk-4.1)
+if(WEBKIT_FOUND)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WEBKIT)
+  target_compile_definitions(${BINARY_NAME} PRIVATE HAS_WEBKIT)
+endif()
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

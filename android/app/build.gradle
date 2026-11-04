@@ -28,6 +28,8 @@ android {
     }
 
     compileOptions {
+        // flutter_local_notifications needs desugaring (fork).
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
@@ -47,18 +49,21 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.github.emavgl.piggybank"
+        applicationId "app.aupp"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        resValue "string", "app_name", "AUPP"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         release {
             def keystoreProperties = new Properties()
-            def keystorePropertiesFile = rootProject.file('key.properties')
+            // The owner's key lives in private/ (ignored by git).
+            def privateProperties = rootProject.file('../private/android/key.properties')
+            def keystorePropertiesFile = privateProperties.exists() ? privateProperties : rootProject.file('key.properties')
             if (keystorePropertiesFile.exists()) {
                 keystorePropertiesFile.withReader('UTF-8') { reader ->
                     keystoreProperties.load(reader)
@@ -73,41 +78,18 @@ android {
     }
 
     buildTypes {
+        // Debug installs next to the real app and never touches its data.
+        debug {
+            applicationIdSuffix ".dev"
+            resValue "string", "app_name", "AUPP Debug"
+        }
         release {
-            signingConfig signingConfigs.release
+            // Without a key (a public checkout) the release still builds, debug-signed.
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
         }
     }
 
-    flavorDimensions "oinkoin"
-    productFlavors {
-        dev {
-            dimension "oinkoin"
-            applicationIdSuffix ".dev.pro"
-            resValue "string", "app_name", "Oinkoin Debug"
-        }
-        free {
-            dimension "oinkoin"
-            applicationIdSuffix ""
-            resValue "string", "app_name", "Oinkoin"
-        }
-        pro {
-            dimension "oinkoin"
-            applicationId "com.github.emavgl.piggybankpro"
-            resValue "string", "app_name", "Oinkoin Pro"
-        }
-        alpha {
-            dimension "oinkoin"
-            applicationId "com.github.emavgl.piggybank.alpha.pro"
-            resValue "string", "app_name", "Oinkoin Alpha"
-        }
-        fdroid {
-            dimension "oinkoin"
-            applicationId "com.github.emavgl.piggybankpro"
-            resValue "string", "app_name", "Oinkoin"
-        }
-    }
-
-    namespace 'com.example.piggybank' // MainActivity package namespace
+    namespace 'app.aupp' // MainActivity package namespace
 }
 
 kotlin {
@@ -121,6 +103,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'

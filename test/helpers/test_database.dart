@@ -1,5 +1,5 @@
-import 'package:piggybank/services/database/sqlite-database.dart';
-import 'package:piggybank/services/database/sqlite-migration-service.dart';
+import 'package:aupp/services/database/sqlite-database.dart';
+import 'package:aupp/services/database/sqlite-migration-service.dart';
 import 'package:sqflite_common/sqflite.dart';
 
 /// TestDatabaseHelper creates isolated in-memory database instances for testing.

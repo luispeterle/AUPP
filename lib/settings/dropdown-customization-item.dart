@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/settings/style.dart';
+import 'package:aupp/settings/style.dart';
 
 import '../services/service-config.dart';
 

@@ -1,10 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:piggybank/models/category-icons.dart';
-import 'package:piggybank/models/model.dart';
+import 'package:aupp/models/category-icons.dart';
+import 'package:aupp/models/model.dart';
 
 import '../helpers/color-utils.dart';
 import 'category.dart';
+
+/// Fork: what a wallet is for. The user chooses it, so a wallet can have any
+/// name.
+enum WalletKind {
+  /// A goal or any other money set aside.
+  normal('Meta'),
+
+  /// Money waiting to be invested: with the bank sync, what the other wallets
+  /// leave of the money (see [DailyMoney]). There is one.
+  toInvest('Para investir'),
+
+  /// Comes before any investment.
+  emergency('Reserva de emergência'),
+
+  /// Kept to buy good companies cheap in a crisis, little by little.
+  opportunity('Reserva de oportunidade');
+
+  final String label;
+
+  const WalletKind(this.label);
+
+  static WalletKind of(Object? name) => values.firstWhere(
+    (kind) => kind.name == name,
+    orElse: () => normal,
+  );
+}
 
 class Wallet extends Model {
   /// Object representing a Wallet (account).
@@ -25,8 +51,17 @@ class Wallet extends Model {
   bool isPredefined; // User-selected default for new records
   int sortOrder;
   double? balance; // computed, not stored in DB
+
+  static const toInvestName = 'Investir';
+
+  /// Fork: what this wallet is for, see [WalletKind].
+  WalletKind kind;
+
+  bool get isInvestmentReserve => kind == WalletKind.toInvest;
+  bool get isEmergencyReserve => kind == WalletKind.emergency;
+  bool get isOpportunityReserve => kind == WalletKind.opportunity;
+
   String? currency; // ISO 4217 code, e.g. "USD", optional
-  int? profileId;
 
   Wallet(
     this.name, {
@@ -41,9 +76,9 @@ class Wallet extends Model {
     this.sortOrder = 0,
     this.balance,
     this.currency,
-    this.profileId,
+    this.kind = WalletKind.normal,
   }) {
-    var categoryIcons = CategoryIcons.pro_category_icons;
+    var categoryIcons = CategoryIcons.category_icons;
     if (iconEmoji == null) {
       if (iconCodePoint == null ||
           categoryIcons.where((i) => i.codePoint == iconCodePoint).isEmpty) {
@@ -71,7 +106,7 @@ class Wallet extends Model {
       'is_predefined': isPredefined ? 1 : 0,
       'sort_order': sortOrder,
       'currency': currency,
-      'profile_id': profileId,
+      'kind': kind.name,
     };
     if (color != null) {
       map['color'] = serializeColorToString(color!);
@@ -114,7 +149,7 @@ class Wallet extends Model {
       sortOrder: sortOrder,
       balance: balance,
       currency: map['currency'] as String?,
-      profileId: map['profile_id'] as int?,
+      kind: WalletKind.of(map['kind']),
     );
   }
 }

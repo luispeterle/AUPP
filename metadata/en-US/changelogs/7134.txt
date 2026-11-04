@@ -1,2 +1,0 @@
-- Add more wallet options: show wallet amount at the end of time interval, disable wallets at all etc.
-- Add wallet split in statistics

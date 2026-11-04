@@ -1,4 +1,4 @@
-import 'package:piggybank/models/model.dart';
+import 'package:aupp/models/model.dart';
 
 class RecordTagAssociation extends Model {
   final int recordId;

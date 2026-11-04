@@ -1,1 +1,0 @@
-enum ProfileSortOption { original, byName }

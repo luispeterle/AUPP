@@ -1,6 +1,9 @@
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'dart:convert';
+
+import 'package:aupp/dinzo/pix-code.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/services/service-config.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../helpers/datetime-utility-functions.dart';
@@ -18,10 +21,131 @@ class RecurrentRecordPattern {
   RecurrentPeriod? recurrentPeriod;
   DateTime? utcLastUpdate;
   Set<String> tags = {};
+
+  /// Fork: payment code (Pix copia-e-cola or boleto digitable line) of each
+  /// estimate occurrence, by its local date ([occurrenceKey]): this month's
+  /// boleto is not next month's. Column `payment_codes` (JSON), in backups.
+  Map<String, String> paymentCodes = {};
+
+  /// Entries of [paymentCodes] that are not dates: the recurrence's default
+  /// Pix (a key, or a whole copia-e-cola) and the name for a key's code. An
+  /// older app only looks up dates, so it ignores them.
+  static const defaultPixKey = 'pix:padrao';
+  static const pixNameKey = 'pix:nome';
+
+  String? get defaultPix => paymentCodes[defaultPixKey];
+
+  /// "Já paguei" on one occurrence, while its real record has not come from
+  /// the Dinzo yet: no more alerts. Linking it later works as always.
+  static String paidKey(DateTime local) => 'pago:${occurrenceKey(local)}';
+
+  bool isMarkedPaid(DateTime local) => paymentCodes.containsKey(paidKey(local));
+
+  void setMarkedPaid(DateTime local, bool paid) {
+    if (paid) {
+      paymentCodes[paidKey(local)] = '1';
+    } else {
+      paymentCodes.remove(paidKey(local));
+    }
+  }
+
+  /// The code of the occurrence on [local]: its own, else the default Pix
+  /// (a key becomes a copia-e-cola with the occurrence's amount).
+  String? paymentCodeFor(DateTime local) {
+    final own = paymentCodes[occurrenceKey(local)];
+    if (own != null) return own;
+    final pix = defaultPix;
+    if (pix == null || pix.trim().isEmpty) return null;
+    if (PixCode.isPayload(pix)) return pix.trim();
+    return PixCode.build(
+      key: pix,
+      name: paymentCodes[pixNameKey],
+      amount: value?.abs(),
+    );
+  }
+
+  /// Amount computed elsewhere for an occurrence (the company's taxes of
+  /// the month before), without sign; null when there is none. Set once at
+  /// startup by FiscalEstimates.
+  static double? Function(RecurrentRecordPattern pattern, DateTime local)?
+      computedValue;
+
+  /// The amount of the occurrence on [local]: what its own code asks for
+  /// (the water bill's boleto), else a computed one ([computedValue]), else
+  /// the recurrence's average. Only that occurrence changes; the recurrence
+  /// keeps its value.
+  double? valueFor(DateTime local) {
+    final own = paymentCodes[occurrenceKey(local)];
+    if (own == null && transferWalletId == null) {
+      final computed = computedValue?.call(this, local);
+      if (computed != null) {
+        return (value ?? -1) < 0 ? -computed : computed;
+      }
+    }
+    final amount = own == null
+        ? null
+        : PixCode.amountOf(own) ??
+              double.tryParse(paymentCodes[chargeValueKey(local)] ?? '');
+    if (amount == null || value == null || transferWalletId != null) {
+      return value;
+    }
+    return value! < 0 ? -amount : amount;
+  }
+
+  /// Amount of a Pix charge pasted on one occurrence, read from the
+  /// receiver's bank when it was pasted ([PixCharge]): the code itself has
+  /// none, and the bank may not answer later.
+  static String chargeValueKey(DateTime local) =>
+      'valor:${occurrenceKey(local)}';
+
+  /// Due date of one occurrence, from its Pix charge or boleto, when it is
+  /// not the recurrence's day: the occurrence shows on that day. It keeps
+  /// its key ([occurrenceKey] of the recurrence's day) for codes and marks.
+  static String dueKey(DateTime local) => 'data:${occurrenceKey(local)}';
+
+  DateTime? dueDateFor(DateTime local) {
+    final due = paymentCodes[dueKey(local)];
+    return due == null ? null : DateTime.tryParse(due);
+  }
+
+  /// Kept even on the recurrence's own day: it says the date was checked.
+  void setDueDate(DateTime local, DateTime? due) {
+    if (due == null) {
+      paymentCodes.remove(dueKey(local));
+    } else {
+      paymentCodes[dueKey(local)] = occurrenceKey(due);
+    }
+  }
+
+  /// The occurrence got its own code, but no due date came with it (nor was
+  /// one set by hand): its day may still be the recurrence's average one.
+  bool dueDateMissing(DateTime local) =>
+      paymentCodes.containsKey(occurrenceKey(local)) &&
+      !paymentCodes.containsKey(dueKey(local));
+
+  /// The recurrence's day of [r] (what keys its codes and marks): the
+  /// generated date, else the day a due date moved it from, else its date.
+  DateTime occurrenceDayOf(Record r) {
+    if (r.occurrenceUtc != null) {
+      return createTzDateTime(r.occurrenceUtc!, timeZoneName!);
+    }
+    final shown = occurrenceKey(r.localDateTime);
+    for (final e in paymentCodes.entries) {
+      if (e.key.startsWith('data:') && e.value == shown) {
+        final day = DateTime.tryParse(e.key.substring(5));
+        if (day != null) return day;
+      }
+    }
+    return r.localDateTime;
+  }
+
+  static String occurrenceKey(DateTime local) =>
+      '${local.year.toString().padLeft(4, '0')}-'
+      '${local.month.toString().padLeft(2, '0')}-'
+      '${local.day.toString().padLeft(2, '0')}';
   int? walletId;
   int? transferWalletId;
   double? transferValue;
-  int? profileId;
   // Only meaningful when recurrentPeriod == RecurrentPeriod.Custom.
   int? customIntervalValue;
   CustomIntervalUnit? customIntervalUnit;
@@ -36,7 +160,6 @@ class RecurrentRecordPattern {
       this.walletId,
       this.transferWalletId,
       this.transferValue,
-      this.profileId,
       this.customIntervalValue,
       this.customIntervalUnit,
       Set<String>? tags}) {
@@ -64,7 +187,6 @@ class RecurrentRecordPattern {
         walletId = record.walletId,
         transferWalletId = record.transferWalletId,
         transferValue = record.transferValue,
-        profileId = record.profileId,
         tags = record.tags;
 
   /// Serialize to database
@@ -84,9 +206,9 @@ class RecurrentRecordPattern {
       'wallet_id': walletId,
       'transfer_wallet_id': transferWalletId,
       'transfer_value': transferValue,
-      'profile_id': profileId,
       'custom_interval_value': customIntervalValue,
       'custom_interval_unit': customIntervalUnit?.index,
+      'payment_codes': paymentCodes.isEmpty ? null : jsonEncode(paymentCodes),
     };
     if (id != null) map['id'] = id;
     return map;
@@ -140,13 +262,24 @@ class RecurrentRecordPattern {
       walletId: map['wallet_id'] as int?,
       transferWalletId: map['transfer_wallet_id'] as int?,
       transferValue: (map['transfer_value'] as num?)?.toDouble(),
-      profileId: map['profile_id'] as int?,
       customIntervalValue: map['custom_interval_value'] as int?,
       customIntervalUnit: customIntervalUnitIndex != null
           ? CustomIntervalUnit.values[customIntervalUnitIndex]
           : null,
       tags: tags,
-    );
+    )..paymentCodes = _decodeCodes(map['payment_codes']);
+  }
+
+  static Map<String, String> _decodeCodes(Object? raw) {
+    if (raw is! String || raw.isEmpty) return {};
+    try {
+      return {
+        for (final e in (jsonDecode(raw) as Map).entries)
+          if (e.value is String) e.key as String: e.value as String,
+      };
+    } catch (_) {
+      return {};
+    }
   }
 
   tz.TZDateTime get localDateTime {

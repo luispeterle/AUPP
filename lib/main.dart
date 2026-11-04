@@ -1,34 +1,39 @@
+import 'package:aupp/fiscal/fiscal-estimates.dart';
+import 'package:aupp/demo/demo-mode.dart';
+import 'package:aupp/desktop/desktop-layout.dart';
+import 'package:aupp/desktop/asset-workspaces.dart';
+import 'package:aupp/disguise/calculator-gate.dart';
+import 'package:aupp/dinzo/fork-defaults.dart';
+import 'package:aupp/hybrid_sync/hybrid-sync.dart';
+import 'package:aupp/services/automatic-writes.dart';
+import 'package:aupp/services/category-hierarchy.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:piggybank/categories/categories-tab-page-view.dart';
+import 'package:aupp/categories/categories-tab-page-view.dart';
+import 'package:private_extensions/private_extensions.dart';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:i18n_extension/i18n_extension.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:piggybank/services/home-widget-service.dart';
-import 'package:piggybank/services/locale-service.dart';
-import 'package:piggybank/services/logger.dart';
-import 'package:piggybank/services/backup-service.dart';
-import 'package:piggybank/services/database/sqlite-database.dart';
-import 'package:piggybank/services/premium-license-store.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/purchase-service.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/shell.dart';
-import 'package:piggybank/style.dart';
+import 'package:aupp/services/home-widget-service.dart';
+import 'package:aupp/services/legacy-data.dart';
+import 'package:aupp/services/locale-service.dart';
+import 'package:aupp/services/logger.dart';
+import 'package:aupp/services/database/sqlite-database.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/shell.dart';
+import 'package:aupp/style.dart';
+import 'package:aupp/services/total-wallets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 
-import 'i18n.dart';
 
 final logger = Logger.withContext("main");
 
@@ -44,54 +49,8 @@ void _scheduleWidgetRefresh() {
   );
 }
 
-/// Resolves the premium state at startup:
-/// - The separate Pro app (package ends with "pro") and desktop builds are
-///   always premium (they are distributed as Pro).
-/// - The free mobile build is premium when a Lifetime Pro license is stored
-///   (cached entitlement) and/or the store reports an active purchase.
-Future<void> _resolvePremium(String packageName) async {
-  final desktop = Platform.isLinux || Platform.isWindows || Platform.isMacOS;
-  final proBuild = packageName.endsWith("pro");
-  if (desktop || proBuild) {
-    ServiceConfig.setPremium(true);
-    return;
-  }
-
-  // Free mobile build: start from the cached license, then sync with the
-  // store so the entitlement is restored or revoked appropriately.
-  ServiceConfig.setPremium(PremiumLicenseStore.isPro());
-  if (Platform.isAndroid || Platform.isIOS) {
-    final purchaseService = PurchaseService.instance
-      ..onPremiumChanged = ServiceConfig.setPremium;
-    await purchaseService.initialize();
-  }
-}
-
 /// Pending quick action that arrived before the navigator was ready.
 String? _pendingQuickAction;
-
-/// Initializes quick actions for the app home screen.
-void _setupQuickActions() {
-  const QuickActions quickActions = QuickActions();
-
-  quickActions.initialize((shortcutType) {
-    _pendingQuickAction = shortcutType;
-    _handlePendingQuickAction();
-  });
-
-  quickActions.setShortcutItems(<ShortcutItem>[
-    ShortcutItem(
-      type: 'add_expense',
-      localizedTitle: 'Add expense'.i18n,
-      icon: 'ic_quick_add_expense',
-    ),
-    ShortcutItem(
-      type: 'add_income',
-      localizedTitle: 'Add income'.i18n,
-      icon: 'ic_quick_add_income',
-    ),
-  ]);
-}
 
 /// Handles a pending quick action by navigating to the appropriate screen.
 /// Refreshes the home tab after the record is saved and the user returns.
@@ -123,8 +82,11 @@ void _handlePendingQuickAction() {
 main() async {
   DartPluginRegistrant.ensureInitialized();
   WidgetsFlutterBinding.ensureInitialized();
+  registerPrivateExtensions();
 
   logger.info('App initialization started');
+
+  await LegacyData.migrate();
 
   try {
     tz_data.initializeTimeZones();
@@ -156,26 +118,37 @@ main() async {
     ServiceConfig.packageName = packageInfo.packageName;
     ServiceConfig.version = packageInfo.version;
 
+    // Fork: a demo start (code typed on the calculator) switches to its own
+    // preferences, so this must come before the first getInstance().
+    await DemoMode.bootstrap();
     ServiceConfig.sharedPreferences = await SharedPreferences.getInstance();
-    await _resolvePremium(packageInfo.packageName);
 
     logger.info(
-      'Package: ${ServiceConfig.packageName} v${ServiceConfig.version} (Premium: ${ServiceConfig.isPremium})',
+      'Package: ${ServiceConfig.packageName} v${ServiceConfig.version}',
     );
     ServiceConfig.initWalletsEnabled();
-    ServiceConfig.initBudgetsEnabled();
-    ServiceConfig.initShowHomepageImage();
-    ServiceConfig.initNavigationBarAnimationsEnabled();
-    ServiceConfig.initPrivacyMode();
-    // Keep the automatic database copy fresh: every database write
-    // schedules a best-effort snapshot (only when the switch is on).
-    // Also refresh home widgets (debounced) so they track new entries.
+    // Every database write refreshes the home widgets (debounced) and marks
+    // the data to send to the other devices.
     SqliteDatabase.onDatabaseChanged = () {
-      BackupService.scheduleDatabaseCopy();
       _scheduleWidgetRefresh();
+      HybridSync.noteDatabaseWrite();
     };
-    await MyI18n.loadTranslations();
-    await ProfileService.instance.initialize();
+    if (DemoMode.active) SqliteDatabase.onDatabaseChanged = null;
+    // Fork: a brand-new database starts with the Dinzo categories.
+    // Fork: the demo is rebuilt from scratch on every entry.
+    if (DemoMode.active) {
+      await DemoMode.prepare();
+    } else {
+      // Fork: data arriving from the other device, also before anything reads
+      // the database.
+      await AutomaticWrites.run(HybridSync.startup);
+    }
+    await AutomaticWrites.run(ForkDefaults.applyIfFresh);
+    await TotalWallets.migrateFromIds();
+    if (!DemoMode.active) await AssetWorkspaces.instance.init();
+    await CategoryHierarchy.init();
+    // Fork: estimates linked to the company's taxes get their amounts.
+    await FiscalEstimates.init();
 
     // Display mode is only available on Android
     if (Platform.isAndroid) {
@@ -183,20 +156,24 @@ main() async {
       logger.debug('High refresh rate enabled (Android)');
     }
 
-    final languageLocale = LocaleService.resolveLanguageLocale();
-    final currencyLocale = LocaleService.resolveCurrencyLocale();
-    LocaleService.setCurrencyLocale(currencyLocale);
-    logger.info(
-      'Locale configured: language=$languageLocale, currency=$currencyLocale',
-    );
+    LocaleService.setCurrencyLocale();
 
     final lightTheme = await MaterialThemeInstance.getLightTheme();
     final darkTheme = await MaterialThemeInstance.getDarkTheme();
     final themeMode = await MaterialThemeInstance.getThemeMode();
     logger.info('Theme loaded: $themeMode');
 
-    // Initialize quick actions after translations are loaded
-    _setupQuickActions();
+    // Fork: with the disguise on, the launcher's long-press shortcuts ("Add
+    // expense") would give the app away. Drop them.
+    if (CalculatorGate.enabled) {
+      const QuickActions().clearShortcutItems();
+      CalculatorGate.install();
+    }
+    CalculatorGate.attach(() => AppCore.navigatorKey.currentState);
+    // Fork: no disguise, or the code was typed right before this restart.
+    if (!CalculatorGate.enabled || DemoMode.startUnlocked) {
+      CalculatorGate.startUnlocked();
+    }
 
     logger.info('App initialization completed successfully');
 
@@ -204,7 +181,6 @@ main() async {
       TalkerWrapper(
         talker: globalTalker,
         child: MyApp(
-          languageLocale: languageLocale,
           lightTheme: lightTheme,
           darkTheme: darkTheme,
           themeMode: themeMode,
@@ -223,33 +199,15 @@ main() async {
 }
 
 class MyApp extends StatefulWidget {
-  final Locale languageLocale;
   final ThemeData lightTheme;
   final ThemeData darkTheme;
   final ThemeMode themeMode;
 
   MyApp({
-    required this.languageLocale,
     required this.lightTheme,
     required this.darkTheme,
     required this.themeMode,
   });
-
-  /// Reloads the theme from SharedPreferences without restarting the app.
-  static Future<void> reloadTheme() async {
-    MaterialThemeInstance.lightTheme = null;
-    MaterialThemeInstance.darkTheme = null;
-    final light = await MaterialThemeInstance.getLightTheme();
-    final dark = await MaterialThemeInstance.getDarkTheme();
-    final mode = await MaterialThemeInstance.getThemeMode();
-    _MyAppState._instance?._applyNewTheme(light, dark, mode);
-  }
-
-  /// Reloads the app locale from SharedPreferences without restarting the app.
-  static void reloadLocale() {
-    final locale = LocaleService.resolveLanguageLocale();
-    _MyAppState._instance?._applyNewLocale(locale);
-  }
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -277,45 +235,12 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
-  void _applyNewTheme(ThemeData light, ThemeData dark, ThemeMode mode) {
-    setState(() {
-      _lightTheme = light;
-      _darkTheme = dark;
-      _themeMode = mode;
-    });
-  }
-
-  Future<void> _applyNewLocale(Locale locale) async {
-    // I18n.define is the only context-free API for setting the locale at runtime.
-    // I18n.of(context) cannot be used here because _MyAppState's context is the
-    // parent of the I18n widget, not a descendant.
-    // ignore: invalid_use_of_visible_for_testing_member
-    I18n.define(locale);
-    // Rebuild the themes so the CJK font fallback matches the new locale.
-    MaterialThemeInstance.lightTheme = null;
-    MaterialThemeInstance.darkTheme = null;
-    final light = await MaterialThemeInstance.getLightTheme();
-    final dark = await MaterialThemeInstance.getDarkTheme();
-    _applyNewTheme(light, dark, _themeMode);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return I18n(
-      initialLocale: widget.languageLocale,
-      supportedLocales: LocaleService.supportedLocales,
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        DefaultCupertinoLocalizations.delegate,
-      ],
-      child: AppCore(
-        lightTheme: _lightTheme,
-        darkTheme: _darkTheme,
-        themeMode: _themeMode,
-      ),
+    return AppCore(
+      lightTheme: _lightTheme,
+      darkTheme: _darkTheme,
+      themeMode: _themeMode,
     );
   }
 }
@@ -340,16 +265,28 @@ class AppCore extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: AppCore.navigatorKey,
-      locale: I18n.locale,
-      localizationsDelegates: I18n.localizationsDelegates,
-      supportedLocales: I18n.supportedLocales,
+      locale: LocaleService.locale,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [LocaleService.locale],
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       onNavigationNotification: _defaultOnNavigationNotification,
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: themeMode,
-      title: "Oinkoin",
-      home: Shell(),
+      title: "AUPP",
+      // Fork: the disguise calculator sits above the real app from the
+      // first frame (lib/disguise/calculator-gate.dart). Flutter forbids
+      // `home` together with onGenerateInitialRoutes (asserted in debug only).
+      routes: {'/': (_) => Shell()},
+      onGenerateInitialRoutes: (_) => [
+        MaterialPageRoute(
+          builder: (_) => Shell(),
+          settings: const RouteSettings(name: '/'),
+        ),
+        if (CalculatorGate.enabled && !DemoMode.startUnlocked)
+          CalculatorGate.route(),
+      ],
     );
   }
 }

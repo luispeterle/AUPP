@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/records/controllers/tab_records_controller.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/database/sqlite-database.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/homepage-time-interval.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/utils/constants.dart';
+import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/recurrent-period.dart';
+import 'package:aupp/models/recurrent-record-pattern.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/records/controllers/tab_records_controller.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/database/sqlite-database.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -47,9 +47,6 @@ void main() {
   setUp(() async {
     // Initialize shared preferences with defaults
     SharedPreferences.setMockInitialValues({
-      PreferencesKeys.homepageTimeInterval:
-          HomepageTimeInterval.CurrentMonth.index,
-      PreferencesKeys.homepageRecordsMonthStartDay: 1,
     });
     sharedPreferences = await SharedPreferences.getInstance();
     ServiceConfig.sharedPreferences = sharedPreferences;
@@ -176,184 +173,11 @@ void main() {
       expect(controller.customIntervalTo!.day, 28);
     });
 
-    test(
-      'should shift year forward by 1 with custom interval set to a full year',
-      () async {
-        // Setup: Custom interval is full year 2024
-        controller.customIntervalFrom = DateTime(2024, 1, 1);
-        controller.customIntervalTo = DateTime(2024, 12, 31, 23, 59);
 
-        await sharedPreferences.setInt(
-          PreferencesKeys.homepageTimeInterval,
-          HomepageTimeInterval.CurrentYear.index,
-        );
 
-        // Act: Shift forward by 1 year
-        await controller.shiftInterval(1);
 
-        // Assert: Should now be 2025
-        expect(controller.customIntervalFrom, DateTime(2025, 1, 1));
-        expect(
-          controller.customIntervalTo,
-          DateTime(2025, 12, 31).add(DateTimeConstants.END_OF_DAY),
-        );
-      },
-    );
 
-    test(
-      'should shift year backward by 1 with custom interval set to a full year',
-      () async {
-        // Setup: Custom interval is full year 2025
-        controller.customIntervalFrom = DateTime(2025, 1, 1);
-        controller.customIntervalTo = DateTime(2025, 12, 31, 23, 59);
 
-        await sharedPreferences.setInt(
-          PreferencesKeys.homepageTimeInterval,
-          HomepageTimeInterval.CurrentYear.index,
-        );
-
-        // Act: Shift backward by 1 year
-        await controller.shiftInterval(-1);
-
-        // Assert: Should now be 2024
-        expect(controller.customIntervalFrom, DateTime(2024, 1, 1));
-        expect(
-          controller.customIntervalTo,
-          DateTime(2024, 12, 31).add(DateTimeConstants.END_OF_DAY),
-        );
-      },
-    );
-
-    test(
-      'should shift week forward by 1 when HomepageTimeInterval is CurrentWeek',
-      () async {
-        // Setup: No custom interval, use CurrentWeek setting
-        controller.customIntervalFrom = null;
-        controller.customIntervalTo = null;
-
-        await sharedPreferences.setInt(
-          PreferencesKeys.homepageTimeInterval,
-          HomepageTimeInterval.CurrentWeek.index,
-        );
-        // Pin firstDayOfWeek to Monday so getFirstDayOfWeekIndex() is deterministic
-        // regardless of I18n.locale state (which may be altered by other test files).
-        await sharedPreferences.setInt(
-          PreferencesKeys.firstDayOfWeek,
-          DateTime.monday,
-        );
-
-        // Get the current week's start (uses same pinned preference as controller)
-        DateTime now = DateTime.now();
-        DateTime currentWeekStart = getStartOfWeek(now);
-
-        // Act: Shift forward by 1 week
-        await controller.shiftInterval(1);
-
-        // Assert: Should be next week
-        DateTime expectedStart = currentWeekStart.add(Duration(days: 7));
-        DateTime expectedEnd = expectedStart.add(Duration(days: 6));
-
-        expect(controller.customIntervalFrom!.year, expectedStart.year);
-        expect(controller.customIntervalFrom!.month, expectedStart.month);
-        expect(controller.customIntervalFrom!.day, expectedStart.day);
-        expect(controller.customIntervalTo!.year, expectedEnd.year);
-        expect(controller.customIntervalTo!.month, expectedEnd.month);
-        expect(controller.customIntervalTo!.day, expectedEnd.day);
-      },
-    );
-
-    test('should shift week backward by 1 when HomepageTimeInterval is CurrentWeek', () async {
-      // Setup: No custom interval, use CurrentWeek setting
-      controller.customIntervalFrom = null;
-      controller.customIntervalTo = null;
-
-      await sharedPreferences.setInt(
-        PreferencesKeys.homepageTimeInterval,
-        HomepageTimeInterval.CurrentWeek.index,
-      );
-      // Pin firstDayOfWeek to Monday so getFirstDayOfWeekIndex() is deterministic
-      // regardless of I18n.locale state (which may be altered by other test files).
-      await sharedPreferences.setInt(
-        PreferencesKeys.firstDayOfWeek,
-        DateTime.monday,
-      );
-
-      // Use fixed dates to avoid any date-sensitive flakiness.
-      // April 1, 2026 is a Wednesday. With Monday as first day,
-      // the week starts March 30, 2026 (Monday).
-      DateTime currentWeekStart = DateTime(2026, 3, 30);
-
-      // Set a known base interval so shiftInterval uses it instead of DateTime.now().
-      controller.customIntervalFrom = currentWeekStart;
-
-      // Act: Shift backward by 1 week
-      await controller.shiftInterval(-1);
-
-      // Assert: Should be previous week (March 23-29, 2026)
-      DateTime expectedStart = DateTime(2026, 3, 23);
-      DateTime expectedEnd = DateTime(2026, 3, 29, 23, 59, 59);
-
-      expect(controller.customIntervalFrom!.year, expectedStart.year);
-      expect(controller.customIntervalFrom!.month, expectedStart.month);
-      expect(controller.customIntervalFrom!.day, expectedStart.day);
-      expect(controller.customIntervalTo!.year, expectedEnd.year);
-      expect(controller.customIntervalTo!.month, expectedEnd.month);
-      expect(controller.customIntervalTo!.day, expectedEnd.day);
-    });
-
-    test(
-      'should shift month forward when HomepageTimeInterval is CurrentMonth',
-      () async {
-        // Setup: No custom interval, use CurrentMonth setting
-        controller.customIntervalFrom = null;
-        controller.customIntervalTo = null;
-
-        await sharedPreferences.setInt(
-          PreferencesKeys.homepageTimeInterval,
-          HomepageTimeInterval.CurrentMonth.index,
-        );
-
-        DateTime now = DateTime.now();
-
-        // Act: Shift forward by 1 month
-        await controller.shiftInterval(1);
-
-        // Assert: Should be next month
-        DateTime expectedDateFrom = DateTime(now.year, now.month + 1, 1);
-        DateTime expectedDateTo = getEndOfMonth(
-          expectedDateFrom.year,
-          expectedDateFrom.month,
-        );
-        expect(controller.customIntervalFrom, expectedDateFrom);
-        expect(controller.customIntervalTo, expectedDateTo);
-      },
-    );
-
-    test(
-      'should shift year forward when HomepageTimeInterval is CurrentYear',
-      () async {
-        // Setup: No custom interval, use CurrentYear setting
-        controller.customIntervalFrom = null;
-        controller.customIntervalTo = null;
-
-        await sharedPreferences.setInt(
-          PreferencesKeys.homepageTimeInterval,
-          HomepageTimeInterval.CurrentYear.index,
-        );
-
-        DateTime now = DateTime.now();
-
-        // Act: Shift forward by 1 year
-        await controller.shiftInterval(1);
-
-        // Assert: Should be next year
-        expect(controller.customIntervalFrom, DateTime(now.year + 1, 1, 1));
-        expect(
-          controller.customIntervalTo,
-          DateTime(now.year + 1, 12, 31).add(DateTimeConstants.END_OF_DAY),
-        );
-      },
-    );
 
     test('should update backgroundImageIndex to the new month', () async {
       // Setup: Custom interval is January
@@ -375,9 +199,9 @@ void main() {
       // Act: Shift to February
       await controller.shiftInterval(1);
 
-      // Assert: Header should be updated (format depends on locale)
+      // Assert: Header should be updated (the app is in pt-BR)
       expect(controller.header, isNotEmpty);
-      expect(controller.header.toLowerCase(), contains('february'));
+      expect(controller.header.toLowerCase(), contains('fevereiro'));
     });
 
     test('should handle shifting across year boundary', () async {
@@ -408,87 +232,8 @@ void main() {
       expect(controller.customIntervalTo!.month, 12);
     });
 
-    test('shiftMonthWeekYear: Forward Shift with custom start day', () async {
-      // Setup Initial State (Jan 15, 2024 to Feb 14, 2024)
-      controller.customIntervalFrom = DateTime(2024, 1, 15);
-      controller.customIntervalTo = DateTime(
-        2024,
-        2,
-        14,
-      ).add(DateTimeConstants.END_OF_DAY);
 
-      // Mock settings to return Month view and Start Day 15
-      await sharedPreferences.setInt(
-        PreferencesKeys.homepageTimeInterval,
-        HomepageTimeInterval.CurrentMonth.index,
-      );
 
-      await sharedPreferences.setInt(
-        PreferencesKeys.homepageRecordsMonthStartDay,
-        15,
-      );
-
-      await controller.shiftInterval(1);
-
-      expect(controller.customIntervalFrom, DateTime(2024, 2, 15));
-      expect(controller.customIntervalTo!.month, 3);
-      expect(controller.customIntervalTo!.day, 14);
-
-      expect(controller.backgroundImageIndex, 2); // February
-      // Header should be range string since startDay != 1
-      expect(controller.header, contains("-"));
-    });
-
-    test('shiftMonthWeekYear: Backward Shift with custom start day', () async {
-      // Setup Initial State (Jan 15, 2024 to Feb 14, 2024)
-      controller.customIntervalFrom = DateTime(2024, 1, 15);
-      controller.customIntervalTo = DateTime(
-        2024,
-        2,
-        14,
-      ).add(DateTimeConstants.END_OF_DAY);
-
-      // Mock settings to return Month view and Start Day 15
-      await sharedPreferences.setInt(
-        PreferencesKeys.homepageTimeInterval,
-        HomepageTimeInterval.CurrentMonth.index,
-      );
-
-      await sharedPreferences.setInt(
-        PreferencesKeys.homepageRecordsMonthStartDay,
-        15,
-      );
-
-      await controller.shiftInterval(-1);
-
-      expect(controller.customIntervalFrom, DateTime(2023, 12, 15));
-      expect(controller.customIntervalTo!.year, 2024);
-      expect(controller.customIntervalTo!.month, 1);
-      expect(controller.customIntervalTo!.day, 14);
-
-      expect(controller.backgroundImageIndex, 12); // December
-      // Header should be range string since startDay != 1
-      expect(controller.header, contains("-"));
-    });
-
-    test(
-      'shiftMonthWeekYear: Clamping safety when moving to February',
-      () async {
-        // Setup: Start Day 31
-        controller.customIntervalFrom = DateTime(2024, 1, 31);
-
-        await sharedPreferences.setInt(
-          PreferencesKeys.homepageRecordsMonthStartDay,
-          31,
-        );
-
-        await controller.shiftInterval(1);
-
-        // February only has 29 days in 2024. Start should be Feb 29.
-        expect(controller.customIntervalFrom!.month, 2);
-        expect(controller.customIntervalFrom!.day, 29);
-      },
-    );
   });
 
   group('_applyTransferAwareWalletFilter', () {
@@ -756,51 +501,8 @@ void main() {
       );
     }
 
-    test('a past period shows the balance as of its end, excluding records dated after it', () async {
-      // Select "Value at the end of the time interval" (mode 1) so past
-      // periods use a point-in-time snapshot.
-      await sharedPreferences.setInt(PreferencesKeys.walletBalanceMode, 1);
 
-      final walletId = await database.addWallet(
-        Wallet('Test Wallet', initialAmount: 100.0),
-      );
-
-      // Always-in-the-past reference period, computed relative to "now" so
-      // this test doesn't rot.
-      final now = DateTime.now();
-      final periodMonthDate = DateTime(now.year, now.month - 3, 1);
-      final periodFrom = DateTime(
-        periodMonthDate.year,
-        periodMonthDate.month,
-        1,
-      );
-      final periodTo = getEndOfMonth(
-        periodMonthDate.year,
-        periodMonthDate.month,
-      );
-
-      await _insertRecord(
-        walletId,
-        -30.0,
-        periodFrom.add(const Duration(days: 5)),
-      );
-      // Dated after the period end (but still in the past relative to "now").
-      await _insertRecord(
-        walletId,
-        -1000.0,
-        periodTo.add(const Duration(days: 10)),
-      );
-
-      controller.updateCustomInterval(periodFrom, periodTo, 'Test Period');
-      await controller.updateRecurrentRecordsAndFetchRecords();
-
-      expect(controller.balanceAsOfDate, isNotNull);
-      final wallet = controller.allWallets.firstWhere((w) => w.id == walletId);
-      // balance = initial(100) + in-period record(-30) = 70, excludes -1000
-      expect(wallet.balance, closeTo(70.0, 0.001));
-    });
-
-    test('the current month keeps the live balance, including same-month records dated after today', () async {
+    test('the current month shows the balance at its end, including same-month records dated after today', () async {
       final walletId = await database.addWallet(
         Wallet('Test Wallet', initialAmount: 100.0),
       );
@@ -819,51 +521,84 @@ void main() {
       controller.updateCustomInterval(periodFrom, periodTo, 'This Month');
       await controller.updateRecurrentRecordsAndFetchRecords();
 
-      expect(controller.balanceAsOfDate, isNull);
+      expect(controller.balanceAsOfDate, isNotNull);
       final wallet = controller.allWallets.firstWhere((w) => w.id == walletId);
-      // balance = initial(100) + record(-40) = 60, matching today's live
-      // (unbounded) behavior — the record isn't excluded just because it's
-      // dated a day after "now".
+      // balance = initial(100) + record(-40) = 60: the record isn't excluded
+      // just because it's dated a day after "now".
       expect(wallet.balance, closeTo(60.0, 0.001));
     });
 
-    test('mode 0 (always the latest value, the default): a past period shows the live balance', () async {
-      // Leave walletBalanceMode at its default (0 = "Always the latest value").
+    test('a future month counts the planned records of the months before it', () async {
       final walletId = await database.addWallet(
         Wallet('Test Wallet', initialAmount: 100.0),
       );
-
+      final boxId = await database.addWallet(
+        Wallet('Box', initialAmount: 0.0),
+      );
       final now = DateTime.now();
-      final periodMonthDate = DateTime(now.year, now.month - 3, 1);
-      final periodFrom = DateTime(
-        periodMonthDate.year,
-        periodMonthDate.month,
-        1,
-      );
-      final periodTo = getEndOfMonth(
-        periodMonthDate.year,
-        periodMonthDate.month,
-      );
+      final firstPlanned = DateTime(now.year, now.month + 1, 10, 12);
+      await database.addRecurrentRecordPattern(RecurrentRecordPattern(
+        -50.0,
+        'Rent',
+        testCategory2,
+        firstPlanned.toUtc(),
+        RecurrentPeriod.EveryMonth,
+        walletId: walletId,
+      ));
+      await database.addRecurrentRecordPattern(RecurrentRecordPattern(
+        -20.0,
+        'To the box',
+        null,
+        firstPlanned.toUtc(),
+        RecurrentPeriod.EveryMonth,
+        walletId: walletId,
+        transferWalletId: boxId,
+      ));
 
-      await _insertRecord(
-        walletId,
-        -30.0,
-        periodFrom.add(const Duration(days: 5)),
-      );
-      // Dated after the period end; still included in the live balance.
-      await _insertRecord(
-        walletId,
-        -1000.0,
-        periodTo.add(const Duration(days: 10)),
-      );
+      final periodFrom = DateTime(now.year, now.month + 3, 1);
+      final periodTo = getEndOfMonth(periodFrom.year, periodFrom.month);
+      // Stored, but dated after the viewed month.
+      await _insertRecord(walletId, -1000.0, periodTo.add(const Duration(days: 5)));
 
-      controller.updateCustomInterval(periodFrom, periodTo, 'Test Period');
+      controller.updateCustomInterval(periodFrom, periodTo, 'In 3 months');
       await controller.updateRecurrentRecordsAndFetchRecords();
 
-      // No snapshot: the live (current) balance is shown even for a past period.
-      expect(controller.balanceAsOfDate, isNull);
       final wallet = controller.allWallets.firstWhere((w) => w.id == walletId);
-      expect(wallet.balance, closeTo(-930.0, 0.001));
+      final box = controller.allWallets.firstWhere((w) => w.id == boxId);
+      // 3 months of rent and transfers (next month up to the viewed one).
+      expect(wallet.balance, closeTo(100.0 - 3 * 70.0, 0.001));
+      expect(box.balance, closeTo(3 * 20.0, 0.001));
+    });
+
+
+    test('a future month counts every scheduled occurrence up to its end, not only its own', () async {
+      final walletId = await database.addWallet(
+        Wallet('Test Wallet', initialAmount: 1000.0),
+      );
+      final now = DateTime.now();
+      // Monthly -100 from the 15th of next month on.
+      await database.addRecurrentRecordPattern(RecurrentRecordPattern(
+        -100.0,
+        'Rent',
+        testCategory2,
+        DateTime(now.year, now.month + 1, 15).toUtc(),
+        RecurrentPeriod.EveryMonth,
+        walletId: walletId));
+
+      Future<double?> balanceOf(int monthsAhead) async {
+        final from = DateTime(now.year, now.month + monthsAhead, 1);
+        controller.updateCustomInterval(
+            from, getEndOfMonth(from.year, from.month), 'Month');
+        await controller.updateRecurrentRecordsAndFetchRecords();
+        return controller.allWallets
+            .firstWhere((w) => w.id == walletId)
+            .balance;
+      }
+
+      expect(await balanceOf(0), closeTo(1000.0, 0.001));
+      expect(await balanceOf(1), closeTo(900.0, 0.001));
+      // Three occurrences (next month, +2, +3), not only the one of +3.
+      expect(await balanceOf(3), closeTo(700.0, 0.001));
     });
 
     test('when wallets are disabled, no wallets are loaded and the balance stays live', () async {

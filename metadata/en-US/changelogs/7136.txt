@@ -1,3 +1,0 @@
-- Now you can add a Transfer without any associated category
-- Settings are also part of the backup/restore
-- Add search in customization page

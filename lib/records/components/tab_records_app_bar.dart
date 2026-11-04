@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/records/components/styled_popup_menu_button.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/services/service-config.dart';
 
 import '../../helpers/records-utility-functions.dart';
 import '../controllers/tab_records_controller.dart';
@@ -11,12 +9,25 @@ class TabRecordsAppBar extends StatelessWidget {
   final TabRecordsController controller;
   final bool isAppBarExpanded;
   final bool simplifyAppBar;
-  final String profileName;
-  final VoidCallback onProfileTapped;
+  /// Opens the accounts shown in the Extrato (person button).
+  final VoidCallback onAccountsTapped;
+
+  /// Some account is switched off: the person button shows a dot.
+  final bool accountsFiltered;
+
+  /// Fork: sync state pill next to the person button (see RecordsPage).
+  final Widget? syncPill;
   final VoidCallback onDatePickerPressed;
+
+  /// Tapping the period text opens the month/year picker (fork-only).
+  final VoidCallback? onPeriodTapped;
   final VoidCallback onStatisticsPressed;
+
+  /// Raises the period, when a sheet covers the bottom of the picture.
+  final double titleLift;
+
+  /// Opens the Extrato as a table (computer only).
   final VoidCallback onSearchPressed;
-  final Function(int) onMenuItemSelected;
 
   // Select-mode props (all optional — only used when isSelectMode is true)
   final bool isSelectMode;
@@ -27,25 +38,47 @@ class TabRecordsAppBar extends StatelessWidget {
   final VoidCallback? onDuplicate;
   final VoidCallback? onMoveToWallet;
 
+  /// Title-cases the selected records' names (fork-only).
+  final VoidCallback? onTitleCase;
+
+  /// Hides the selected records from the Extrato, or shows them again when
+  /// [selectionAllHidden] (fork-only).
+  final VoidCallback? onToggleHidden;
+  final bool selectionAllHidden;
+
   const TabRecordsAppBar({
     Key? key,
     required this.controller,
     required this.isAppBarExpanded,
     this.simplifyAppBar = false,
-    required this.profileName,
-    required this.onProfileTapped,
+    required this.onAccountsTapped,
+    this.accountsFiltered = false,
+    this.syncPill,
     required this.onDatePickerPressed,
+    this.onPeriodTapped,
     required this.onStatisticsPressed,
     required this.onSearchPressed,
-    required this.onMenuItemSelected,
     this.isSelectMode = false,
     this.selectedCount = 0,
+    this.titleLift = 0,
     this.onClose,
     this.onDelete,
     this.onSelectAll,
     this.onDuplicate,
     this.onMoveToWallet,
+    this.onTitleCase,
+    this.onToggleHidden,
+    this.selectionAllHidden = false,
   }) : super(key: key);
+
+  /// Height of the bar with its picture.
+  static double expandedHeightFor(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.20;
+    return height < 180.0 ? 180.0 : height;
+  }
+
+  /// Height of the bar without its picture (toolbar + period row).
+  static const double simplifiedHeight = kToolbarHeight + 48;
 
   @override
   Widget build(BuildContext context) {
@@ -61,15 +94,16 @@ class TabRecordsAppBar extends StatelessWidget {
         backgroundColor: Theme.of(context).primaryColor,
         automaticallyImplyLeading: false,
         pinned: true,
+        leadingWidth: isSelectMode ? null : _leadingWidth,
         leading: isSelectMode
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: onClose,
               )
-            : (profileName.isNotEmpty ? _buildLeading() : null),
+            : _buildLeading(),
         title: isSelectMode
             ? Text(
-                "$selectedCount ${"selected".i18n}",
+                "$selectedCount ${'selecionado'}",
                 style: const TextStyle(color: Colors.white),
               )
             : null,
@@ -86,20 +120,20 @@ class TabRecordsAppBar extends StatelessWidget {
       backgroundColor: Theme.of(context).primaryColor,
       automaticallyImplyLeading: false,
       pinned: true,
-      expandedHeight: MediaQuery.of(context).size.height * 0.20 < 180.0
-          ? 180.0
-          : MediaQuery.of(context).size.height * 0.20,
+      expandedHeight: expandedHeightFor(context),
+      leadingWidth:
+          isSelectMode || !isAppBarExpanded ? null : _leadingWidth,
       leading: isSelectMode
           ? IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: onClose,
             )
-          : (profileName.isNotEmpty && isAppBarExpanded)
+          : isAppBarExpanded
               ? _buildLeading()
               : null,
       title: isSelectMode
           ? Text(
-              "$selectedCount ${"selected".i18n}",
+              "$selectedCount ${'selecionado'}",
               style: const TextStyle(color: Colors.white),
             )
           : null,
@@ -112,7 +146,7 @@ class TabRecordsAppBar extends StatelessWidget {
         ],
         centerTitle: false,
         titlePadding: _getTitlePadding(
-            headerPaddingBottom, canShiftBack, canShiftForward),
+            headerPaddingBottom + titleLift, canShiftBack, canShiftForward),
         title: isSelectMode && !isAppBarExpanded
             ? null
             : _buildTitle(headerFontSize, canShiftBack, canShiftForward),
@@ -134,45 +168,32 @@ class TabRecordsAppBar extends StatelessWidget {
     );
   }
 
-  /// Profile button with icon and initials in the AppBar leading slot.
+  /// Person button (the accounts shown) in the AppBar leading slot.
   Widget _buildLeading() {
     return Row(
       children: [
-        StyledActionButton(
-          icon: Icons.person,
-          onPressed: onProfileTapped,
-          semanticsId: 'profile',
+        Badge(
+          isLabelVisible: accountsFiltered,
+          smallSize: 9,
+          alignment: const AlignmentDirectional(0.45, -0.45),
+          child: StyledActionButton(
+            icon: Icons.person,
+            onPressed: onAccountsTapped,
+            tooltip: 'Contas',
+            semanticsId: 'accounts',
+          ),
         ),
+        if (syncPill != null) syncPill!,
       ],
     );
   }
 
+  /// Room for the person button plus the sync pill.
+  double? get _leadingWidth => syncPill == null ? null : 150;
+
   List<Widget> _buildActions() {
     const double actionButtonScale = 1.0;
-    // Eye toggle mirrors the profile button: visible while the bar is
-    // expanded (or simplified), hidden once it collapses on scroll.
-    final showPrivacyToggle = simplifyAppBar || isAppBarExpanded;
-
     return <Widget>[
-      if (showPrivacyToggle)
-        ValueListenableBuilder<bool>(
-          valueListenable: ServiceConfig.privacyModeEnabledNotifier,
-          builder: (context, armed, _) {
-            // Disarmed: no eye button, taps do nothing, amounts stay visible.
-            if (!armed) return const SizedBox.shrink();
-            return ValueListenableBuilder<bool>(
-              valueListenable: ServiceConfig.privacyModeHiddenNotifier,
-              builder: (context, hidden, _) => StyledActionButton(
-                icon: hidden ? Icons.visibility_off : Icons.visibility,
-                onPressed: () =>
-                    ServiceConfig.setPrivacyModeHidden(!hidden),
-                tooltip: hidden ? "Show amounts".i18n : "Hide amounts".i18n,
-                semanticsId: 'privacy-toggle',
-                scaleFactor: actionButtonScale,
-              ),
-            );
-          },
-        ),
       StyledActionButton(
         icon: Icons.calendar_today,
         onPressed: onDatePickerPressed,
@@ -191,10 +212,6 @@ class TabRecordsAppBar extends StatelessWidget {
         semanticsId: 'search-button',
         scaleFactor: actionButtonScale,
       ),
-      StyledPopupMenuButton(
-        onSelected: onMenuItemSelected,
-        scaleFactor: actionButtonScale,
-      ),
     ];
   }
 
@@ -202,7 +219,7 @@ class TabRecordsAppBar extends StatelessWidget {
     return [
       IconButton(
         icon: const Icon(Icons.delete_outline, color: Colors.white),
-        tooltip: "Delete".i18n,
+        tooltip: 'Excluir',
         onPressed: selectedCount > 0 ? onDelete : null,
       ),
       PopupMenuButton<String>(
@@ -214,21 +231,35 @@ class TabRecordsAppBar extends StatelessWidget {
             onDuplicate?.call();
           } else if (value == 'move_wallet') {
             onMoveToWallet?.call();
+          } else if (value == 'toggle_hidden') {
+            onToggleHidden?.call();
+          } else if (value == 'title_case') {
+            onTitleCase?.call();
           }
         },
         itemBuilder: (_) => [
           PopupMenuItem(
             value: 'select_all',
-            child: Text('Select all'.i18n),
+            child: Text('Selecionar tudo'),
           ),
           PopupMenuItem(
             value: 'duplicate',
-            child: Text('Duplicate'.i18n),
+            child: Text('Duplicar'),
           ),
-          if (ServiceConfig.isPremium && ServiceConfig.walletsEnabled)
+          PopupMenuItem(
+            value: 'toggle_hidden',
+            child: Text(selectionAllHidden
+                ? 'Mostrar no Extrato'
+                : 'Ocultar do Extrato'),
+          ),
+          const PopupMenuItem(
+            value: 'title_case',
+            child: Text('Primeira Letra Maiúscula'),
+          ),
+          if (ServiceConfig.walletsEnabled)
             PopupMenuItem(
               value: 'move_wallet',
-              child: Text('Move to wallet'.i18n),
+              child: Text('Mover para carteira'),
             ),
         ],
       ),
@@ -244,19 +275,40 @@ class TabRecordsAppBar extends StatelessWidget {
         if (showShiftButtons && canShiftBack)
           _buildShiftButton(Icons.arrow_left, -1),
         Expanded(
-          child: Semantics(
-            identifier: 'date-text',
-            child: Text(
-              controller.header,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.left,
-              style: TextStyle(color: Colors.white, fontSize: headerFontSize),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: isSelectMode ? null : onPeriodTapped,
+            child: Semantics(
+              identifier: 'date-text',
+              child: Text(
+                controller.header,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.left,
+                style: TextStyle(color: Colors.white, fontSize: headerFontSize),
+              ),
             ),
           ),
         ),
         if (showShiftButtons && canShiftForward)
           _buildShiftButton(Icons.arrow_right, 1),
+        if (showShiftButtons && controller.canToggleMonthYear)
+          _buildMonthYearToggle(),
       ],
+    );
+  }
+
+  /// Fork: switches the period on screen between its month and its year.
+  Widget _buildMonthYearToggle() {
+    return SizedBox(
+      height: 30,
+      width: 34,
+      child: IconButton(
+        tooltip: controller.showsYear ? 'Ver mês' : 'Ver ano',
+        icon: const Icon(Icons.swap_horiz, color: Colors.white, size: 22),
+        onPressed: () => controller.toggleMonthYear(),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+      ),
     );
   }
 
@@ -295,7 +347,7 @@ class TabRecordsAppBar extends StatelessWidget {
     if (!isAppBarExpanded) {
       // When collapsed the title sits in the toolbar alongside the leading
       // widget (56 dp) — use the standard Material offset (56 + 16 = 72) so
-      // the text doesn't slide behind the profile circle.
+      // the text doesn't slide behind the person button.
       return EdgeInsets.fromLTRB(15, 15, 15, headerPaddingBottom);
     }
     return EdgeInsets.fromLTRB(

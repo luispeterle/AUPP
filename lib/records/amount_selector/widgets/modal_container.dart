@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/records/amount_selector/utils/padding.extension.dart';
+import 'package:aupp/records/amount_selector/utils/padding.extension.dart';
 
 class ModalContainer extends StatelessWidget {
   const ModalContainer({

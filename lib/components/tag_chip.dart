@@ -1,3 +1,4 @@
+import 'package:aupp/components/known-tags.dart';
 import 'package:flutter/material.dart';
 
 class TagChip extends StatelessWidget {
@@ -30,7 +31,8 @@ class TagChip extends StatelessWidget {
     );
 
     return FilterChip(
-        label: Text(labelText, style: effectiveLabelStyle),
+        // Banks, payment methods and origin tags show as an icon (fork).
+        label: TagLabel(labelText, textStyle: effectiveLabelStyle),
         labelStyle: effectiveLabelStyle,
         selected: isSelected,
         onSelected: onSelected,

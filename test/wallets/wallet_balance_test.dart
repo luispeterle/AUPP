@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/database/sqlite-database.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/database/sqlite-database.dart';
+import 'package:aupp/services/service-config.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 

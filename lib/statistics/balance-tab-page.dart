@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
-import 'package:piggybank/statistics/statistics-summary-card.dart';
-import 'package:piggybank/records/components/records-day-list.dart';
+import 'package:aupp/desktop/desktop-layout.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
+import 'package:aupp/statistics/statistics-summary-card.dart';
+import 'package:aupp/records/components/records-day-list.dart';
 import '../helpers/datetime-utility-functions.dart';
 import 'unified-balance-card.dart';
 
@@ -23,7 +23,6 @@ class BalanceTabPage extends StatefulWidget {
   final GroupByType? forceGroupByType;
   final Function? onListBackCallback;
 
-  final Map<int, String?> walletCurrencyMap;
   final Map<int, Wallet> walletMap;
 
   BalanceTabPage(this.from, this.to, this.records,
@@ -36,7 +35,6 @@ class BalanceTabPage extends StatefulWidget {
       this.showRecordsToggle = false,
       this.forceGroupByType,
       this.onListBackCallback,
-      this.walletCurrencyMap = const {},
       this.walletMap = const {}})
       : super();
 
@@ -79,7 +77,7 @@ class BalanceTabPageState extends State<BalanceTabPage> {
               width: 200,
             ),
             Text(
-              "No entries to show.".i18n,
+              'Nenhum item para mostrar.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 22.0,
@@ -101,7 +99,6 @@ class BalanceTabPageState extends State<BalanceTabPage> {
         widget.records,
         aggregationMethod,
         selectedDate: selectedDate,
-        walletCurrencyMap: widget.walletCurrencyMap,
         onSelectionChanged: (date) {
           setState(() {
             selectedDate = date;
@@ -150,7 +147,6 @@ class BalanceTabPageState extends State<BalanceTabPage> {
           hideTagsSelection: widget.hideTagsSelection,
           hideCategorySelection: widget.hideCategorySelection,
           hideWalletsSelection: widget.hideWalletsSelection,
-          walletCurrencyMap: widget.walletCurrencyMap,
           walletMap: widget.walletMap,
           onGroupByTypeChanged: (newType) {
             setState(() {
@@ -187,7 +183,7 @@ class BalanceTabPageState extends State<BalanceTabPage> {
                   Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
                   SizedBox(height: 16),
                   Text(
-                    "No entries found".i18n,
+                    'Nenhum item encontrado',
                     style: TextStyle(
                       fontSize: 18,
                       color: Colors.grey[600],
@@ -202,7 +198,6 @@ class BalanceTabPageState extends State<BalanceTabPage> {
           recordsForList,
           isSliver: true,
           onListBackCallback: widget.onListBackCallback,
-          walletCurrencyMap: widget.walletCurrencyMap,
         ));
         slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 75)));
       }
@@ -213,10 +208,31 @@ class BalanceTabPageState extends State<BalanceTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: widget.records.length > 0
-          ? _buildContentSlivers()
-          : _buildNoRecordSlivers(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slivers = widget.records.isNotEmpty
+            ? _buildContentSlivers()
+            : _buildNoRecordSlivers();
+        if (widget.records.isEmpty ||
+            constraints.maxWidth < AdaptiveColumns.minTwoColumnWidth) {
+          return CustomScrollView(slivers: slivers);
+        }
+        // On the computer the chart stays beside the list. The first two
+        // slivers are the chart card and its gap.
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: CustomScrollView(
+                primary: false,
+                slivers: slivers.take(2).toList(),
+              ),
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            Expanded(child: CustomScrollView(slivers: slivers.skip(2).toList())),
+          ],
+        );
+      },
     );
   }
 }

@@ -16,14 +16,27 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="*/*" />
         </intent>
+        <!-- Fork: bank apps to pay a Pix / boleto from the Extrato. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
-
-    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- Fork: the Dinzo integration and the Central Bank rates need the
+         network. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Fork: sync notifications (Dinzo and other syncs). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Fork: the sync keeps running with the phone locked / app in the
+         background (SyncForegroundService). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
         android:name="${applicationName}"
         android:label="@string/app_name"
-        android:localeConfig="@xml/locales_config"
         android:hasFragileUserData="true"
         android:enableOnBackInvokedCallback="false"
         android:icon="@mipmap/ic_launcher">
@@ -40,9 +53,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Oinkoin home screen widgets -->
+        <!-- AUPP home screen widgets -->
         <receiver
-            android:name=".widget.OinkoinOverviewWidgetProvider"
+            android:name=".widget.AuppOverviewWidgetProvider"
             android:exported="false"
             android:label="@string/app_name">
             <intent-filter>
@@ -50,10 +63,10 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/oinkoin_overview_widget_info" />
+                android:resource="@xml/aupp_overview_widget_info" />
         </receiver>
         <receiver
-            android:name=".widget.OinkoinIncomeWidgetProvider"
+            android:name=".widget.AuppIncomeWidgetProvider"
             android:exported="false"
             android:label="@string/app_name">
             <intent-filter>
@@ -61,10 +74,10 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/oinkoin_income_widget_info" />
+                android:resource="@xml/aupp_income_widget_info" />
         </receiver>
         <receiver
-            android:name=".widget.OinkoinExpensesWidgetProvider"
+            android:name=".widget.AuppExpensesWidgetProvider"
             android:exported="false"
             android:label="@string/app_name">
             <intent-filter>
@@ -72,10 +85,10 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/oinkoin_expenses_widget_info" />
+                android:resource="@xml/aupp_expenses_widget_info" />
         </receiver>
         <receiver
-            android:name=".widget.OinkoinBalanceWidgetProvider"
+            android:name=".widget.AuppBalanceWidgetProvider"
             android:exported="false"
             android:label="@string/app_name">
             <intent-filter>
@@ -83,19 +96,12 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/oinkoin_balance_widget_info" />
+                android:resource="@xml/aupp_balance_widget_info" />
         </receiver>
-        <receiver
-            android:name=".widget.OinkoinBudgetWidgetProvider"
+        <service
+            android:name=".SyncForegroundService"
             android:exported="false"
-            android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/oinkoin_budget_widget_info" />
-        </receiver>
+            android:foregroundServiceType="dataSync" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

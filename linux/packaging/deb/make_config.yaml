@@ -1,10 +1,9 @@
-display_name: Oinkoin
-package_name: oinkoin
+display_name: AUPP
+package_name: aupp
 version: 1.1.6
 
 maintainer:
-  name: Oinkoin Team
-  email: support@oinkoin.com
+  name: AUPP
 
 priority: optional
 section: utils
@@ -17,11 +16,11 @@ dependencies:
   - libglib2.0-0
 
 essential: false
-icon: linux/assets/oinkoin.png
+icon: linux/assets/aupp.png
 
 # Optional post-install/uninstall scripts
 postuninstall_scripts:
-  - echo "Thank you for using Oinkoin!"
+  - echo "Thank you for using AUPP!"
 
 keywords:
   - expense
@@ -29,10 +28,9 @@ keywords:
   - finance
   - budget
   - money
-  - piggybank
-  - oinkoin
+  - aupp
 
-generic_name: Expense Tracker
+generic_name: Finanças pessoais
 categories:
   - Office
   - Finance

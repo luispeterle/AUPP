@@ -1,2 +1,0 @@
-- Pie-chart: add option to select how many categories to display
-- Pie-chart: when using category's colors, sort the area by colors

@@ -1,3 +1,0 @@
-- Add Logs page in the settings
-- Add swipe between months and other intervals using gestures
-- Add setting to change amount Keyboard layout

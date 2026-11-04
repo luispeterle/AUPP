@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Creates commits using Oinkoin's conventional commit style without generated co-author or assistant footers.
+description: Creates commits using AUPP's conventional commit style without generated co-author or assistant footers.
 argument-hint: "[optional summary]"
 ---
 

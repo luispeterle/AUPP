@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/categories/edit-category-page.dart';
-import 'package:piggybank/i18n.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/categories/edit-category-page.dart';
 
 import '../components/category_icon_circle.dart';
 
@@ -72,7 +71,7 @@ class CategoriesListState extends State<CategoriesList> {
               children: <Widget>[
                 Image.asset('assets/images/no_entry_2.png', width: 200),
                 Text(
-                  "No categories yet.".i18n,
+                  'Nenhuma categoria ainda.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 22.0),
                 ),

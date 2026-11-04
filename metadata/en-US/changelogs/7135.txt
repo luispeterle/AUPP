@@ -1,2 +1,0 @@
-- Add settings for choosing your Monthly Image
-- Bug fixes

@@ -1,4 +1,4 @@
-import 'package:piggybank/models/category.dart';
+import 'package:aupp/models/category.dart';
 
 class RecordsSummaryPerCategory {
   double? _amount;

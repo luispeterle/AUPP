@@ -1,19 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/helpers/amount-input-utils.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/components/inapp-keyboard.dart';
+import 'package:aupp/helpers/amount-input-utils.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
 
-/// A unified amount input widget that transparently switches between keyboard
-/// modes based on the user's preference (read once at construction):
-///
-/// - [AmountKeyboardMode.phoneKeyboard] / [AmountKeyboardMode.numberKeyboard]:
-///   a [TextFormField] with math-aware formatters.
-/// - [AmountKeyboardMode.inAppKeyboard]: a tappable [TextFormField] that
-///   slides up [InAppKeyboard] as a non-modal overlay when tapped.
-///
-/// Callers interact only with this widget and never need to know which mode
-/// is active.
+/// A text field for amounts, with math-aware formatters.
 class AmountInputField extends StatefulWidget {
   const AmountInputField({
     super.key,
@@ -28,7 +17,6 @@ class AmountInputField extends StatefulWidget {
     this.autovalidateMode = AutovalidateMode.disabled,
     this.decimalDigits,
     this.unlimitedDecimals = false,
-    this.currencyCode,
   });
 
   final TextEditingController controller;
@@ -36,8 +24,7 @@ class AmountInputField extends StatefulWidget {
   final String? suffixText;
   final bool enabled;
 
-  /// Allow negative values. Enables the sign-toggle in [InAppKeyboard] and
-  /// accepts a leading minus in text-field mode.
+  /// Allow negative values: accepts a leading minus.
   final bool allowNegative;
 
   /// Override the default validator. The default rejects empty input and
@@ -57,23 +44,16 @@ class AmountInputField extends StatefulWidget {
   /// truncating precision would defeat the purpose of the field.
   final bool unlimitedDecimals;
 
-  /// When set (and [decimalDigits] is null), the decimal digits configured
-  /// for this currency (Currencies → Edit) override the global default.
-  /// Ignored when [unlimitedDecimals] is true.
-  final String? currencyCode;
-
   @override
   State<AmountInputField> createState() => _AmountInputFieldState();
 }
 
 class _AmountInputFieldState extends State<AmountInputField> {
-  int get _resolvedDecimalDigits => resolveDecimalDigits(
-        widget.decimalDigits,
-        currencyCode: widget.currencyCode,
-      );
+  int get _resolvedDecimalDigits =>
+      widget.decimalDigits ?? getNumberDecimalDigits();
 
   String? _defaultValidator(String? value) {
-    if (value == null || value.isEmpty) return "Please enter a value".i18n;
+    if (value == null || value.isEmpty) return 'Por favor, insira um valor';
     final parsed = widget.allowNegative
         ? tryParseSignedCurrencyString(value)
         : tryParseCurrencyString(value);
@@ -87,33 +67,12 @@ class _AmountInputFieldState extends State<AmountInputField> {
 
   @override
   Widget build(BuildContext context) {
-    final mode = getAmountKeyboardMode();
     final validator = widget.validator ?? _defaultValidator;
     final decDigits = _resolvedDecimalDigits;
-    // Honor the currency symbol spacing preference (non-breaking space so the
-    // number and currency never wrap apart).
+    // Non-breaking space so the number and currency never wrap apart.
     final suffixText = widget.suffixText == null
         ? null
-        : getCurrencySymbolSpacing()
-            ? '\u00A0${widget.suffixText}'
-            : widget.suffixText;
-
-    if (mode == AmountKeyboardMode.inAppKeyboard) {
-      return _InAppKeyboardField(
-        controller: widget.controller,
-        labelText: widget.labelText,
-        suffixText: suffixText,
-        enabled: widget.enabled,
-        allowNegative: widget.allowNegative,
-        validator: validator,
-        onChanged: widget.onChanged,
-        autovalidateMode: widget.autovalidateMode,
-        autofocus: widget.autofocus,
-        decimalDigits: widget.decimalDigits,
-        unlimitedDecimals: widget.unlimitedDecimals,
-        currencyCode: widget.currencyCode,
-      );
-    }
+        : '\u00A0${widget.suffixText}';
 
     return TextFormField(
       controller: widget.controller,
@@ -136,7 +95,7 @@ class _AmountInputFieldState extends State<AmountInputField> {
             ? Theme.of(context).colorScheme.onSurface
             : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
       ),
-      keyboardType: getAmountInputKeyboardType(mode, signed: widget.allowNegative),
+      keyboardType: getAmountInputKeyboardType(signed: widget.allowNegative),
       decoration: InputDecoration(
         floatingLabelBehavior: FloatingLabelBehavior.always,
         labelText: widget.labelText,
@@ -144,279 +103,6 @@ class _AmountInputFieldState extends State<AmountInputField> {
             widget.unlimitedDecimals ? '0' : buildZeroAmountText(decimalDigits: decDigits),
         suffixText: suffixText,
       ),
-    );
-  }
-}
-
-/// InApp-keyboard variant. Shows a [TextFormField] that slides up
-/// [InAppKeyboard] as a non-modal overlay when tapped.
-class _InAppKeyboardField extends StatefulWidget {
-  const _InAppKeyboardField({
-    required this.controller,
-    required this.enabled,
-    required this.allowNegative,
-    required this.validator,
-    required this.autovalidateMode,
-    this.labelText,
-    this.suffixText,
-    this.onChanged,
-    this.autofocus = false,
-    this.decimalDigits,
-    this.unlimitedDecimals = false,
-    this.currencyCode,
-  });
-
-  final TextEditingController controller;
-  final bool enabled;
-  final bool allowNegative;
-  final FormFieldValidator<String> validator;
-  final AutovalidateMode autovalidateMode;
-  final String? labelText;
-  final String? suffixText;
-  final ValueChanged<String>? onChanged;
-  final bool autofocus;
-  final int? decimalDigits;
-  final bool unlimitedDecimals;
-  final String? currencyCode;
-
-  @override
-  State<_InAppKeyboardField> createState() => _InAppKeyboardFieldState();
-}
-
-class _InAppKeyboardFieldState extends State<_InAppKeyboardField> {
-  int get _resolvedDecimalDigits => resolveDecimalDigits(
-        widget.decimalDigits,
-        currencyCode: widget.currencyCode,
-      );
-
-  OverlayEntry? _overlayEntry;
-  final GlobalKey<_KeyboardOverlayState> _overlayKey = GlobalKey();
-  final GlobalKey _keyboardSizeKey = GlobalKey();
-  final FocusNode _focusNode = FocusNode();
-  bool _isClosing = false;
-  ModalRoute<dynamic>? _observedRoute;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onControllerChanged);
-    _focusNode.addListener(_onFocusChanged);
-    if (widget.autofocus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _openKeyboard();
-      });
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Watch the host route's animation so we can tear down the overlay the
-    // instant an AppBar-back navigation begins — before the page transition
-    // plays — rather than waiting for dispose().
-    final route = ModalRoute.of(context);
-    if (route != _observedRoute) {
-      _observedRoute?.animation?.removeStatusListener(_onRouteAnimationStatus);
-      _observedRoute = route;
-      _observedRoute?.animation?.addStatusListener(_onRouteAnimationStatus);
-    }
-  }
-
-  void _onRouteAnimationStatus(AnimationStatus status) {
-    if (status == AnimationStatus.reverse && _overlayEntry != null) {
-      _removeOverlay();
-      inAppKeyboardOpen.value = false;
-      inAppKeyboardHeight.value = 0.0;
-      registerInAppKeyboardClose(null);
-    }
-  }
-
-  @override
-  void dispose() {
-    _observedRoute?.animation?.removeStatusListener(_onRouteAnimationStatus);
-    widget.controller.removeListener(_onControllerChanged);
-    _focusNode.removeListener(_onFocusChanged);
-    _focusNode.dispose();
-    _removeOverlay();
-    registerInAppKeyboardClose(null);
-    if (inAppKeyboardOpen.value) {
-      inAppKeyboardOpen.value = false;
-    }
-    super.dispose();
-  }
-
-  void _onControllerChanged() {
-    widget.onChanged?.call(widget.controller.text);
-  }
-
-  void _onFocusChanged() {
-    if (!_focusNode.hasFocus) _doCloseImmediately();
-  }
-
-  void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-  }
-
-  Future<void> _doClose() async {
-    if (_isClosing || _overlayEntry == null) return;
-    _isClosing = true;
-    await _overlayKey.currentState?.animateClose();
-    inAppKeyboardOpen.value = false;
-    inAppKeyboardHeight.value = 0.0;
-    _removeOverlay();
-    registerInAppKeyboardClose(null);
-    if (mounted) setState(() => _isClosing = false);
-  }
-
-  void _doCloseImmediately() {
-    if (_overlayEntry == null) return;
-    _isClosing = false;
-    inAppKeyboardOpen.value = false;
-    inAppKeyboardHeight.value = 0.0;
-    _removeOverlay();
-    registerInAppKeyboardClose(null);
-    if (mounted) setState(() {});
-  }
-
-  void _openKeyboard() {
-    if (!widget.enabled || _overlayEntry != null) return;
-
-    _overlayEntry = OverlayEntry(
-      builder: (_) => Positioned(
-        left: 0,
-        right: 0,
-        bottom: 0,
-        child: _KeyboardOverlay(
-          key: _overlayKey,
-          child: InAppKeyboard(
-            key: _keyboardSizeKey,
-            controller: widget.controller,
-            enableSignToggleButton: widget.allowNegative,
-            onSubmit: (_) => _doClose(),
-            decimalDigits: widget.decimalDigits,
-            unlimitedDecimals: widget.unlimitedDecimals,
-            currencyCode: widget.currencyCode,
-          ),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_overlayEntry!);
-    registerInAppKeyboardClose(_doCloseImmediately);
-    inAppKeyboardOpen.value = true;
-    // Rebuild so PopScope.canPop updates to false immediately.
-    setState(() {});
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final box = _keyboardSizeKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null) inAppKeyboardHeight.value = box.size.height;
-      if (mounted) _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // PopScope intercepts the hardware back button (Navigator.maybePop) when
-    // the keyboard is open: blocks the pop and closes the keyboard instead.
-    // Navigator.pop() — used by the AppBar back button — ignores canPop and
-    // always pops; _onRouteAnimationStatus handles that path by removing the
-    // overlay as soon as the route starts reversing.
-    final decDigits = _resolvedDecimalDigits;
-    return PopScope(
-      canPop: _overlayEntry == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _doClose();
-      },
-      child: TextFormField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        keyboardType: TextInputType.none,
-        enabled: widget.enabled,
-        autofocus: widget.autofocus,
-        autovalidateMode: widget.autovalidateMode,
-        inputFormatters: buildAmountInputFormatters(
-          decimalSep: getDecimalSeparator(),
-          groupSep: getGroupingSeparator(),
-          autoDec: getAmountInputAutoDecimalShift(),
-          decDigits: decDigits,
-          unlimitedDecimals: widget.unlimitedDecimals,
-        ),
-        validator: widget.validator,
-        onTap: _openKeyboard,
-        // The framework's default tap-outside behavior unfocuses the field on
-        // desktop platforms (Linux/Windows/macOS), which closes the in-app
-        // keyboard on any click — including on the keyboard's own keys. The
-        // keyboard is dismissed explicitly instead: other text fields steal
-        // focus (closing it via _onFocusChanged) and interactive elements call
-        // dismissInAppKeyboard().
-        onTapOutside: (_) {},
-        textAlign: TextAlign.end,
-        style: TextStyle(
-          fontSize: 32.0,
-          color: widget.enabled
-              ? Theme.of(context).colorScheme.onSurface
-              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
-        ),
-        decoration: InputDecoration(
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-          labelText: widget.labelText,
-          hintText: widget.unlimitedDecimals
-              ? '0'
-              : buildZeroAmountText(decimalDigits: decDigits),
-          suffixText: widget.suffixText,
-        ),
-      ),
-    );
-  }
-}
-
-/// Wraps the keyboard widget with a slide-up entrance / slide-down exit animation.
-class _KeyboardOverlay extends StatefulWidget {
-  const _KeyboardOverlay({super.key, required this.child});
-  final Widget child;
-
-  @override
-  _KeyboardOverlayState createState() => _KeyboardOverlayState();
-}
-
-class _KeyboardOverlayState extends State<_KeyboardOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<Offset> _slide;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _slide = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-    _controller.forward();
-  }
-
-  Future<void> animateClose() => _controller.reverse();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // While sliding in, keep hit testing at the settled position: a finger
-    // aiming at a key during the first frames of the entrance must reach that
-    // key instead of falling through to the page behind it. On the way out,
-    // hits follow the painted position so an invisible keyboard does not
-    // swallow taps once it has slid away.
-    return SlideTransition(
-      position: _slide,
-      transformHitTests: _controller.status != AnimationStatus.forward,
-      child: widget.child,
     );
   }
 }

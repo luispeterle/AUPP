@@ -2,73 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class CategoryIcons {
-  static List<IconData> free_category_icons = [
-    // Other
-    FontAwesomeIcons.question.data,
-    Icons.swap_horiz,
-
-    // House
-    FontAwesomeIcons.house.data,
-
-    // Food
-    FontAwesomeIcons.burger.data,
-    FontAwesomeIcons.pizzaSlice.data,
-    FontAwesomeIcons.iceCream.data,
-    FontAwesomeIcons.cakeCandles.data,
-    FontAwesomeIcons.fish.data,
-
-    // Beverage
-    FontAwesomeIcons.martiniGlassCitrus.data,
-    FontAwesomeIcons.mugSaucer.data,
-    FontAwesomeIcons.beerMugEmpty.data,
-
-    // transports
-    FontAwesomeIcons.car.data,
-    FontAwesomeIcons.motorcycle.data,
-    FontAwesomeIcons.taxi.data,
-    FontAwesomeIcons.planeDeparture.data,
-    FontAwesomeIcons.bus.data,
-    FontAwesomeIcons.train.data,
-
-    // Shopping
-    FontAwesomeIcons.cartShopping.data,
-    FontAwesomeIcons.gift.data,
-    FontAwesomeIcons.socks.data,
-    FontAwesomeIcons.receipt.data,
-    FontAwesomeIcons.shirt.data,
-
-    // Animal
-    FontAwesomeIcons.cat.data,
-    FontAwesomeIcons.dog.data,
-
-    // Finance
-    FontAwesomeIcons.moneyBill.data,
-    FontAwesomeIcons.creditCard.data,
-    FontAwesomeIcons.wallet.data,
-    FontAwesomeIcons.handHoldingDollar.data,
-    FontAwesomeIcons.circleDollarToSlot.data,
-    FontAwesomeIcons.landmark.data,
-
-    // Entertainment
-    FontAwesomeIcons.phone.data,
-    FontAwesomeIcons.gamepad.data,
-    FontAwesomeIcons.masksTheater.data,
-    FontAwesomeIcons.personSwimming.data,
-    FontAwesomeIcons.football.data,
-    FontAwesomeIcons.dumbbell.data,
-    FontAwesomeIcons.tv.data,
-    FontAwesomeIcons.film.data,
-    FontAwesomeIcons.desktop.data,
-    FontAwesomeIcons.music.data,
-
-    // Medical
-    FontAwesomeIcons.pills.data,
-    FontAwesomeIcons.smoking.data,
-    FontAwesomeIcons.syringe.data,
-    FontAwesomeIcons.tooth.data,
-  ];
-
-  static List<IconData> pro_category_icons = [
+  static List<IconData> category_icons = [
     // Other
     FontAwesomeIcons.question.data,
     Icons.swap_horiz,
@@ -216,5 +150,62 @@ class CategoryIcons {
     // People
     FontAwesomeIcons.handHoldingHand.data,
     FontAwesomeIcons.accessibleIcon.data,
+
+    // Dinzo subcategories (fork-only), appended so existing code points keep
+    // their meaning.
+    FontAwesomeIcons.fileInvoiceDollar.data,
+    FontAwesomeIcons.moneyCheck.data,
+    FontAwesomeIcons.peopleGroup.data,
+    FontAwesomeIcons.fileSignature.data,
+    FontAwesomeIcons.percent.data,
+    FontAwesomeIcons.sackDollar.data,
+    FontAwesomeIcons.handshake.data,
+    FontAwesomeIcons.calendarDays.data,
+    FontAwesomeIcons.fileInvoice.data,
+    FontAwesomeIcons.scaleBalanced.data,
+    FontAwesomeIcons.arrowTrendUp.data,
+    FontAwesomeIcons.arrowTrendDown.data,
+    FontAwesomeIcons.moneyBillTrendUp.data,
+    FontAwesomeIcons.chartLine.data,
+    FontAwesomeIcons.chalkboardUser.data,
+    FontAwesomeIcons.school.data,
+    FontAwesomeIcons.userGraduate.data,
+    FontAwesomeIcons.book.data,
+    FontAwesomeIcons.scissors.data,
+    FontAwesomeIcons.handSparkles.data,
+    FontAwesomeIcons.wandMagicSparkles.data,
+    FontAwesomeIcons.circlePlay.data,
+    FontAwesomeIcons.mobileScreen.data,
+    FontAwesomeIcons.tree.data,
+    FontAwesomeIcons.ticket.data,
+    FontAwesomeIcons.faceLaughBeam.data,
+    FontAwesomeIcons.bone.data,
+    FontAwesomeIcons.bowlFood.data,
+    FontAwesomeIcons.shower.data,
+    FontAwesomeIcons.prescriptionBottleMedical.data,
+    FontAwesomeIcons.userDoctor.data,
+    FontAwesomeIcons.calendarPlus.data,
+    FontAwesomeIcons.personCane.data,
+    FontAwesomeIcons.clock.data,
+    FontAwesomeIcons.briefcase.data,
+    FontAwesomeIcons.heartPulse.data,
+    FontAwesomeIcons.teeth.data,
+    FontAwesomeIcons.idCard.data,
+    FontAwesomeIcons.fileContract.data,
+    FontAwesomeIcons.triangleExclamation.data,
+    FontAwesomeIcons.road.data,
+    FontAwesomeIcons.carSide.data,
+    FontAwesomeIcons.carBurst.data,
+    FontAwesomeIcons.fire.data,
+    FontAwesomeIcons.wifi.data,
+    FontAwesomeIcons.key.data,
+    FontAwesomeIcons.building.data,
+    FontAwesomeIcons.houseLock.data,
+    FontAwesomeIcons.shoePrints.data,
+    FontAwesomeIcons.glasses.data,
+    FontAwesomeIcons.rightLeft.data,
+    FontAwesomeIcons.sliders.data,
+    FontAwesomeIcons.monero.data,
+    FontAwesomeIcons.broom.data,
   ];
 }

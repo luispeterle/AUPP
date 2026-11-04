@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/services/service-config.dart';
 
 class TabRecordsSelectionAppBar extends StatelessWidget
     implements PreferredSizeWidget {
@@ -11,6 +10,14 @@ class TabRecordsSelectionAppBar extends StatelessWidget
   final VoidCallback onDuplicate;
   final VoidCallback? onMoveToWallet;
 
+  /// Title-cases the selected records' names (fork-only).
+  final VoidCallback onTitleCase;
+
+  /// Hides the selected records from the Extrato, or shows them again when
+  /// [selectionAllHidden] (fork-only).
+  final VoidCallback onToggleHidden;
+  final bool selectionAllHidden;
+
   const TabRecordsSelectionAppBar({
     Key? key,
     required this.selectedCount,
@@ -19,6 +26,9 @@ class TabRecordsSelectionAppBar extends StatelessWidget
     required this.onSelectAll,
     required this.onDuplicate,
     this.onMoveToWallet,
+    required this.onTitleCase,
+    required this.onToggleHidden,
+    this.selectionAllHidden = false,
   }) : super(key: key);
 
   @override
@@ -33,11 +43,11 @@ class TabRecordsSelectionAppBar extends StatelessWidget
         icon: const Icon(Icons.arrow_back),
         onPressed: onClose,
       ),
-      title: Text("$selectedCount ${"selected".i18n}"),
+      title: Text("$selectedCount ${'selecionado'}"),
       actions: [
         IconButton(
           icon: const Icon(Icons.delete_outline),
-          tooltip: "Delete".i18n,
+          tooltip: 'Excluir',
           onPressed: selectedCount > 0 ? onDelete : null,
         ),
         PopupMenuButton<String>(
@@ -49,21 +59,35 @@ class TabRecordsSelectionAppBar extends StatelessWidget
               onDuplicate();
             } else if (value == 'move_wallet') {
               onMoveToWallet?.call();
+            } else if (value == 'toggle_hidden') {
+              onToggleHidden();
+            } else if (value == 'title_case') {
+              onTitleCase();
             }
           },
           itemBuilder: (_) => [
             PopupMenuItem(
               value: 'select_all',
-              child: Text('Select all'.i18n),
+              child: Text('Selecionar tudo'),
             ),
             PopupMenuItem(
               value: 'duplicate',
-              child: Text('Duplicate'.i18n),
+              child: Text('Duplicar'),
             ),
-            if (ServiceConfig.isPremium && ServiceConfig.walletsEnabled)
+            PopupMenuItem(
+              value: 'toggle_hidden',
+              child: Text(selectionAllHidden
+                  ? 'Mostrar no Extrato'
+                  : 'Ocultar do Extrato'),
+            ),
+            const PopupMenuItem(
+              value: 'title_case',
+              child: Text('Primeira Letra Maiúscula'),
+            ),
+            if (ServiceConfig.walletsEnabled)
               PopupMenuItem(
                 value: 'move_wallet',
-                child: Text('Move to wallet'.i18n),
+                child: Text('Mover para carteira'),
               ),
           ],
         ),

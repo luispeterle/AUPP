@@ -4,10 +4,10 @@ project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "piggybank")
+set(BINARY_NAME "aupp")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.github.emavgl.oinkoin")
+set(APPLICATION_ID "app.aupp")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -128,13 +128,13 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
 endif()
 
 # Install the application icon
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/oinkoin.png"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/aupp.png"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/512x512/apps"
-  RENAME "oinkoin.png"
+  RENAME "aupp.png"
   COMPONENT Runtime)
 
 # Install the desktop file
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/com.github.emavgl.oinkoin.desktop"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/app.aupp.desktop"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications"
   COMPONENT Runtime)
 

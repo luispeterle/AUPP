@@ -1,2 +1,0 @@
-- Fix icons alignment in statistics
-- Fix order of the records in statistics 

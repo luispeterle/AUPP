@@ -1,4 +1,0 @@
-- Bug fixes
-- Automatically use digits grouping separator on edit
-- Preliminary Balance statistics
-

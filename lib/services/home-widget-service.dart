@@ -1,50 +1,37 @@
-import 'dart:convert';
+import 'package:aupp/accounts/money-accounts.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:home_widget/home_widget.dart';
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/home_widgets/widget_views.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/budget-type.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/logger.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/style.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:aupp/demo/demo-mode.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/home_widgets/widget_views.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/logger.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/style.dart';
 
-/// Android home screen widgets (overview, income, expenses, balance, and
-/// one configurable widget per budget).
+/// Android home screen widgets (overview, income, expenses, balance).
 ///
 /// The native side renders text itself, so figures stay crisp at any widget
 /// size; only the small sparkline charts are bitmaps. Values follow the
 /// homepage time interval setting. Refresh happens on app events (record
-/// and budget changes, launch) plus a manual refresh; Android additionally
+/// changes, launch) plus a manual refresh; Android additionally
 /// redraws on its own schedule.
 class HomeWidgetService {
   static final _logger = Logger.withClass(HomeWidgetService);
 
-  static const String _providerPackage = 'com.example.piggybank.widget';
+  static const String _providerPackage = 'app.aupp.widget';
   static const String overviewProvider =
-      '$_providerPackage.OinkoinOverviewWidgetProvider';
+      '$_providerPackage.AuppOverviewWidgetProvider';
   static const String incomeProvider =
-      '$_providerPackage.OinkoinIncomeWidgetProvider';
+      '$_providerPackage.AuppIncomeWidgetProvider';
   static const String expensesProvider =
-      '$_providerPackage.OinkoinExpensesWidgetProvider';
+      '$_providerPackage.AuppExpensesWidgetProvider';
   static const String balanceProvider =
-      '$_providerPackage.OinkoinBalanceWidgetProvider';
-  static const String budgetProvider =
-      '$_providerPackage.OinkoinBudgetWidgetProvider';
-
-  /// Maps pinned budget widget instances to budget database ids.
-  /// Managed from Settings > Home screen widgets (device-local).
-  static const String budgetMappingKey = 'homeWidgetBudgetMap';
+      '$_providerPackage.AuppBalanceWidgetProvider';
 
   /// Widgets are an Android-only feature in this app.
   static bool get isSupported => Platform.isAndroid;
@@ -54,39 +41,28 @@ class HomeWidgetService {
   /// Recomputes every widget's data and pushes an update. Best effort:
   /// failures only log so callers (UI event handlers) never break.
   static Future<void> refreshAll() async {
-    if (!isSupported) return;
+    // The demo's made-up numbers never reach the home screen.
+    if (!isSupported || DemoMode.active) return;
     try {
-      final prefs = ServiceConfig.sharedPreferences ??
-          await SharedPreferences.getInstance();
-      final dark = _isDark(prefs);
-      await HomeWidget.saveWidgetData<bool>('oinkoin_dark', dark);
+      const dark = true;
+      await HomeWidget.saveWidgetData<bool>('aupp_dark', dark);
       // App's own background so widgets blend in (dynamic seed theme:
       // read the live theme, fall back to the default seed scheme).
-      final brightness = dark ? Brightness.dark : Brightness.light;
+      const brightness = Brightness.dark;
       final surface = MaterialThemeInstance.currentTheme?.colorScheme.surface ??
           ColorScheme.fromSeed(
                   seedColor: MaterialThemeInstance.defaultSeedColor,
                   brightness: brightness)
               .surface;
       await HomeWidget.saveWidgetData(
-          'oinkoin_background_color', surface.toARGB32());
-      final profileId = ProfileService.instance.activeProfileId;
+          'aupp_background_color', surface.toARGB32());
       final interval = getHomepageTimeIntervalEnumSetting();
       final monthStartDay = getHomepageRecordsMonthStartDay();
-      final wallets = await _database.getAllWallets(profileId: profileId);
-      final walletCurrencyMap = {
-        for (final w in wallets)
-          if (w.id != null) w.id!: w.currency,
-      };
-      final records = await getRecordsByHomepageTimeInterval(
-        _database,
-        interval,
-        monthStartDay: monthStartDay,
-        profileId: profileId,
-      );
+      final records = MoneyAccounts.withoutTransfers(
+          await getRecordsByHomepageTimeInterval(_database, interval,
+              monthStartDay: monthStartDay));
 
-      await _refreshTotals(dark, records, walletCurrencyMap);
-      await _refreshBudgets(profileId);
+      await _refreshTotals(dark, records);
     } catch (e, st) {
       _logger.handle(e, st, 'Failed to refresh home screen widgets');
     }
@@ -99,86 +75,82 @@ class HomeWidgetService {
 
   static Future<void> _refreshTotals(    bool dark,
     List<Record?> records,
-    Map<int, String?> walletCurrencyMap,
   ) async {
-    final brightness = dark ? Brightness.dark : Brightness.light;
+    const brightness = Brightness.dark;
     final incomeRecords = records.where((r) =>
-        r?.category?.categoryType == CategoryType.income && !r!.isTransfer);
+        r?.category?.categoryType == CategoryType.income && !r!.isOwnMove);
     final expenseRecords = records.where((r) =>
-        r?.category?.categoryType == CategoryType.expense && !r!.isTransfer);
-    final balanceRecords = records.where((r) => r != null && !r.isTransfer);
+        r?.category?.categoryType == CategoryType.expense && !r!.isOwnMove);
+    final balanceRecords = records.where((r) => r != null && !r.isOwnMove);
 
     String text(Iterable<Record?> rs, {required bool isBalance}) {
-      final result =
-          computeConvertedTotal(rs, walletCurrencyMap, isAbsValue: !isBalance);
-      return formatRecordsTotalResult(result);
+      return formatMoney(recordsTotal(rs, isAbsValue: !isBalance));
     }
 
     Future<void> save(String key, Object value) =>
         HomeWidget.saveWidgetData(key, value);
 
     final incomeTotal =
-        computeConvertedTotal(incomeRecords, walletCurrencyMap).total;
+        recordsTotal(incomeRecords);
     final expenseTotal =
-        computeConvertedTotal(expenseRecords, walletCurrencyMap).total;
-    final balanceResult = computeConvertedTotal(
-        balanceRecords, walletCurrencyMap,
+        recordsTotal(expenseRecords);
+    final balanceResult = recordsTotal(balanceRecords,
         isAbsValue: false);
 
-    await save('oinkoin_overview_label_income', "Income".i18n);
-    await save('oinkoin_overview_label_expenses', "Expenses".i18n);
-    await save('oinkoin_overview_label_balance', "Balance".i18n);
+    await save('aupp_overview_label_income', 'Rendas');
+    await save('aupp_overview_label_expenses', 'Despesas');
+    await save('aupp_overview_label_balance', 'Saldo');
     await save(
-        'oinkoin_overview_income', text(incomeRecords, isBalance: false));
+        'aupp_overview_income', text(incomeRecords, isBalance: false));
     await save(
-        'oinkoin_overview_expenses', text(expenseRecords, isBalance: false));
+        'aupp_overview_expenses', text(expenseRecords, isBalance: false));
     await save(
-        'oinkoin_overview_balance', text(balanceRecords, isBalance: true));
-    await save('oinkoin_overview_income_color',
+        'aupp_overview_balance', text(balanceRecords, isBalance: true));
+    await save('aupp_overview_income_color',
         (getAmountColor(incomeTotal, brightness) ?? Colors.green).toARGB32());
-    await save('oinkoin_overview_expenses_color',
+    await save('aupp_overview_expenses_color',
         (getAmountColor(expenseTotal, brightness) ?? Colors.red).toARGB32());
-    await save('oinkoin_overview_balance_color',
-        (getAmountColor(balanceResult.total, brightness) ??
-                _balanceFallback(balanceResult.total))
+    await save('aupp_overview_balance_color',
+        (getAmountColor(balanceResult, brightness) ??
+                _balanceFallback(balanceResult))
             .toARGB32());
     final balanceSeries = dailySeries(balanceRecords, isBalance: true);
     if (balanceSeries.length > 1) {
       final overviewSpark = await _renderSparkline(
-        prefix: 'oinkoin_overview',
+        prefix: 'aupp_overview',
         values: balanceSeries,
-        color: getAmountColor(balanceResult.total, brightness) ??
-            _balanceFallback(balanceResult.total),
+        color: getAmountColor(balanceResult, brightness) ??
+            _balanceFallback(balanceResult),
       );
       if (overviewSpark != null) {
-        await save('oinkoin_overview_spark', overviewSpark);
+        await save('aupp_overview_spark', overviewSpark);
       }
     }
     await HomeWidget.updateWidget(qualifiedAndroidName: overviewProvider);
 
     await _refreshSingle(
       provider: incomeProvider,
-      prefix: 'oinkoin_income',
-      label: "Income".i18n,
+      prefix: 'aupp_income',
+      label: 'Rendas',
       amount: text(incomeRecords, isBalance: false),
       color: getAmountColor(incomeTotal, brightness),
       sparkline: dailySeries(incomeRecords, isBalance: false),
     );
     await _refreshSingle(
       provider: expensesProvider,
-      prefix: 'oinkoin_expenses',
-      label: "Expenses".i18n,
+      prefix: 'aupp_expenses',
+      label: 'Despesas',
       amount: text(expenseRecords, isBalance: false),
       color: getAmountColor(expenseTotal, brightness),
       sparkline: dailySeries(expenseRecords, isBalance: false),
     );
     await _refreshSingle(
       provider: balanceProvider,
-      prefix: 'oinkoin_balance',
-      label: "Balance".i18n,
+      prefix: 'aupp_balance',
+      label: 'Saldo',
       amount: text(balanceRecords, isBalance: true),
-      color: getAmountColor(balanceResult.total, brightness) ??
-          _balanceFallback(balanceResult.total),
+      color: getAmountColor(balanceResult, brightness) ??
+          _balanceFallback(balanceResult),
       sparkline: dailySeries(balanceRecords, isBalance: true),
     );
   }
@@ -206,76 +178,6 @@ class HomeWidgetService {
     await HomeWidget.updateWidget(qualifiedAndroidName: provider);
   }
 
-  static Future<void> _refreshBudgets(int? profileId) async {
-    final budgets = (await _database.getBudgets(profileId: profileId))
-        .where((b) => !b.isArchived)
-        .toList();
-    if (budgets.isEmpty) return;
-    final byId = {for (final b in budgets) b.id: b};
-
-    List<HomeWidgetInfo> installed = const [];
-    try {
-      installed = await HomeWidget.getInstalledWidgets();
-    } catch (e, st) {
-      _logger.handle(e, st, 'Failed to list installed widgets');
-      return;
-    }
-    final mapping = await getBudgetMapping();
-    // Auto-assign: with exactly one active budget, point every budget widget
-    // that was never explicitly assigned at it. An explicit "None" (sentinel
-    // 0) is never overwritten.
-    if (budgets.length == 1) {
-      final onlyBudgetId = budgets.first.id;
-      if (onlyBudgetId != null) {
-        var changed = false;
-        for (final info in installed) {
-          if (info.androidClassName != budgetProvider) continue;
-          final widgetId = info.androidWidgetId;
-          if (widgetId == null) continue;
-          if (!mapping.containsKey(widgetId.toString())) {
-            mapping[widgetId.toString()] = onlyBudgetId;
-            changed = true;
-          }
-        }
-        if (changed) await _saveBudgetMapping(mapping);
-      }
-    }
-    final allRecords = await _database.getAllRecords(profileId: profileId);
-
-    for (final info in installed) {
-      if (info.androidClassName != budgetProvider) continue;
-      final widgetId = info.androidWidgetId;
-      if (widgetId == null) continue;
-      final budget = byId[mapping[widgetId.toString()]];
-      if (budget == null) continue;
-      final cycle = budget.currentCycle();
-      final amount = budgetProgressAmount(
-          budget, matchingBudgetRecords(budget, allRecords.whereType<Record>(), cycle));
-      final ratio =
-          budget.targetAmount == 0 ? 0.0 : amount / budget.targetAmount;
-      final color = budget.budgetType == BudgetType.expense
-          ? Colors.red[600]!
-          : Colors.green[600]!;
-      final prefix = 'oinkoin_budget_$widgetId';
-      final percent = '${(ratio * 100).round()}%';
-      await HomeWidget.saveWidgetData('${prefix}_name', budget.name);
-      await HomeWidget.saveWidgetData('${prefix}_cycle',
-          'From %s to %s'.i18n.fill([
-            getDateStr(cycle.start),
-            getDateStr(cycle.end),
-          ]));
-      await HomeWidget.saveWidgetData('${prefix}_type',
-          budget.budgetType == BudgetType.expense ? 'expense' : 'saving');
-      await HomeWidget.saveWidgetData('${prefix}_progress',
-          '${getCurrencyValueString(amount)} / ${getCurrencyValueString(budget.targetAmount)}');
-      await HomeWidget.saveWidgetData('${prefix}_percent', percent);
-      await HomeWidget.saveWidgetData(
-          '${prefix}_ratio', (ratio.clamp(0.0, 1.0) * 100).round());
-      await HomeWidget.saveWidgetData('${prefix}_color', color.toARGB32());
-    }
-    await HomeWidget.updateWidget(qualifiedAndroidName: budgetProvider);
-  }
-
   /// Daily totals over the interval for sparklines (signed for balance,
   /// absolute otherwise), capped to the most recent 31 days.
   static List<double> dailySeries(
@@ -284,7 +186,7 @@ class HomeWidgetService {
   }) {
     final byDay = <DateTime, double>{};
     for (final record in records) {
-      if (record?.value == null || record!.isTransfer) continue;
+      if (record?.value == null || record!.isOwnMove) continue;
       final day = DateTime(
         record.localDateTime.year,
         record.localDateTime.month,
@@ -324,52 +226,4 @@ class HomeWidgetService {
     }
   }
 
-  static bool _isDark(SharedPreferences prefs) {
-    final modeIndex = prefs.getInt(PreferencesKeys.themeMode) ?? 0;
-    if (modeIndex == 2) return true;
-    if (modeIndex == 1) return false;
-    return SchedulerBinding.instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
-  }
-
-  /// Budget database id per pinned budget-widget instance id.
-  ///
-  /// An explicit "None" choice is stored as the sentinel `0` (budget ids
-  /// start at 1), so auto-assignment never resurrects it. Widgets never
-  /// assigned have no entry at all.
-  static Future<Map<String, int>> getBudgetMapping() async {
-    final prefs = ServiceConfig.sharedPreferences ??
-        await SharedPreferences.getInstance();
-    final raw = prefs.getString(budgetMappingKey);
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      final decoded = json.decode(raw) as Map<String, dynamic>;
-      return {
-        for (final entry in decoded.entries)
-          if (entry.value is int) entry.key: entry.value as int,
-      };
-    } catch (_) {
-      return {};
-    }
-  }
-
-  static Future<void> _saveBudgetMapping(Map<String, int> mapping) async {
-    final prefs = ServiceConfig.sharedPreferences ??
-        await SharedPreferences.getInstance();
-    await prefs.setString(budgetMappingKey, json.encode(mapping));
-  }
-
-  /// Sets which budget [androidWidgetId] shows: a budget id, `0` for an
-  /// explicit "None", or `null` to clear the assignment.
-  static Future<void> setBudgetMapping(
-      int androidWidgetId, int? budgetId) async {
-    final mapping = await getBudgetMapping();
-    final key = androidWidgetId.toString();
-    if (budgetId == null) {
-      mapping.remove(key);
-    } else {
-      mapping[key] = budgetId;
-    }
-    await _saveBudgetMapping(mapping);
-  }
 }

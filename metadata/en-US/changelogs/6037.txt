@@ -1,3 +1,0 @@
-- Add Chinese Simplified
-- Currency Locale is now different from App language locale
-- Bug fix

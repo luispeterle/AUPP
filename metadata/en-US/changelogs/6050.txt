@@ -1,2 +1,0 @@
-- Update translations
-- Add icons outline in navbar

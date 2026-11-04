@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:piggybank/models/category-icons.dart';
-import 'package:piggybank/models/model.dart';
+import 'package:aupp/models/category-icons.dart';
+import 'package:aupp/models/model.dart';
 
 import '../helpers/color-utils.dart';
 import 'category-type.dart';
@@ -24,6 +24,27 @@ class Category extends Model {
     Colors.white,
   ];
 
+  /// Fork: what money becoming an investment is filed under. Created when first
+  /// used, like [adjustment].
+  static const investmentName = 'Aporte';
+
+  static Category investment() => Category(
+    investmentName,
+    categoryType: CategoryType.investment,
+    color: Colors.teal[400],
+    iconCodePoint: FontAwesomeIcons.chartLine.data.codePoint,
+  );
+
+  /// What the wallet to invest gained or lost without an entry saying why.
+  static const adjustmentName = 'Ajuste';
+
+  static Category adjustment() => Category(
+    adjustmentName,
+    categoryType: CategoryType.investment,
+    color: Colors.blueGrey[300],
+    iconCodePoint: FontAwesomeIcons.sliders.data.codePoint,
+  );
+
   String? name;
   Color? color;
   int? iconCodePoint;
@@ -35,6 +56,10 @@ class Category extends Model {
   bool isArchived;
   int? sortOrder; // New field to track the order of categories
 
+  /// Name of the parent category (same type), for subcategories. Records of
+  /// a subcategory also count for its parent (budgets, statistics). Fork-only.
+  String? parentName;
+
   // Updated constructor to include the sortOrder field
   Category(String? name,
       {this.color,
@@ -44,10 +69,11 @@ class Category extends Model {
       this.recordCount,
       this.iconEmoji,
       this.isArchived = false,
-      this.sortOrder = 0}) {
+      this.sortOrder = 0,
+      this.parentName}) {
     // Initialize sortOrder in constructor
     this.name = name;
-    var categoryIcons = CategoryIcons.pro_category_icons;
+    var categoryIcons = CategoryIcons.category_icons;
 
     if (iconEmoji == null) {
       if (this.iconCodePoint == null ||
@@ -78,6 +104,7 @@ class Category extends Model {
       'is_archived': isArchived ? 1 : 0,
       'icon_emoji': iconEmoji,
       'sort_order': sortOrder, // Add sortOrder to the map
+      'parent_name': parentName,
     };
     if (color != null) {
       map['color'] = serializeColorToString(color!);
@@ -134,6 +161,7 @@ class Category extends Model {
       iconEmoji: iconEmojiFromMap,
       isArchived: isArchivedFromMap,
       sortOrder: sortOrder, // Initialize sortOrder
+      parentName: map['parent_name'] as String?,
     );
   }
 

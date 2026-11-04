@@ -1,10 +1,8 @@
-import 'package:piggybank/models/budget.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/profile.dart';
-import 'package:piggybank/models/record-tag-association.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/recurrent-record-pattern.dart';
-import 'package:piggybank/models/wallet.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/record-tag-association.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/recurrent-record-pattern.dart';
+import 'package:aupp/models/wallet.dart';
 
 import 'category.dart';
 import 'model.dart';
@@ -15,8 +13,6 @@ class Backup extends Model {
   List<RecurrentRecordPattern> recurrentRecordsPattern;
   List<RecordTagAssociation> recordTagAssociations;
   List<Wallet> wallets;
-  List<Profile> profiles;
-  List<Budget> budgets;
   var created_at;
 
   String? packageName;
@@ -24,7 +20,6 @@ class Backup extends Model {
   String? databaseVersion;
 
   /// Raw JSON string of user-defined currencies from SharedPreferences.
-  String? userCurrencies;
 
   /// Portable application preferences captured from SharedPreferences.
   Map<String, dynamic> preferences;
@@ -32,13 +27,8 @@ class Backup extends Model {
   Backup(this.packageName, this.version, this.databaseVersion, this.categories,
       this.records, this.recurrentRecordsPattern, this.recordTagAssociations,
       {List<Wallet>? wallets,
-      List<Profile>? profiles,
-      List<Budget>? budgets,
-      this.userCurrencies,
       Map<String, dynamic>? preferences})
       :        wallets = wallets ?? [],
-        profiles = profiles ?? [],
-        budgets = budgets ?? [],
         preferences = preferences ?? {} {
     created_at = new DateTime.now().millisecondsSinceEpoch;
   }
@@ -54,26 +44,17 @@ class Backup extends Model {
       'record_tag_associations': List.generate(recordTagAssociations.length,
           (index) => recordTagAssociations[index].toMap()),
       'wallets': wallets.map((w) => w.toMap()).toList(),
-      'profiles': profiles.map((p) => p.toMap()).toList(),
-      'budgets': budgets.map((budget) => budget.toMap()).toList(),
       'created_at': created_at,
       'package_name': packageName ?? '',
       'version': version ?? '',
       'database_version': databaseVersion ?? '',
-      if (userCurrencies != null) 'user_currencies': userCurrencies,
       'preferences': preferences,
     };
     return map;
   }
 
   static Backup fromMap(Map<String, dynamic> map) {
-    // Step 0: load profiles (backward compat: key may not exist in old backups)
-    List<Profile> profiles = [];
-    if (map.containsKey('profiles') && map['profiles'] != null) {
-      profiles = List.generate(map['profiles'].length, (i) {
-        return Profile.fromMap(Map<String, dynamic>.from(map['profiles'][i]));
-      });
-    }
+    // Old backups may carry the profiles the app used to have: ignored.
 
     // Step 0b: load wallets
     List<Wallet> wallets = [];
@@ -146,25 +127,18 @@ class Backup extends Model {
       });
     }
 
-    // Step 5: load budgets. This key is optional for older backups.
-    final budgetMaps = map['budgets'] as List? ?? const [];
-    final budgets = budgetMaps
-        .map((raw) => Budget.fromMap(Map<String, dynamic>.from(raw)))
-        .toList();
+    // Older backups may carry a 'budgets' key: budgets were removed from
+    // the fork (2026-10-13), so it is ignored.
 
     // Extract optional packageName and version
     String? packageName = nonEmptyStringValue(map, 'package_name');
     String? version = nonEmptyStringValue(map, 'version');
     String? databaseVersion = nonEmptyStringValue(map, 'database_version');
-    String? userCurrencies = nonEmptyStringValue(map, 'user_currencies');
     final preferences = _preferencesFromMap(map['preferences']);
 
     return Backup(packageName, version, databaseVersion, categories, records,
         recurrentRecordsPattern, recordTagAssociations,
         wallets: wallets,
-        profiles: profiles,
-        budgets: budgets,
-        userCurrencies: userCurrencies,
         preferences: preferences);
   }
 

@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/wallet.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/wallet.dart';
 import 'package:community_charts_flutter/community_charts_flutter.dart'
     as charts;
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
 
-import '../services/service-config.dart';
-import '../settings/constants/preferences-keys.dart';
-import '../settings/preferences-utils.dart';
 
 class LinearWalletRecord {
   final int? walletId;
@@ -23,13 +18,11 @@ class WalletsPieChart extends StatefulWidget {
   final Map<int, Wallet> walletMap;
   final Function(double?, String?, List<String>?)? onSelectionChanged;
   final String? selectedWalletId;
-  final Map<int, String?> walletCurrencyMap;
 
   WalletsPieChart(this.records,
       {this.walletMap = const {},
       this.onSelectionChanged,
-      this.selectedWalletId,
-      this.walletCurrencyMap = const {}});
+      this.selectedWalletId});
 
   @override
   _WalletsPieChartState createState() => _WalletsPieChartState();
@@ -70,9 +63,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
   }
 
   void _initializeData() {
-    walletCount = PreferencesUtils.getOrDefault<int>(
-        ServiceConfig.sharedPreferences!,
-        PreferencesKeys.statisticsPieChartNumberOfCategoriesToDisplay)!;
+    walletCount = 4;
     defaultColorsPalette =
         charts.MaterialPalette.getOrderedPalettes(walletCount)
             .map((palette) => palette.shadeDefault)
@@ -88,7 +79,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
   void _updateSeriesList() {
     seriesList = [
       charts.Series<LinearWalletRecord, String>(
-        id: 'Wallets'.i18n,
+        id: 'Carteiras',
         colorFn: (LinearWalletRecord datum, i) {
           final color = _preparedColors[i!];
           if (_selectedWalletId == null ||
@@ -98,7 +89,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
           return color.lighter.lighter;
         },
         domainFn: (LinearWalletRecord recordsUnderWallet, _) =>
-            recordsUnderWallet.walletId?.toString() ?? "Others".i18n,
+            recordsUnderWallet.walletId?.toString() ?? 'Outros',
         measureFn: (LinearWalletRecord recordsUnderWallet, _) =>
             recordsUnderWallet.value,
         data: _preparedData,
@@ -116,7 +107,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
     for (var record in records) {
       if (record != null && record.walletId != null) {
         final value =
-            getRecordValueInDefaultCurrency(record, widget.walletCurrencyMap);
+            record.value!;
         aggregatedWalletsValuesTemporaryMap.update(
           record.walletId!,
           (current) => current + value,
@@ -145,7 +136,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
       var walletAndValue = topWalletsAndValue[i];
       var percentage = (100 * walletAndValue.value.abs()) / totalSum;
       final wallet = widget.walletMap[walletAndValue.key];
-      final name = wallet?.name ?? "Unknown wallet".i18n;
+      final name = wallet?.name ?? 'Carteira desconhecida';
       var lr = LinearWalletRecord(walletAndValue.key, name, percentage);
       data.add(lr);
       if (wallet?.color != null) {
@@ -161,7 +152,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
         0.0,
         (dynamic value, element) => value + element.value,
       );
-      var remainingWalletKey = "Others".i18n;
+      var remainingWalletKey = 'Outros';
       var percentage = (100 * sumOfRemainingWallets.abs()) / totalSum;
       var lr = LinearWalletRecord(null, remainingWalletKey, percentage);
       data.add(lr);
@@ -185,8 +176,8 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
           for (var r in widget.records) {
             if (r == null) continue;
             final value =
-                getRecordValueInDefaultCurrency(r, widget.walletCurrencyMap);
-            if (walletId == "Others".i18n) {
+                r.value!;
+            if (walletId == 'Outros') {
               if (r.walletId != null && !_isTopWallet(r.walletId!)) {
                 walletSum += value;
               }
@@ -214,13 +205,13 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
     } else {
       final selectedDatum = model.selectedDatum.first;
       final data = selectedDatum.datum as LinearWalletRecord;
-      _selectWallet(data.walletId?.toString() ?? "Others".i18n);
+      _selectWallet(data.walletId?.toString() ?? 'Outros');
     }
   }
 
   bool _isTopWallet(int walletId) {
     return linearRecords.any((lr) =>
-        lr.walletId == walletId && lr.walletId?.toString() != "Others".i18n);
+        lr.walletId == walletId && lr.walletId?.toString() != 'Outros');
   }
 
   Widget _buildPieChart(BuildContext context) {
@@ -251,7 +242,7 @@ class _WalletsPieChartState extends State<WalletsPieChart> {
 
           return InkWell(
             onTap: () => _selectWallet(
-                linearRecord.walletId?.toString() ?? "Others".i18n),
+                linearRecord.walletId?.toString() ?? 'Outros'),
             borderRadius: BorderRadius.circular(4),
             child: Container(
                 margin: EdgeInsets.fromLTRB(0, 0, 8, 8),

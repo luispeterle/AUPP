@@ -1,1 +1,0 @@
-- Add Portuguese (PT and BR) language

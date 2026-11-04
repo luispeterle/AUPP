@@ -1,4 +1,0 @@
-enum BudgetType {
-  expense,
-  saving,
-}

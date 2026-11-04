@@ -1,18 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/premium/splash-screen.dart';
-import 'package:piggybank/premium/util-widgets.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/wallets/edit-wallet-page.dart';
-import 'package:piggybank/wallets/wallet-picker-page.dart';
-import 'package:piggybank/wallets/wallet-sort-option.dart';
-import 'package:piggybank/wallets/wallets-list.dart';
+import 'package:aupp/dinzo/dinzo-sync-service.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
+import 'package:aupp/wallets/edit-wallet-page.dart';
+import 'package:aupp/wallets/wallet-picker-page.dart';
+import 'package:aupp/wallets/wallet-sort-option.dart';
+import 'package:aupp/wallets/wallets-list.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'bank-balances-page.dart';
+import 'investment-classes.dart';
+import 'wallet-sections.dart';
 
 class WalletsTabPage extends StatefulWidget {
   WalletsTabPage({Key? key}) : super(key: key);
@@ -26,18 +28,18 @@ class WalletsTabPageState extends State<WalletsTabPage> {
   List<Wallet>? _wallets;
   List<Wallet> _selectedWallets = [];
   bool _walletPrefsLoaded = false;
-  int? _walletPrefsProfileId;
   bool _showArchived = false;
-  bool _showBreakdown = false;
 
   WalletSortOption _selectedSortOption = WalletSortOption.original;
   WalletSortOption _storedDefaultOption = WalletSortOption.original;
   bool _isDefaultOrder = false;
+  InvestmentTotals _investments = const InvestmentTotals();
 
   // When true the user is in drag-to-reorder mode; drag handles and OK button are visible.
   bool _inCustomOrderMode = false;
   // Holds the pending reordered list while the user drags (before pressing OK).
-  List<Wallet>? _pendingOrderWallets;
+  /// The order dragged in each section, not saved yet.
+  final Map<WalletSection, List<Wallet>> _pendingOrder = {};
 
   @override
   void initState() {
@@ -69,9 +71,14 @@ class WalletsTabPageState extends State<WalletsTabPage> {
     _isDefaultOrder = false;
   }
 
+  Future<void> _loadInvestments() async {
+    final totals = await InvestmentTotals.load();
+    if (mounted) setState(() => _investments = totals);
+  }
+
   Future<void> _loadWallets() async {
-    final wallets = await database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
+    unawaited(_loadInvestments());
+    final wallets = await database.getAllWallets();
     final allNonArchived = wallets.where((w) => !w.isArchived).toList();
 
     List<Wallet> updatedSelection = _selectedWallets;
@@ -80,16 +87,13 @@ class WalletsTabPageState extends State<WalletsTabPage> {
       final selectedIds = _selectedWallets.map((w) => w.id).toSet();
       updatedSelection =
           allNonArchived.where((w) => selectedIds.contains(w.id)).toList();
-    } else if (!_walletPrefsLoaded ||
-        _walletPrefsProfileId != ProfileService.instance.activeProfileId) {
-      // First load, or profile switched: restore saved selection for this profile
+    } else if (!_walletPrefsLoaded) {
+      // First load: restore the saved selection
       _walletPrefsLoaded = true;
-      _walletPrefsProfileId = ProfileService.instance.activeProfileId;
       updatedSelection = [];
       final prefs = await SharedPreferences.getInstance();
       final savedIds = prefs.getStringList(
-              PreferencesKeys.walletsTabWalletFilter(
-                  ProfileService.instance.activeProfileId!)) ??
+              PreferencesKeys.walletsTabWalletFilter) ??
           [];
       if (savedIds.isNotEmpty) {
         final idSet = savedIds.map(int.tryParse).toSet();
@@ -103,7 +107,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
       _selectedWallets = updatedSelection;
       // Exit custom order mode on reload
       _inCustomOrderMode = false;
-      _pendingOrderWallets = null;
+      _pendingOrder.clear();
     });
   }
 
@@ -113,12 +117,16 @@ class WalletsTabPageState extends State<WalletsTabPage> {
 
   /// Confirm the pending drag order and persist it to the database.
   Future<void> _confirmCustomOrder() async {
-    final ordered = _pendingOrderWallets ?? _walletsByArchiveStatusSorted;
+    final sections = WalletSection.split(_walletsByArchiveStatusSorted);
+    final ordered = [
+      for (final section in WalletSection.values)
+        ...?_pendingOrder[section] ?? sections[section],
+    ];
     // Only persist the non-archived wallets order; archived stay unchanged.
     await database.resetWalletOrderIndexes(ordered);
     setState(() {
       _inCustomOrderMode = false;
-      _pendingOrderWallets = null;
+      _pendingOrder.clear();
     });
     await _loadWallets();
   }
@@ -140,7 +148,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        "Order by".i18n,
+                        'Ordenar por',
                         style: const TextStyle(fontSize: 22),
                       ),
                       Row(
@@ -154,7 +162,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                               });
                             },
                           ),
-                          Text("Make it default".i18n),
+                          Text('Tornar padrão'),
                         ],
                       ),
                     ],
@@ -164,7 +172,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                 ListTile(
                   leading: const Icon(Icons.reorder),
                   title: Text(
-                    "Custom order".i18n,
+                    'Ordem personalizada',
                     style: TextStyle(
                       color: pendingOption == WalletSortOption.original
                           ? Theme.of(context).colorScheme.primary
@@ -184,7 +192,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                 ListTile(
                   leading: const Icon(Icons.abc),
                   title: Text(
-                    "Name (Alphabetically)".i18n,
+                    'Nome (alfabético)',
                     style: TextStyle(
                       color: pendingOption == WalletSortOption.byName
                           ? Theme.of(context).colorScheme.primary
@@ -204,7 +212,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                 ListTile(
                   leading: const Icon(Icons.arrow_upward),
                   title: Text(
-                    "Amount (Ascending)".i18n,
+                    'Valor (Crescente)',
                     style: TextStyle(
                       color: pendingOption == WalletSortOption.byAmountAsc
                           ? Theme.of(context).colorScheme.primary
@@ -224,7 +232,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                 ListTile(
                   leading: const Icon(Icons.arrow_downward),
                   title: Text(
-                    "Amount (Descending)".i18n,
+                    'Valor (Decrescente)',
                     style: TextStyle(
                       color: pendingOption == WalletSortOption.byAmountDesc
                           ? Theme.of(context).colorScheme.primary
@@ -253,12 +261,12 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                           _selectedSortOption = pendingOption;
                           _inCustomOrderMode =
                               pendingOption == WalletSortOption.original;
-                          _pendingOrderWallets = null;
+                          _pendingOrder.clear();
                         });
                         _storeOnUserPreferences();
                         Navigator.pop(context);
                       },
-                      child: Text("Apply".i18n),
+                      child: Text('Aplicar'),
                     ),
                   ),
                 ),
@@ -278,118 +286,26 @@ class WalletsTabPageState extends State<WalletsTabPage> {
     return _wallets!.where((w) => !w.isArchived).toList();
   }
 
-  String _displayBalanceString() {
-    return computeCombinedBalanceString(_displayWallets);
-  }
+  /// The total: with no filter, the investments shown below the wallets too.
+  List<Wallet> get _totalWallets => [
+    ..._displayWallets,
+    if (_selectedWallets.isEmpty && _investments.total > 0)
+      Wallet('', balance: _investments.total),
+  ];
 
-  double _displayBalanceTotal() {
-    return computeCombinedBalanceResult(_displayWallets).total;
-  }
+  String _displayBalanceString() => formatMoney(_displayBalanceTotal());
 
-  bool get _canShowBreakdown {
-    if (_displayWallets.isEmpty) return false;
-    final defaultCurrency = getDefaultCurrency();
-    if (defaultCurrency == null || defaultCurrency.isEmpty) return false;
-    final currencies = _displayWallets
-        .map((w) => w.currency)
-        .where((c) => c != null && c.isNotEmpty)
-        .toSet();
-    if (currencies.length > 1) return true;
-    if (currencies.length == 1 && currencies.first != defaultCurrency)
-      return true;
-    final hasNoCurrency =
-        _displayWallets.any((w) => w.currency == null || w.currency!.isEmpty);
-    final hasExplicitCurrency = currencies.isNotEmpty;
-    return hasNoCurrency && hasExplicitCurrency;
-  }
-
-  Widget _buildBreakdown() {
-    final brightness = Theme.of(context).brightness;
-    final Map<String, double> groupTotals = {};
-    double noCurrencyTotal = 0.0;
-    for (final wallet in _displayWallets) {
-      final balance = wallet.balance ?? 0.0;
-      final currency = wallet.currency;
-      if (currency == null || currency.isEmpty) {
-        noCurrencyTotal += balance;
-      } else {
-        groupTotals[currency] = (groupTotals[currency] ?? 0.0) + balance;
-      }
-    }
-
-    final entries = groupTotals.entries.toList()
-      ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
-
-    final breakdownItems = <MapEntry<String, double>>[
-      if (noCurrencyTotal != 0.0) MapEntry('', noCurrencyTotal),
-      ...entries,
-    ];
-
-    final defaultCurrency = getDefaultCurrency();
-    final conversionResult = computeCombinedBalanceResult(_displayWallets);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final item in breakdownItems) ...[
-          if (item != breakdownItems.first) const SizedBox(height: 2),
-          Text(
-            item.key.isEmpty ? "No currency".i18n : item.key,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.5),
-                ),
-          ),
-          Text(
-            item.key.isEmpty
-                ? getCurrencyValueString(item.value)
-                : formatCurrencyAmount(item.value, item.key),
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: getAmountColor(item.value, brightness),
-                ),
-          ),
-        ],
-        if (defaultCurrency != null &&
-            conversionResult.currency != null &&
-            conversionResult.currency != '' &&
-            conversionResult.currency != breakdownItems.first.key) ...[
-          const SizedBox(height: 8),
-          const Divider(thickness: 0.5),
-          const SizedBox(height: 4),
-          Text(
-            "Total in $defaultCurrency".i18n,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.5),
-                ),
-          ),
-          Text(
-            formatCurrencyAmount(conversionResult.total, defaultCurrency),
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: getAmountColor(conversionResult.total, brightness),
-                ),
-          ),
-        ],
-      ],
-    );
-  }
+  double _displayBalanceTotal() => walletsTotal(_totalWallets);
 
   String get _headerLabel {
-    if (_selectedWallets.isEmpty) return "All accounts".i18n;
+    if (_selectedWallets.isEmpty) return 'Todas as contas';
     if (_selectedWallets.length == 1) return _selectedWallets.first.name;
-    return "%s Wallets".i18n.fill([_selectedWallets.length.toString()]);
+    return '${_selectedWallets.length.toString()} Carteiras';
   }
 
   Future<void> _clearWalletFilter() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(PreferencesKeys.walletsTabWalletFilter(
-        ProfileService.instance.activeProfileId!));
+    await prefs.remove(PreferencesKeys.walletsTabWalletFilter);
     setState(() {
       _selectedWallets = [];
     });
@@ -403,8 +319,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
         builder: (_) => WalletPickerPage(
           multiSelect: true,
           initiallySelected: _selectedWallets,
-          preferencesKey: PreferencesKeys.walletsTabWalletFilter(
-              ProfileService.instance.activeProfileId!),
+          preferencesKey: PreferencesKeys.walletsTabWalletFilter,
         ),
       ),
     );
@@ -441,12 +356,35 @@ class WalletsTabPageState extends State<WalletsTabPage> {
     return filtered;
   }
 
+  /// Fork: dia a dia, caixinhas, reservas, then the investments, which only
+  /// show what the positions hold. Dragging reorders inside a section.
+  List<Widget> _sections() {
+    final sections = WalletSection.split(_walletsByArchiveStatusSorted);
+    return [
+      for (final section in WalletSection.values)
+        if (sections[section]!.isNotEmpty) ...[
+          _SectionHeader(section.label),
+          WalletsList(
+            sections[section]!,
+            onChanged: _loadWallets,
+            enableManualSorting:
+                _inCustomOrderMode && section != WalletSection.reserves,
+            onReorderPending: (wallets) => _pendingOrder[section] = wallets,
+          ),
+        ],
+      if (_investments.total > 0) ...[
+        const _SectionHeader('Investimentos', note: 'só para ver'),
+        InvestmentClasses(_investments, dividerOnTop: false),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_showArchived ? "Archived wallets".i18n : "Wallets".i18n),
+        title: Text(_showArchived ? 'Archived wallets' : 'Carteiras'),
         leading: _showArchived
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
@@ -457,17 +395,19 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                     icon: const Icon(Icons.close),
                     onPressed: () => setState(() {
                       _inCustomOrderMode = false;
-                      _pendingOrderWallets = null;
+                      _pendingOrder.clear();
                     }),
                   )
                 : null,
-        automaticallyImplyLeading: false,
+        // Fork: opened from the Início (no longer a tab), so it gets a back
+        // arrow.
+        automaticallyImplyLeading: true,
         actions: [
           if (_inCustomOrderMode)
             TextButton(
               onPressed: _confirmCustomOrder,
               child: Text(
-                "OK".i18n,
+                'OK',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.bold,
@@ -476,6 +416,16 @@ class WalletsTabPageState extends State<WalletsTabPage> {
               ),
             )
           else ...[
+            // Fork: what Dinzo says is at each bank.
+            if (!_showArchived && DinzoSyncService.apiKey != null)
+              IconButton(
+                icon: const Icon(Icons.account_balance),
+                tooltip: 'Saldo nos bancos',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BankBalancesPage()),
+                ),
+              ),
             if (!_showArchived)
               IconButton(
                 icon: const Icon(Icons.sort),
@@ -496,8 +446,8 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                   value: 1,
                   child: Text(
                     _showArchived
-                        ? "Show active wallets".i18n
-                        : "Show archived wallets".i18n,
+                        ? 'Mostrar carteiras ativas'
+                        : 'Mostrar carteiras arquivadas',
                     style: const TextStyle(fontSize: 16),
                   ),
                 ),
@@ -550,65 +500,36 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          // Tapping the total shows or hides amounts (privacy
-                          // mode, see the toolbar eye on the homepage).
-                          // Long-press still toggles the per-currency
-                          // breakdown, but only while amounts are visible.
-                          ValueListenableBuilder<bool>(
-                            valueListenable:
-                                ServiceConfig.privacyModeHiddenNotifier,
-                            builder: (context, hidden, _) => GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () =>
-                                  ServiceConfig.setPrivacyModeHidden(!hidden),
-                              onLongPress: (!hidden && _canShowBreakdown)
-                                  ? () => setState(() =>
-                                      _showBreakdown = !_showBreakdown)
-                                  : null,
-                              child: hidden
-                                  ? obscuredAmountTextWidget(
-                                      Theme.of(context)
-                                          .textTheme
-                                          .headlineLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    )
-                                  : (_showBreakdown && _canShowBreakdown
-                                      ? _buildBreakdown()
-                                      : Text(
-                                          _displayBalanceString(),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .headlineLarge
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color: getAmountColor(
-                                                    _displayBalanceTotal(),
-                                                    brightness),
-                                              ),
-                                        )),
-                            ),
+                          Text(
+                            _displayBalanceString(),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: getAmountColor(
+                                      _displayBalanceTotal(),
+                                      brightness),
+                                ),
                           ),
                         ],
                       ),
                     ),
                     const Divider(thickness: 0.5),
                   ],
-                  WalletsList(
-                    _walletsByArchiveStatusSorted,
-                    onChanged: _loadWallets,
-                    enableManualSorting: _inCustomOrderMode,
-                    onReorderPending: (wallets) {
-                      _pendingOrderWallets = wallets;
-                    },
-                  ),
+                  if (_showArchived)
+                    WalletsList(
+                      _walletsByArchiveStatusSorted,
+                      onChanged: _loadWallets,
+                    )
+                  else
+                    ..._sections(),
                   if (!_showArchived && _selectedWallets.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: TextButton(
                         onPressed: _clearWalletFilter,
-                        child: Text("Show all wallets".i18n),
+                        child: Text('Mostrar todas as carteiras'),
                       ),
                     ),
                   const SizedBox(height: 75),
@@ -617,50 +538,56 @@ class WalletsTabPageState extends State<WalletsTabPage> {
             ),
       floatingActionButton: (_showArchived || _inCustomOrderMode)
           ? null
-          : Stack(
-              children: [
-                FloatingActionButton(
-                  heroTag: null,
-                  onPressed: ServiceConfig.isPremium
-                      ? () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    EditWalletPage(passedWallet: null)),
-                          );
-                          await _loadWallets();
-                        }
-                      : () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => PremiumSplashScreen()),
-                          );
-                        },
-                  tooltip: "Add wallet".i18n,
-                  child: const Icon(Icons.add),
-                ),
-                if (!ServiceConfig.isPremium)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: GestureDetector(
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => PremiumSplashScreen()),
-                        );
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(8, 8, 0, 0),
-                        child: getProLabel(labelFontSize: 10.0),
-                      ),
-                    ),
-                  ),
-              ],
+          : FloatingActionButton(
+              heroTag: null,
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => EditWalletPage(passedWallet: null)),
+                );
+                await _loadWallets();
+              },
+              tooltip: 'Nova caixinha',
+              child: const Icon(Icons.add),
             ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label, {this.note});
+
+  final String label;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Text.rich(
+        TextSpan(
+          text: label.toUpperCase(),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+          children: [
+            if (note != null)
+              TextSpan(
+                text: '  ·  $note',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.normal,
+                  letterSpacing: 0,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,18 +1,19 @@
+import 'package:aupp/desktop/desktop-layout.dart';
+import 'package:aupp/services/category-hierarchy.dart';
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/statistics/overview-card.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-summary-card.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/statistics/overview-card.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-summary-card.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
 
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/statistics/bar-chart-card.dart';
-import 'package:piggybank/statistics/categories-pie-chart.dart';
-import 'package:piggybank/statistics/tags-pie-chart.dart';
-import 'package:piggybank/statistics/wallets-pie-chart.dart';
-import 'package:piggybank/records/components/records-day-list.dart';
+import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/statistics/bar-chart-card.dart';
+import 'package:aupp/statistics/categories-pie-chart.dart';
+import 'package:aupp/statistics/tags-pie-chart.dart';
+import 'package:aupp/statistics/wallets-pie-chart.dart';
+import 'package:aupp/records/components/records-day-list.dart';
 
 class StatisticsTabPage extends StatefulWidget {
   final List<Record?> records;
@@ -28,7 +29,9 @@ class StatisticsTabPage extends StatefulWidget {
   final bool hideWalletsSelection;
   final Function? onListBackCallback;
 
-  final Map<int, String?> walletCurrencyMap;
+  /// Opens on the pie chart instead of the bars.
+  final bool startWithPieChart;
+
   final Map<int, Wallet> walletMap;
 
   StatisticsTabPage(this.from, this.to, this.records,
@@ -41,7 +44,7 @@ class StatisticsTabPage extends StatefulWidget {
       this.hideCategorySelection = false,
       this.hideWalletsSelection = false,
       this.onListBackCallback,
-      this.walletCurrencyMap = const {},
+      this.startWithPieChart = false,
       this.walletMap = const {}})
       : super();
 
@@ -56,7 +59,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
   DateTime? selectedDate;
   String? selectedCategory;
   List<String>? topCategories;
-  bool showPieChart = false;
+  late bool showPieChart = widget.startWithPieChart;
   late GroupByType groupByType;
   GroupByType? filterGroupByType;
 
@@ -94,7 +97,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
               width: 200,
             ),
             Text(
-              "No entries to show.".i18n,
+              'Nenhum item para mostrar.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 22.0,
@@ -106,11 +109,28 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
     ];
   }
 
+  List<Record?>? _rolledUpSource;
+  List<Record?> _rolledUp = [];
+
+  /// Records as the current grouping sees them: grouping by category rolls
+  /// subcategories up into their parent; every other grouping keeps them.
+  List<Record?> get _records {
+    if (groupByType != GroupByType.category) return widget.records;
+    if (!identical(_rolledUpSource, widget.records)) {
+      _rolledUpSource = widget.records;
+      _rolledUp = widget.records.map((r) {
+        final parent = CategoryHierarchy.parentOf(r?.category);
+        return parent == null ? r : r!.copyWith(category: parent);
+      }).toList();
+    }
+    return _rolledUp;
+  }
+
   List<Widget> _buildContentSlivers() {
     final List<Record?> recordsToVisualize =
         (widget.footer == null && groupByType == GroupByType.tag)
-            ? widget.records.where((r) => r!.tags.isNotEmpty).toList()
-            : widget.records;
+            ? _records.where((r) => r!.tags.isNotEmpty).toList()
+            : _records;
 
     final List<Widget> slivers = [];
 
@@ -120,7 +140,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
         chartWidget = TagsPieChart(
           recordsToVisualize,
           selectedTag: selectedCategory,
-          walletCurrencyMap: widget.walletCurrencyMap,
           onSelectionChanged: (amount, tag, topTags) {
             setState(() {
               selectedAmount = amount;
@@ -135,7 +154,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
           recordsToVisualize,
           walletMap: widget.walletMap,
           selectedWalletId: selectedCategory,
-          walletCurrencyMap: widget.walletCurrencyMap,
           onSelectionChanged: (amount, walletId, topWallets) {
             setState(() {
               selectedAmount = amount;
@@ -149,7 +167,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
         chartWidget = CategoriesPieChart(
           recordsToVisualize,
           selectedCategory: selectedCategory,
-          walletCurrencyMap: widget.walletCurrencyMap,
           onSelectionChanged: (amount, category, topCats) {
             setState(() {
               selectedAmount = amount;
@@ -167,7 +184,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
         recordsToVisualize,
         aggregationMethod,
         selectedDate: selectedDate,
-        walletCurrencyMap: widget.walletCurrencyMap,
         onSelectionChanged: (double? amount, DateTime? date) {
           setState(() {
             selectedAmount = amount;
@@ -212,7 +228,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
       selectedRecords: (selectedDate != null || selectedCategory != null)
           ? _getSelectionRecords()
           : const [],
-      walletCurrencyMap: widget.walletCurrencyMap,
       actions: <OverviewCardAction>[
         OverviewCardAction(
           icon: showPieChart ? Icons.bar_chart : Icons.pie_chart,
@@ -230,8 +245,8 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
             });
           },
           tooltip: showPieChart
-              ? "Switch to bar chart".i18n
-              : "Switch to pie chart".i18n,
+              ? 'Alternar para gráfico de barras'
+              : 'Alternar para gráfico de pizza',
         ),
       ],
     );
@@ -258,7 +273,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
           hideTagsSelection: widget.hideTagsSelection,
           hideCategorySelection: widget.hideCategorySelection,
           hideWalletsSelection: widget.hideWalletsSelection,
-          walletCurrencyMap: widget.walletCurrencyMap,
           walletMap: widget.walletMap,
           onGroupByTypeChanged: (newType) {
             setState(() {
@@ -297,7 +311,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
                   Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
                   SizedBox(height: 16),
                   Text(
-                    "No entries found".i18n,
+                    'Nenhum item encontrado',
                     style: TextStyle(
                       fontSize: 18,
                       color: Colors.grey[600],
@@ -312,7 +326,6 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
           recordsForList,
           isSliver: true,
           onListBackCallback: widget.onListBackCallback,
-          walletCurrencyMap: widget.walletCurrencyMap,
         ));
         slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 75)));
       }
@@ -329,9 +342,9 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
   List<Record?> _getSelectionRecords() {
     final bool hasSelection = selectedDate != null ||
         (selectedCategory != null && topCategories != null);
-    if (!hasSelection) return widget.records;
+    if (!hasSelection) return _records;
 
-    List<Record?> recordsForList = widget.records;
+    List<Record?> recordsForList = _records;
 
     // Filter by selected date (bar selection)
     if (selectedDate != null) {
@@ -343,7 +356,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
 
     // Filter by selected category/tag/wallet (pie selection)
     if (selectedCategory != null && topCategories != null) {
-      if (selectedCategory == "Others".i18n) {
+      if (selectedCategory == 'Outros') {
         // Show records for items not in topCategories
         recordsForList = recordsForList.where((r) {
           if (filterGroupByType == GroupByType.tag) {
@@ -372,10 +385,31 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: widget.records.length > 0
-          ? _buildContentSlivers()
-          : _buildNoRecordSlivers(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slivers = _records.length > 0
+            ? _buildContentSlivers()
+            : _buildNoRecordSlivers();
+        if (_records.isEmpty ||
+            constraints.maxWidth < AdaptiveColumns.minTwoColumnWidth) {
+          return CustomScrollView(slivers: slivers);
+        }
+        // Fork: on the computer the overview and chart stay beside the list.
+        // The first four slivers are overview, gap, chart, gap.
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: CustomScrollView(
+                primary: false,
+                slivers: slivers.take(4).toList(),
+              ),
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            Expanded(child: CustomScrollView(slivers: slivers.skip(4).toList())),
+          ],
+        );
+      },
     );
   }
 }

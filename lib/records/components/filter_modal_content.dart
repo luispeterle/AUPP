@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/components/tag_chip.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/category.dart';
+import 'package:aupp/components/tag_chip.dart';
+import 'package:aupp/models/category.dart';
 
 import '../../models/category-type.dart';
 
@@ -199,7 +198,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
               if (onToggleAll != null)
                 IconButton(
                   onPressed: onToggleAll,
-                  tooltip: 'Select all'.i18n,
+                  tooltip: 'Selecionar tudo',
                   icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
                   visualDensity: VisualDensity.compact,
                 ),
@@ -281,7 +280,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
             ),
             IconButton(
               onPressed: () => _toggleAllCategories(categories),
-              tooltip: 'Select all'.i18n,
+              tooltip: 'Selecionar tudo',
               icon: Icon(
                 _allCategoriesSelected(categories)
                     ? Icons.deselect
@@ -310,7 +309,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
     if (!hasBothTypes) {
       final isExpense = expenseCategories.isNotEmpty;
       return _buildCategoryGroup(
-        title: (isExpense ? 'Expense Categories' : 'Income Categories').i18n,
+        title: (isExpense ? 'Expense Categories' : 'Income Categories'),
         categories: isExpense ? expenseCategories : incomeCategories,
         color: isExpense ? Colors.red[600]! : Colors.green[600]!,
         icon: isExpense
@@ -323,14 +322,14 @@ class _FilterModalContentState extends State<FilterModalContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCategoryGroup(
-          title: 'Expense Categories'.i18n,
+          title: 'Categorias de despesas',
           categories: expenseCategories,
           color: Colors.red[600]!,
           icon: Icons.remove_circle_outline,
         ),
         Divider(color: Theme.of(context).colorScheme.outlineVariant),
         _buildCategoryGroup(
-          title: 'Income Categories'.i18n,
+          title: 'Categorias de renda',
           categories: incomeCategories,
           color: Colors.green[600]!,
           icon: Icons.add_circle_outline,
@@ -344,7 +343,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
       return Padding(
         padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
         child: Text(
-          'No tags found'.i18n,
+          'Nenhuma tag encontrada',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -409,13 +408,13 @@ class _FilterModalContentState extends State<FilterModalContent> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildLogicToggle(
-            title: 'Filter by Tags'.i18n,
+            title: 'Filtrar por Tags',
             value: _tagORLogic,
             onChanged: (value) => setState(() => _tagORLogic = value),
           ),
           if (_selectedCategories.isNotEmpty)
             _buildLogicToggle(
-              title: 'Categories vs Tags'.i18n,
+              title: 'Categorias vs Tags',
               value: _categoryTagORLogic,
               onChanged: (value) => setState(() => _categoryTagORLogic = value),
             ),
@@ -501,7 +500,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
               children: [
                 Expanded(
                   child: Text(
-                    'Filters'.i18n,
+                    'Filtros',
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -511,12 +510,12 @@ class _FilterModalContentState extends State<FilterModalContent> {
                 if (_hasSelections)
                   IconButton(
                     onPressed: _clearAllFilters,
-                    tooltip: 'Clear All Filters'.i18n,
+                    tooltip: 'Limpar todos os filtros',
                     icon: const Icon(Icons.restart_alt),
                   ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  tooltip: 'Close'.i18n,
+                  tooltip: 'Fechar',
                   icon: const Icon(Icons.close),
                 ),
               ],
@@ -529,7 +528,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
                 padding: const EdgeInsets.only(bottom: 8),
                 children: [
                   _buildSectionHeader(
-                    title: 'Filter by Categories'.i18n,
+                    title: 'Filtrar por categorias',
                     icon: Icons.category_outlined,
                     expanded: _categoriesExpanded,
                     count: _selectedCategories.length,
@@ -542,7 +541,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
                   if (_tagsToShow.isNotEmpty) ...[
                     Divider(color: colorScheme.outlineVariant),
                     _buildSectionHeader(
-                      title: 'Filter by Tags'.i18n,
+                      title: 'Filtrar por Tags',
                       icon: Icons.local_offer_outlined,
                       expanded: _tagsExpanded,
                       count: _selectedTags.length,
@@ -555,7 +554,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
                     if (_selectedTags.isNotEmpty) ...[
                       Divider(color: colorScheme.outlineVariant),
                       _buildSectionHeader(
-                        title: 'Filter Logic'.i18n,
+                        title: 'Lógica do filtro',
                         icon: Icons.tune,
                         expanded: _logicExpanded,
                         onTap: () =>
@@ -573,7 +572,7 @@ class _FilterModalContentState extends State<FilterModalContent> {
               child: ElevatedButton.icon(
                 onPressed: _onApplyFilters,
                 icon: const Icon(Icons.check),
-                label: Text('Apply Filters'.i18n, textAlign: TextAlign.center),
+                label: Text('Aplicar filtros', textAlign: TextAlign.center),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colorScheme.primary,
                   foregroundColor: colorScheme.onPrimary,

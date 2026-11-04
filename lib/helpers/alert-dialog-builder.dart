@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
 
 class AlertDialogBuilder {
   /// Utility class that simplify the creation of an alert dialog that return a boolean value.
@@ -13,7 +12,7 @@ class AlertDialogBuilder {
   AlertDialogBuilder(String title) {
     this.title = title;
     this.trueButtonName = "OK";
-    this.falseButtonName = "Cancel".i18n;
+    this.falseButtonName = 'Cancelar';
     this.subtitle = null;
   }
 

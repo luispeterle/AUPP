@@ -1,8 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/services/logger.dart';
+import 'package:aupp/services/logger.dart';
 
 /// Lets the user choose the folder holding the database file.
 ///
@@ -25,7 +24,7 @@ class DatabaseDirectoryService {
     String? path;
     try {
       path = await FilePicker.getDirectoryPath(
-          dialogTitle: "Select the database folder".i18n);
+          dialogTitle: 'Selecionar a pasta do banco de dados');
     } catch (e, st) {
       _logger.handle(e, st, 'Failed to pick the database directory');
       return null;
@@ -44,7 +43,7 @@ class DatabaseDirectoryService {
     try {
       final directory = Directory(path);
       if (!await directory.exists()) return false;
-      final probe = File('${directory.path}/.oinkoin_write_probe');
+      final probe = File('${directory.path}/.aupp_write_probe');
       await probe.writeAsString('');
       await probe.delete();
       return true;

@@ -1,28 +1,36 @@
 // file: edit-record-page.dart
 
+import 'package:aupp/budget_plan/budget-plan.dart';
+import 'package:aupp/budget_plan/budget-plan-page.dart';
+import 'package:aupp/components/known-tags.dart';
+import 'package:aupp/dinzo/split-payment.dart';
+import 'package:aupp/dinzo/dinzo-api.dart';
+import 'package:aupp/dinzo/dinzo-sync-service.dart';
+import 'package:aupp/components/payment-code-sheet.dart';
+import 'package:aupp/dinzo/estimate-link.dart';
+import 'package:aupp/dinzo/pix-charge.dart';
+import 'package:aupp/dinzo/pix-code.dart';
+import 'package:aupp/services/recurrent-record-service.dart';
+import 'package:aupp/dinzo/payment-launcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
-import 'package:piggybank/categories/categories-tab-page-view.dart';
-import 'package:piggybank/components/tag_chip.dart';
-import 'package:piggybank/helpers/alert-dialog-builder.dart';
-import 'package:piggybank/helpers/amount-input-utils.dart';
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/recurrent-period.dart';
-import 'package:piggybank/premium/splash-screen.dart';
-import 'package:piggybank/premium/util-widgets.dart';
-import 'package:piggybank/components/amount_input_field.dart';
-import 'package:piggybank/components/markup_text.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/logger.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/services/transfer-exchange-rate-service.dart';
+import 'package:aupp/categories/categories-tab-page-view.dart';
+import 'package:aupp/components/tag_chip.dart';
+import 'package:aupp/helpers/alert-dialog-builder.dart';
+import 'package:aupp/helpers/amount-input-utils.dart';
+import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/recurrent-period.dart';
+import 'package:aupp/components/amount_input_field.dart';
+import 'package:aupp/components/markup_text.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/logger.dart';
+import 'package:aupp/services/service-config.dart';
 
 import '../components/category_icon_circle.dart';
 import '../helpers/date_picker_utils.dart';
@@ -69,17 +77,101 @@ class EditRecordPageState extends State<EditRecordPage> {
   final _logger = Logger.withContext('EditRecordPage');
   DatabaseInterface database = ServiceConfig.database;
   TextEditingController _textEditingController = TextEditingController();
-  final _receivedAmountController = TextEditingController();
-  bool _receivedAmountIsManual = false;
-  bool _updatingReceivedAmount = false;
   final _formKey = GlobalKey<FormState>();
   Record? record;
 
   Record? passedRecord;
   Category? passedCategory;
   bool readOnly = false;
+
+  /// Records imported from Dinzo mirror the bank: only their name and note
+  /// can change here, and a new name is written back to Dinzo.
+  bool get _fromDinzo => record?.dinzoId != null;
+  bool get _locked => readOnly || _fromDinzo;
+  String? _originalTitle;
+  String? _originalCategoryName;
+
+  /// A Dinzo expense or income can change category; it goes to Dinzo too
+  /// ([DinzoSyncService.pushCategory]). Same type only: the amount's sign
+  /// comes from the bank.
+  bool get _dinzoCategoryEditable =>
+      _fromDinzo &&
+      !readOnly &&
+      !DinzoSyncService.isSynthetic(record!.dinzoId) &&
+      record!.transferWalletId == null;
+
+  /// A Dinzo expense or income can be moved to another wallet (e.g. paid by
+  /// a caixinha); the sync keeps that choice. The app's own records stay locked.
+  bool get _dinzoWalletEditable =>
+      _fromDinzo &&
+      !readOnly &&
+      !DinzoSyncService.isSynthetic(record!.dinzoId) &&
+      record!.transferWalletId == null;
+
+  /// Forecast entry (see [DinzoSyncService.estimateTag]); never a transfer.
+  bool _isEstimateChecked = false;
+
+  /// Fork: an occurrence of an estimate (read-only view of a recurrence).
+  bool get _isEstimateOccurrence =>
+      record != null &&
+      record!.isFutureRecord &&
+      record!.recurrencePatternId != null &&
+      record!.tags.contains(DinzoSyncService.estimateTag);
+
+  /// Upcoming occurrence of a recurrence paid by boleto / Pix
+  /// ([Record.billingTags]): its code can be pasted here.
+  bool get _isBillingOccurrence =>
+      record != null &&
+      record!.isFutureRecord &&
+      record!.recurrencePatternId != null &&
+      Record.billingKindOf(record!.tags) != null;
+
+  /// Choosing boleto / Pix for a recurrence (or an estimate), never for a
+  /// stored record or a transfer.
+  bool get _showsBillingCard =>
+      !readOnly &&
+      !_fromDinzo &&
+      record?.id == null &&
+      _selectedDestinationWallet == null &&
+      (recurrentPeriod != null || _isEstimate);
+
+  /// Pix / boleto of this occurrence ([RecurrentRecordPattern.paymentCodes]).
+  String? _paymentCode;
+
+  /// The recurrence's default Pix, a key or a copia-e-cola, and the name used
+  /// for a key's code ([RecurrentRecordPattern.defaultPixKey]).
+  String? _defaultPix;
+  String? _pixName;
+  bool get _isEstimate =>
+      (_isEstimateChecked || _forcedEstimate) &&
+      _selectedDestinationWallet == null;
+
+  /// Real records come from Dinzo (fork, 2026-10-12): unless manual records
+  /// are allowed in Settings → Dinzo, a new one-off record is an estimate.
+  /// Recurring records (e.g. meal voucher) and transfers stay as they are.
+  bool get _forcedEstimate =>
+      !(PreferencesUtils.getOrDefault<bool>(
+            ServiceConfig.sharedPreferences!,
+            PreferencesKeys.allowManualRecords,
+          ) ??
+          true) &&
+      _sourceLocked &&
+      recurrentPeriod == null &&
+      _selectedDestinationWallet == null;
+
+  /// New records (and new recurrent patterns) always use the default wallet
+  /// as source; only transfers started from a wallet keep that wallet.
+  bool get _sourceLocked =>
+      record?.id == null &&
+      passedRecurrentRecordPattern == null &&
+      !isTransferFlow;
   bool isTransferFlow = false;
   RecurrentRecordPattern? passedRecurrentRecordPattern;
+
+  /// Pattern behind a future (read-only) occurrence that happens just once,
+  /// e.g. a one-day estimate: it can be deleted right here instead of going
+  /// through Settings > Recurrent records.
+  RecurrentRecordPattern? _singleOccurrencePattern;
 
   RecurrentPeriod? recurrentPeriod;
   int? recurrentPeriodIndex;
@@ -88,7 +180,6 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   late String currency;
   DateTime? lastCharInsertedMillisecond;
-  late bool enableRecordNameSuggestions;
   late String categorySign;
 
   DateTime? localDisplayDate;
@@ -116,35 +207,35 @@ class EditRecordPageState extends State<EditRecordPage> {
   static final recurrentIntervalDropdownList = [
     DropdownMenuItem<int>(
         value: RecurrentPeriod.EveryDay.index,
-        child: Text("Every day".i18n, style: TextStyle(fontSize: 18.0))),
+        child: Text('Todo dia', style: TextStyle(fontSize: 18.0))),
     DropdownMenuItem<int>(
         value: RecurrentPeriod.EveryWeek.index,
-        child: Text("Every week".i18n, style: TextStyle(fontSize: 18.0))),
+        child: Text('Toda semana', style: TextStyle(fontSize: 18.0))),
     DropdownMenuItem<int>(
         value: RecurrentPeriod.EveryTwoWeeks.index,
-        child: Text("Every two weeks".i18n, style: TextStyle(fontSize: 18.0))),
+        child: Text('A cada duas semanas', style: TextStyle(fontSize: 18.0))),
     DropdownMenuItem<int>(
         value: RecurrentPeriod.EveryFourWeeks.index,
-        child: Text("Every four weeks".i18n, style: TextStyle(fontSize: 18.0))),
+        child: Text('A cada quatro semanas', style: TextStyle(fontSize: 18.0))),
     DropdownMenuItem<int>(
       value: RecurrentPeriod.EveryMonth.index,
-      child: Text("Every month".i18n, style: TextStyle(fontSize: 18.0)),
+      child: Text('Todo mês', style: TextStyle(fontSize: 18.0)),
     ),
     DropdownMenuItem<int>(
       value: RecurrentPeriod.EveryThreeMonths.index,
-      child: Text("Every three months".i18n, style: TextStyle(fontSize: 18.0)),
+      child: Text('A cada três meses', style: TextStyle(fontSize: 18.0)),
     ),
     DropdownMenuItem<int>(
       value: RecurrentPeriod.EveryFourMonths.index,
-      child: Text("Every four months".i18n, style: TextStyle(fontSize: 18.0)),
+      child: Text('A cada quatro meses', style: TextStyle(fontSize: 18.0)),
     ),
     DropdownMenuItem<int>(
       value: RecurrentPeriod.EveryYear.index,
-      child: Text("Every year".i18n, style: TextStyle(fontSize: 18.0)),
+      child: Text('Anualmente', style: TextStyle(fontSize: 18.0)),
     ),
     DropdownMenuItem<int>(
       value: RecurrentPeriod.Custom.index,
-      child: Text("Custom".i18n, style: TextStyle(fontSize: 18.0)),
+      child: Text('Personalizado', style: TextStyle(fontSize: 18.0)),
     ),
   ];
 
@@ -154,9 +245,6 @@ class EditRecordPageState extends State<EditRecordPage> {
     isTransferFlow = widget.isTransferFlow ||
         passedRecord?.isTransfer == true ||
         passedRecurrentRecordPattern?.transferWalletId != null;
-    enableRecordNameSuggestions = PreferencesUtils.getOrDefault<bool>(
-        ServiceConfig.sharedPreferences!,
-        PreferencesKeys.enableRecordNameSuggestions)!;
 
     // Loading parameters passed to the page
 
@@ -184,7 +272,15 @@ class EditRecordPageState extends State<EditRecordPage> {
             .getRecurrentRecordPattern(record!.recurrencePatternId)
             .then((value) {
           if (value != null) {
+            final start = value.localDateTime;
+            final end = value.localEndDate;
             setState(() {
+              if (record!.isFutureRecord &&
+                  end != null &&
+                  !DateTime(end.year, end.month, end.day)
+                      .isAfter(DateTime(start.year, start.month, start.day))) {
+                _singleOccurrencePattern = value;
+              }
               recurrentPeriod = value.recurrentPeriod;
               recurrentPeriodIndex = value.recurrentPeriod!.index;
               localDisplayEndDate = value.localEndDate;
@@ -194,8 +290,13 @@ class EditRecordPageState extends State<EditRecordPage> {
           }
         });
       }
+      _paymentCode = passedRecord!.paymentCode;
       // Initialize selected tags for existing record
       _selectedTags = Set.from(record!.tags);
+      _isEstimateChecked =
+          _selectedTags.contains(DinzoSyncService.estimateTag);
+      _originalTitle = record!.title;
+      _originalCategoryName = record!.category?.name;
     } else if (passedRecurrentRecordPattern != null) {
       // I am editing a recurrent pattern
       // Instantiate a new Record object from the pattern
@@ -212,7 +313,6 @@ class EditRecordPageState extends State<EditRecordPage> {
         walletId: passedRecurrentRecordPattern!.walletId,
         transferWalletId: passedRecurrentRecordPattern!.transferWalletId,
         transferValue: passedRecurrentRecordPattern!.transferValue,
-        profileId: passedRecurrentRecordPattern!.profileId,
       );
       // Use the localDateTime for display
       localDisplayDate = passedRecurrentRecordPattern!.localDateTime;
@@ -236,8 +336,13 @@ class EditRecordPageState extends State<EditRecordPage> {
             passedRecurrentRecordPattern!.customIntervalValue;
         _customIntervalUnit = passedRecurrentRecordPattern!.customIntervalUnit;
       });
+      _defaultPix = passedRecurrentRecordPattern!.defaultPix;
+      _pixName = passedRecurrentRecordPattern!
+          .paymentCodes[RecurrentRecordPattern.pixNameKey];
       // Initialize selected tags for existing recurrent pattern
       _selectedTags = Set.from(passedRecurrentRecordPattern!.tags);
+      _isEstimateChecked =
+          _selectedTags.contains(DinzoSyncService.estimateTag);
     } else {
       // I am adding a new record
       // Create a new record with a UTC timestamp and the current local timezone
@@ -258,7 +363,11 @@ class EditRecordPageState extends State<EditRecordPage> {
       localDisplayDate = record!.localDateTime;
       _hasTime = true;
       _selectedTime = TimeOfDay(hour: now.hour, minute: now.minute);
-      _selectedTags = {};
+      _selectedTags = {
+        record!.transferWalletId != null
+            ? DinzoSyncService.virtualTag
+            : DinzoSyncService.manualTag
+      };
       if (record!.value == null) {
         final zeroText = buildZeroAmountText();
         if (zeroText != '0') {
@@ -282,7 +391,7 @@ class EditRecordPageState extends State<EditRecordPage> {
 
     // Keyboard listeners initializations (the same as before)
     _textEditingController.addListener(() async {
-      if (readOnly) return;
+      if (_locked) return;
       var text = _textEditingController.text.toLowerCase();
       await Future.delayed(Duration(seconds: 2));
       if (!mounted) return;
@@ -307,7 +416,6 @@ class EditRecordPageState extends State<EditRecordPage> {
   @override
   void dispose() {
     _textEditingController.dispose();
-    _receivedAmountController.dispose();
     _typeAheadController.dispose();
     super.dispose();
   }
@@ -353,7 +461,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                   keyboardType: TextInputType.multiline,
                   decoration: InputDecoration(
                       floatingLabelBehavior: FloatingLabelBehavior.always,
-                      hintText: "Add a note".i18n,
+                      hintText: 'Adicione uma nota',
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.fromLTRB(20, 10, 10, 10),
                       label: Text("Note"))),
@@ -405,13 +513,12 @@ class EditRecordPageState extends State<EditRecordPage> {
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                           contentPadding: EdgeInsets.fromLTRB(20, 10, 10, 10),
                           border: InputBorder.none,
-                          hintText: record!.category?.name ?? "Record name".i18n,
-                          labelText: "Record name".i18n)),
+                          hintText: record!.category?.name ?? 'Nome do Item',
+                          labelText: 'Nome do Item')),
                 );
               },
               suggestionsCallback: (search) {
                 if (search.isNotEmpty &&
-                    enableRecordNameSuggestions &&
                     record!.category != null) {
                   return database.suggestedRecordTitles(
                       search, record!.category!.name!);
@@ -441,18 +548,28 @@ class EditRecordPageState extends State<EditRecordPage> {
     final category = record!.category;
     return InkWell(
       onTap: () async {
-        if (readOnly) return;
-        dismissInAppKeyboard();
+        if (_locked && !_dinzoCategoryEditable) return;
         final selectedCategory = await Navigator.push<Category?>(
           context,
           MaterialPageRoute(builder: (context) => CategoryTabPageView()),
         );
-        if (selectedCategory != null) {
-          setState(() {
-            record!.category = selectedCategory;
-            changeRecordValue(_textEditingController.text.toLowerCase());
-          });
+        if (selectedCategory == null || !mounted) return;
+        if (_fromDinzo) {
+          if (selectedCategory.categoryType != category?.categoryType) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(category?.categoryType == CategoryType.expense
+                    ? 'Lançamento da Dinzo: escolha uma categoria de despesa.'
+                    : 'Lançamento da Dinzo: escolha uma categoria de receita.')));
+            return;
+          }
+          // The amount comes from the bank: only the category changes.
+          setState(() => record!.category = selectedCategory);
+          return;
         }
+        setState(() {
+          record!.category = selectedCategory;
+          changeRecordValue(_textEditingController.text.toLowerCase());
+        });
       },
       child: Semantics(
         identifier: 'category-field',
@@ -477,32 +594,36 @@ class EditRecordPageState extends State<EditRecordPage> {
                         ),
                       ),
                     ),
-              Container(
-                margin: EdgeInsets.fromLTRB(20, 10, 10, 10),
-                child: Text(
-                  category?.name ?? "Select the category".i18n,
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: category == null
-                        ? Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant
-                            .withValues(alpha: 0.5)
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
+              Expanded(
+                child: Container(
+                  margin: EdgeInsets.fromLTRB(20, 10, 10, 10),
+                  child: Text(
+                    category?.name ?? 'Selecione a categoria',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: category == null
+                          ? Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant
+                              .withValues(alpha: 0.5)
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              )
+              ),
+              // Fork: which budget group the category counts in.
+              if (category?.categoryType == CategoryType.expense)
+                BudgetGroupLabel(_selectedTags.contains(outOfBudgetTag)
+                    ? outOfBudget
+                    : BudgetPlan.decode(ServiceConfig.sharedPreferences
+                            ?.getString(PreferencesKeys.budgetPlan))
+                        ?.groupOfCategory(category!.name)),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  goToPremiumSplashScreen() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => PremiumSplashScreen()),
     );
   }
 
@@ -512,10 +633,11 @@ class EditRecordPageState extends State<EditRecordPage> {
     return WalletTransferRow(
       selectedWallet: _selectedWallet,
       selectedDestinationWallet: _selectedDestinationWallet,
-      showTransferSide:
-          isTransferFlow || (isExpense && _totalWalletCount > 1),
+      showTransferSide: !_fromDinzo &&
+          (isTransferFlow || (isExpense && _totalWalletCount > 1)),
       requireDestination: isTransferFlow,
-      readOnly: readOnly,
+      readOnly: _locked && !_dinzoWalletEditable,
+      sourceLocked: _sourceLocked,
       walletNameSizeGroup: _walletNameSizeGroup,
       onSourceChanged: (wallet) {
         if (wallet?.id == _selectedWallet?.id) return;
@@ -524,14 +646,12 @@ class EditRecordPageState extends State<EditRecordPage> {
           if (_selectedDestinationWallet?.id == wallet?.id) {
             _selectedDestinationWallet = null;
           }
-          _resetReceivedAmount();
         });
       },
       onDestinationChanged: (wallet) {
         if (wallet?.id == _selectedDestinationWallet?.id) return;
         setState(() {
           _selectedDestinationWallet = wallet;
-          _resetReceivedAmount();
         });
       },
     );
@@ -544,19 +664,16 @@ class EditRecordPageState extends State<EditRecordPage> {
     final bool showEndDateRow = recurrentPeriod != null &&
         (!isRecordFromPattern || localDisplayEndDate != null);
 
-    final bool canChangeRepeat = ServiceConfig.isPremium &&
-        !readOnly &&
+    final bool canChangeRepeat = !_locked &&
         record!.id == null &&
         record!.recurrencePatternId == null;
-    final bool canChangeEndDate = !readOnly && !isRecordFromPattern;
+    final bool canChangeEndDate = !_locked && !isRecordFromPattern;
 
     final bool showClearRepeat = record!.id == null &&
         record!.recurrencePatternId == null &&
         recurrentPeriod != null;
     final bool showClearEndDate =
         localDisplayEndDate != null && record!.recurrencePatternId == null;
-
-    final bool showProLabel = !ServiceConfig.isPremium && !isRecordFromPattern;
 
     return _buildDateRepeatSection(
       showRepeatRow: showRepeatRow,
@@ -565,7 +682,6 @@ class EditRecordPageState extends State<EditRecordPage> {
       canChangeEndDate: canChangeEndDate,
       showClearRepeat: showClearRepeat,
       showClearEndDate: showClearEndDate,
-      showProLabel: showProLabel,
     );
   }
 
@@ -576,7 +692,6 @@ class EditRecordPageState extends State<EditRecordPage> {
     required bool canChangeEndDate,
     required bool showClearRepeat,
     required bool showClearEndDate,
-    required bool showProLabel,
   }) {
     return Column(
       children: [
@@ -589,9 +704,14 @@ class EditRecordPageState extends State<EditRecordPage> {
                   identifier: 'date-field',
                   child: InkWell(
                     onTap: () async {
-                      if (readOnly) return;
+                      // An estimate or boleto occurrence moves by itself.
+                      if (_locked &&
+                          (_isEstimateOccurrence || _isBillingOccurrence)) {
+                        await _editDueDate();
+                        return;
+                      }
+                      if (_locked) return;
                       FocusScope.of(context).unfocus();
-                      dismissInAppKeyboard();
                       DateTime initialDate = localDisplayDate ?? DateTime.now();
                       int firstDayOfWeek = getFirstDayOfWeekIndex();
                       DateTime? result = await showDatePicker(
@@ -606,6 +726,13 @@ class EditRecordPageState extends State<EditRecordPage> {
                           });
                       if (result != null) {
                         setState(() {
+                          // Something that happens once (a one-off estimate
+                          // ends on its own day) moves with its date.
+                          final end = localDisplayEndDate;
+                          if (end != null &&
+                              DateUtils.isSameDay(end, initialDate)) {
+                            localDisplayEndDate = result;
+                          }
                           localDisplayDate = result;
                           _hasTime = false;
                           _selectedTime = null;
@@ -655,9 +782,8 @@ class EditRecordPageState extends State<EditRecordPage> {
               // the arrow_forward in the wallet row, so they align exactly.
               InkWell(
                 onTap: () async {
-                  if (readOnly) return;
+                  if (_locked) return;
                   FocusScope.of(context).unfocus();
-                  dismissInAppKeyboard();
                   final TimeOfDay? result = await showTimePicker(
                     context: context,
                     initialTime: _selectedTime ?? TimeOfDay.now(),
@@ -674,7 +800,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                     });
                   }
                 },
-                onLongPress: readOnly
+                onLongPress: _locked
                     ? null
                     : () {
                         setState(() {
@@ -699,9 +825,8 @@ class EditRecordPageState extends State<EditRecordPage> {
                   identifier: 'time-field',
                   child: InkWell(
                     onTap: () async {
-                      if (readOnly) return;
+                      if (_locked) return;
                       FocusScope.of(context).unfocus();
-                      dismissInAppKeyboard();
                       final TimeOfDay? result = await showTimePicker(
                         context: context,
                         initialTime: _selectedTime ?? TimeOfDay.now(),
@@ -718,7 +843,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                         });
                       }
                     },
-                    onLongPress: readOnly
+                    onLongPress: _locked
                         ? null
                         : () {
                             setState(() {
@@ -738,7 +863,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                       child: AutoSizeText(
                         _hasTime && _selectedTime != null
                             ? _selectedTime!.format(context)
-                            : "Add time".i18n,
+                            : 'Adicionar hora',
                         maxLines: 1,
                         minFontSize: 10,
                         group: _dateTimeSizeGroup,
@@ -868,13 +993,12 @@ class EditRecordPageState extends State<EditRecordPage> {
                                           : null,
                                       onTap: () {
                                         FocusScope.of(context).unfocus();
-                                        dismissInAppKeyboard();
                                       },
                                       value: recurrentPeriodIndex,
                                       underline: SizedBox(),
                                       isExpanded: true,
                                       hint: Text(
-                                        "Not repeat".i18n,
+                                        'Não repetir',
                                         style: TextStyle(
                                             fontSize: 18,
                                             color: Theme.of(context)
@@ -882,10 +1006,6 @@ class EditRecordPageState extends State<EditRecordPage> {
                                                 .onSurfaceVariant),
                                       ),
                                     )),
-                                    Visibility(
-                                      child: getProLabel(labelFontSize: 12.0),
-                                      visible: showProLabel,
-                                    ),
                                     Visibility(
                                       child: IconButton(
                                         icon: Icon(Icons.close,
@@ -926,7 +1046,6 @@ class EditRecordPageState extends State<EditRecordPage> {
                           onTap: canChangeEndDate
                               ? () async {
                                   FocusScope.of(context).unfocus();
-                                  dismissInAppKeyboard();
                                   // Default to 30 days from now (not 1 year, which is confusing)
                                   DateTime initialDate = localDisplayEndDate ??
                                       DateTime.now().add(Duration(days: 30));
@@ -981,7 +1100,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  "End Date (optional)".i18n,
+                                                  'Data de término (opcional)',
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     color: Theme.of(context)
@@ -995,7 +1114,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                                                   localDisplayEndDate != null
                                                       ? getDateStr(
                                                           localDisplayEndDate!)
-                                                      : "Not set".i18n,
+                                                      : 'Não definido',
                                                   style: TextStyle(
                                                     fontSize: 18,
                                                     color: localDisplayEndDate !=
@@ -1044,7 +1163,7 @@ class EditRecordPageState extends State<EditRecordPage> {
   }
 
   Widget _createAmountCard() {
-    final shouldAutofocus = !readOnly &&
+    final shouldAutofocus = !_locked &&
         passedRecord == null &&
         passedRecurrentRecordPattern == null;
 
@@ -1091,15 +1210,11 @@ class EditRecordPageState extends State<EditRecordPage> {
                   identifier: 'amount-field',
                   child: AmountInputField(
                     controller: _textEditingController,
-                    labelText: "Amount".i18n,
-                    suffixText: _isCrossCurrencyTransfer
-                        ? _walletCurrency(_selectedWallet)
-                        : null,
-                    enabled: !readOnly,
+                    labelText: 'Quantia',
+                    enabled: !_locked,
                     allowNegative: false,
                     autofocus: shouldAutofocus,
                     onChanged: changeRecordValue,
-                    currencyCode: _walletCurrency(_selectedWallet),
                     validator: isTransferFlow || _selectedDestinationWallet != null
                         ? _validatePositiveTransferAmount
                         : null,
@@ -1123,128 +1238,15 @@ class EditRecordPageState extends State<EditRecordPage> {
       }
       record!.value = numericValue;
     }
-    if (mounted) {
-      setState(() => _suggestReceivedAmount());
-    }
-  }
-
-  String? _walletCurrency(Wallet? wallet) {
-    final currency = wallet?.currency;
-    if (currency != null && currency.isNotEmpty) return currency;
-    return getDefaultCurrency();
-  }
-
-  bool get _isCrossCurrencyTransfer {
-    if (!ServiceConfig.walletsEnabled ||
-        _selectedWallet == null ||
-        _selectedDestinationWallet == null) {
-      return false;
-    }
-    final source = _walletCurrency(_selectedWallet);
-    final destination = _walletCurrency(_selectedDestinationWallet);
-    return source != null && destination != null && source != destination;
-  }
-
-  void _setReceivedAmountText(double? amount) {
-    // Keep all saved digits; formatting for display must not change balances.
-    var text = amount?.toString() ?? '';
-    // Currency parsing does not accept scientific notation. Expand the
-    // shortest double representation without rounding or adding digits.
-    if (text.contains('e')) {
-      final parts = text.split('e');
-      final mantissa = parts[0].split('.');
-      final digits = mantissa.join();
-      final point = mantissa[0].length + int.parse(parts[1]);
-      if (point <= 0) {
-        text = '0.${'0' * -point}$digits';
-      } else if (point >= digits.length) {
-        text = '$digits${'0' * (point - digits.length)}';
-      } else {
-        text = '${digits.substring(0, point)}.${digits.substring(point)}';
-      }
-    }
-    _updatingReceivedAmount = true;
-    _receivedAmountController.text =
-        text.replaceAll('.', getDecimalSeparator());
-    _updatingReceivedAmount = false;
-  }
-
-  void _suggestReceivedAmount() {
-    if (!_isCrossCurrencyTransfer || _receivedAmountIsManual || readOnly)
-      return;
-    final amount = record?.value == null
-        ? null
-        : convertAmount(
-            record!.value!.abs(),
-            _walletCurrency(_selectedWallet)!,
-            _walletCurrency(_selectedDestinationWallet)!,
-          );
-    _setReceivedAmountText(
-      amount != null && amount.isFinite && amount > 0 ? amount : null,
-    );
-  }
-
-  void _resetReceivedAmount() {
-    _receivedAmountIsManual = false;
-    _setReceivedAmountText(null);
-    _suggestReceivedAmount();
   }
 
   String? _validatePositiveTransferAmount(String? text) {
     final amount = text == null ? null : tryParseSignedCurrencyString(text);
     if (amount == null || !amount.isFinite || amount <= 0) {
-      return "Please enter a positive amount.".i18n;
+      return 'Insira um valor positivo.';
     }
     if (isMathExpression(text!)) return amountFormatErrorMessage();
     return null;
-  }
-
-  String? get _transferRateString {
-    final sent = tryParseCurrencyString(_textEditingController.text);
-    final received = tryParseSignedCurrencyString(_receivedAmountController.text);
-    if (!_isCrossCurrencyTransfer || sent == null || received == null) return null;
-    final rate = record
-        ?.copyWith(
-          value: -sent,
-          transferWalletId: _selectedDestinationWallet!.id,
-          transferValue: received,
-        )
-        .transferExchangeRate;
-    if (rate == null) return null;
-    final rateText = rate.toString().replaceAll('.', getDecimalSeparator());
-    return '1 ${_walletCurrency(_selectedWallet)} = $rateText ${_walletCurrency(_selectedDestinationWallet)}';
-  }
-
-  Widget _createReceivedAmountCard() {
-    if (!_isCrossCurrencyTransfer) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Semantics(
-            identifier: 'received-amount-field',
-            child: AmountInputField(
-              controller: _receivedAmountController,
-              labelText: "Amount received".i18n,
-              suffixText: _walletCurrency(_selectedDestinationWallet),
-              currencyCode: _walletCurrency(_selectedDestinationWallet),
-              enabled: !readOnly,
-              validator: _validatePositiveTransferAmount,
-              onChanged: (_) {
-                if (_updatingReceivedAmount || readOnly) return;
-                setState(() => _receivedAmountIsManual = true);
-              },
-            ),
-          ),
-          if (_transferRateString != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_transferRateString!),
-            ),
-        ],
-      ),
-    );
   }
 
   /// Evaluates any pending math expression left in the amount field and
@@ -1259,60 +1261,6 @@ class EditRecordPageState extends State<EditRecordPage> {
       _textEditingController,
       onSolved: changeRecordValue,
     );
-    if (_isCrossCurrencyTransfer) {
-      solveMathExpressionAndUpdateController(_receivedAmountController);
-    }
-  }
-
-  void _updateTransferValue() {
-    final src = _walletCurrency(_selectedWallet);
-    final dest = _walletCurrency(_selectedDestinationWallet);
-    if (src == null || dest == null || record?.value == null) {
-      record?.transferValue = null;
-      return;
-    }
-    if (src == dest) {
-      record!.transferValue = null;
-      return;
-    }
-    record!.transferValue =
-        tryParseCurrencyString(_receivedAmountController.text);
-  }
-
-  Future<void> _refreshTransferRatesIfCustomRate() async {
-    if (!_isCrossCurrencyTransfer || !_receivedAmountIsManual) return;
-    try {
-      await TransferExchangeRateService.refresh(database);
-    } catch (_) {}
-  }
-
-  void _appendTransferNoteToDescription() {
-    final srcCurrency = _walletCurrency(_selectedWallet);
-    final destCurrency = _walletCurrency(_selectedDestinationWallet);
-    if (srcCurrency == null ||
-        destCurrency == null ||
-        record?.transferValue == null ||
-        srcCurrency == destCurrency) {
-      return;
-    }
-    final srcFormatted =
-        formatCurrencyAmount(record!.value!.abs(), srcCurrency);
-    final destFormatted =
-        formatCurrencyAmount(record!.transferValue!, destCurrency);
-    final rateString = _transferRateString;
-
-    final buffer = StringBuffer();
-    buffer.write('$srcFormatted → $destFormatted');
-    if (rateString != null) {
-      buffer.write(' ($rateString)');
-    }
-
-    final existing = record!.description?.trim();
-    if (existing == null || existing.isEmpty) {
-      record!.description = buffer.toString();
-    } else if (!existing.contains(buffer.toString())) {
-      record!.description = '$existing\n${buffer.toString()}';
-    }
   }
 
   addOrUpdateRecord() async {
@@ -1325,14 +1273,13 @@ class EditRecordPageState extends State<EditRecordPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: MarkupText(
-              "Select both <b>origin</b> and <b>destination</b> wallets".i18n),
+              'Selecione as carteiras de <b>origem</b> e <b>destino</b>'),
         ),
       );
       return;
     }
 
     if (ServiceConfig.walletsEnabled) {
-      _updateTransferValue();
       record!.walletId = _selectedWallet?.id;
       record!.transferWalletId = _selectedDestinationWallet?.id;
     } else if (record!.id == null) {
@@ -1341,6 +1288,7 @@ class EditRecordPageState extends State<EditRecordPage> {
       // records keep their current wallet/transfer assignment untouched.
       record!.walletId = (await database.getDefaultWallet())?.id;
     }
+    _applyOriginTag(isTransfer: record!.transferWalletId != null);
     record!.tags = _selectedTags; // Assign selected tags to the record
     _logger.debug('Saving record with ${_selectedTags.length} tags');
     if (record!.recurrencePatternId != null) {
@@ -1357,13 +1305,491 @@ class EditRecordPageState extends State<EditRecordPage> {
       }
     }
     if (record!.id == null) {
-      _appendTransferNoteToDescription();
       await database.addRecord(record);
     } else {
       await database.updateRecordById(record!.id, record);
+      if (_fromDinzo &&
+          !DinzoSyncService.isSynthetic(record!.dinzoId) &&
+          record!.title != _originalTitle) {
+        await _pushTitleToDinzo();
+      }
+      if (_dinzoCategoryEditable &&
+          record!.category?.name != _originalCategoryName) {
+        await _pushCategoryToDinzo();
+      }
     }
-    await _refreshTransferRatesIfCustomRate();
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  /// Hand-entered records carry exactly one origin tag: "Virtual" for moves
+  /// between wallets, "Manual" for everything else. Dinzo imports carry none.
+  void _applyOriginTag({required bool isTransfer}) {
+    if (_fromDinzo) return;
+    // The "Estimativa" box starts from the tag, so it decides (unchecking
+    // turns an estimate into a plain recurrence).
+    final estimate = _isEstimate;
+    _selectedTags
+      ..remove(DinzoSyncService.manualTag)
+      ..remove(DinzoSyncService.virtualTag)
+      ..remove(DinzoSyncService.estimateTag)
+      ..add(estimate
+          ? DinzoSyncService.estimateTag
+          : isTransfer
+              ? DinzoSyncService.virtualTag
+              : DinzoSyncService.manualTag);
+  }
+
+  /// Estimates become a recurrent pattern tagged [estimateTag]; without a
+  /// repetition they occur once (end date = date). Returns false when the
+  /// date is not in the future (it would vanish right away).
+  bool _prepareEstimate() {
+    // Keep the estimate once a repetition is set below (a forced estimate
+    // only applies while there is none).
+    _isEstimateChecked = true;
+    final date = localDisplayDate ?? DateTime.now();
+    final today = DateTime.now();
+    if (!DateTime(date.year, date.month, date.day)
+        .isAfter(DateTime(today.year, today.month, today.day))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'A estimativa precisa de uma data futura: ela some quando o dia chega.')));
+      return false;
+    }
+    if (recurrentPeriod == null) {
+      recurrentPeriod = RecurrentPeriod.EveryMonth;
+      localDisplayEndDate = date;
+    }
+    return true;
+  }
+
+  Widget _createEstimateCard() {
+    final forced = _forcedEstimate;
+    return CheckboxListTile(
+      value: _isEstimateChecked || forced,
+      onChanged: forced || readOnly
+          ? null
+          : (v) => setState(() => _isEstimateChecked = v ?? false),
+      secondary: const Icon(Icons.query_stats, color: Color(0xFFF9A825)),
+      title: const Text('Estimativa'),
+      subtitle: Text(forced
+          ? 'Os lançamentos reais vêm da Dinzo, então um lançamento avulso '
+              'vira estimativa (data futura). Para um recorrente de verdade, '
+              'como o vale-alimentação, escolha uma repetição. Dá pra liberar '
+              'lançamentos manuais em Configurações → Integrações com API.'
+          : 'Para prever os próximos meses. Fica no Extrato até ser vinculada '
+              'ao lançamento real: segure a estimativa e toque no lançamento. '
+              'Use a repetição para salário e gastos médios.'),
+    );
+  }
+
+  /// Marks the recurrence as paid by boleto or Pix (a [Record.billingTags]
+  /// tag): the Extrato then flags each occurrence still without its code.
+  Widget _createBillingCard() {
+    final kind = Record.billingKindOf(_selectedTags);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 40,
+            child: Icon(Icons.qr_code_2,
+                size: 28,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Pago com boleto ou Pix',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text(
+                  'Cada ocorrência pede o código dela. Sem ele, o ícone '
+                  'pisca em vermelho no Extrato.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: '', label: Text('Não')),
+                    ButtonSegment(value: 'Boleto', label: Text('Boleto')),
+                    ButtonSegment(value: 'Pix', label: Text('Pix')),
+                  ],
+                  selected: {kind ?? ''},
+                  onSelectionChanged: (v) => setState(() {
+                    _selectedTags.removeAll(Record.billingTags);
+                    if (v.first.isNotEmpty) _selectedTags.add(v.first);
+                  }),
+                ),
+                if (kind == 'Pix') _createDefaultPixTile(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The same Pix every month (e.g. to a person): a key, so each occurrence
+  /// gets a copia-e-cola with its amount, or a fixed copia-e-cola.
+  Widget _createDefaultPixTile() {
+    final pix = _defaultPix;
+    return ListTile(
+      contentPadding: const EdgeInsets.only(top: 4),
+      leading: const Icon(Icons.push_pin_outlined),
+      title: const Text('Pix padrão'),
+      subtitle: Text(
+        pix == null
+            ? 'Toque para definir a chave da pessoa: cada mês já sai com o '
+                'valor'
+            : PixCode.isPayload(pix)
+                ? 'Copia-e-cola fixo'
+                : 'Chave ${PixCode.normalizeKey(pix)}'
+                    '${_pixName == null ? '' : ' · $_pixName'} · com o valor',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: _editDefaultPix,
+    );
+  }
+
+  Future<void> _editDefaultPix() async {
+    final result = await DefaultPixSheet.show(
+      context,
+      initialKey: _defaultPix,
+      initialName: _pixName,
+    );
+    if (result == null) return;
+    setState(() {
+      final k = result.$1.trim();
+      final n = result.$2.trim();
+      _defaultPix = k.isEmpty ? null : k;
+      _pixName = k.isEmpty || n.isEmpty ? null : n;
+    });
+  }
+
+  /// Fork: Pix copia-e-cola / boleto digitable line of this estimate
+  /// occurrence, saved on the recurrence right away (the view is read-only).
+  Widget _createPaymentCodeTile() {
+    final code = _paymentCode;
+    return ListTile(
+      leading: const Icon(Icons.qr_code_2),
+      title: const Text('Pix / linha digitável'),
+      subtitle: Text(
+        code == null
+            ? 'Toque para colar o código desta ocorrência'
+            : '${Record.paymentCodeKind(code)} · $code',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: code == null
+          ? null
+          : FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFF9A825),
+                foregroundColor: Colors.black87,
+              ),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('Pagar'),
+              onPressed: () => PaymentLauncher.open(context, code),
+            ),
+      onTap: _editPaymentCode,
+    );
+  }
+
+  /// This occurrence's due date: from its code, or checked by hand when the
+  /// code has none (a utility boleto). Moves only this occurrence.
+  Widget _createDueDateTile() {
+    final unknown = record!.dueDateUnknown;
+    final shown = localDisplayDate ?? record!.localDateTime;
+    return ListTile(
+      leading: Icon(
+        Icons.event,
+        color: unknown ? Theme.of(context).colorScheme.error : null,
+      ),
+      title: Text(
+          '${_paymentCode == null ? 'Data desta conta' : 'Vencimento'}: '
+          '${getDateStr(shown)}'),
+      subtitle: Text(unknown
+          ? 'O código não trouxe a data. Toque para conferir.'
+          : 'Toque para mudar o dia só desta conta; o recorrente continua '
+              'como está.'),
+      onTap: _editDueDate,
+    );
+  }
+
+  Future<void> _editDueDate() async {
+    final shown = localDisplayDate ?? record!.localDateTime;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: shown,
+      firstDate: DateTime(shown.year - 1),
+      lastDate: DateTime(shown.year + 1, 12, 31),
+      helpText: 'Data desta conta',
+    );
+    if (picked == null) return;
+    final pattern =
+        await database.getRecurrentRecordPattern(record!.recurrencePatternId);
+    if (pattern == null) return;
+    final day = pattern.occurrenceDayOf(record!);
+    pattern.setDueDate(day, picked);
+    await database.updateRecordPatternById(pattern.id, pattern);
+    if (!mounted) return;
+    // Saved: back to the list, where the message shows.
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    messenger.showSnackBar(SnackBar(
+      duration: const Duration(seconds: 5),
+      content: Text('Esta conta passou para ${getDateStr(picked)}. O '
+          'recorrente continua no dia ${day.day}.'),
+    ));
+  }
+
+  /// "Já paguei" only means something for a bill: a Pix / boleto code on the
+  /// occurrence, or a recurrence paid by Pix or boleto. Once marked it stays,
+  /// so it can be undone.
+  bool get _canMarkPaid =>
+      _paymentCode != null ||
+      Record.billingKindOf(record!.tags) != null ||
+      record!.markedPaid;
+
+  /// Turns this estimate occurrence into a stored record of its own: same
+  /// name, amount, category, wallet and note, tagged "Manual". The occurrence
+  /// is consumed like a link ([EstimateLink.link]), so it leaves the estimate,
+  /// which is deleted once nothing is left of it.
+  Widget _createMakeRealTile() {
+    return ListTile(
+      leading: const Icon(Icons.task_alt),
+      title: const Text('Virar lançamento real'),
+      subtitle: const Text(
+          'Cria um lançamento com estes dados, fora do recorrente, e tira '
+          'esta ocorrência da estimativa.'),
+      onTap: _makeReal,
+    );
+  }
+
+  Future<void> _makeReal() async {
+    final occurrence = record!;
+    final now = DateTime.now();
+    final shown = localDisplayDate ?? occurrence.localDateTime;
+    // What is real already happened: a future date comes to today.
+    final day = shown.isAfter(now) ? now : shown;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Virar lançamento real?'),
+        content: Text(
+          '${occurrence.title ?? occurrence.category?.name ?? ''}, '
+          '${getDateStr(day)}, ${getCurrencyValueString(occurrence.value)}.\n\n'
+          'Vira um lançamento manual, sem ligação com o recorrente. Esta '
+          'ocorrência some da estimativa; as outras continuam.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Virar real'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final tags = {...occurrence.tags}
+      ..remove(DinzoSyncService.estimateTag)
+      ..remove(DinzoSyncService.virtualTag)
+      ..add(DinzoSyncService.manualTag);
+    final id = await database.addRecord(Record(
+      occurrence.value,
+      occurrence.title,
+      occurrence.category,
+      day.toUtc(),
+      description: occurrence.description,
+      walletId: occurrence.walletId,
+      tags: tags,
+    ));
+    await EstimateLink.link(occurrence, id);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Agora é um lançamento real')));
+  }
+
+  /// "Já paguei" on this occurrence while the real record has not come.
+  Widget _createMarkedPaidTile() {
+    return CheckboxListTile(
+      value: record!.markedPaid,
+      onChanged: (v) async {
+        await RecurrentRecordService.setMarkedPaid(record!, v ?? false);
+        if (mounted) setState(() {});
+      },
+      secondary: const Icon(Icons.check_circle_outline, color: Colors.green),
+      title: const Text('Já paguei'),
+      subtitle: const Text(
+          'Para de avisar enquanto o lançamento não chega da Dinzo. Quando '
+          'chegar, vincule como sempre.'),
+    );
+  }
+
+  Future<void> _editPaymentCode() async {
+    final local = record!.localDateTime;
+    final name = record!.title == null || record!.title!.trim().isEmpty
+        ? record!.category?.name ?? 'Conta'
+        : record!.title!;
+    final result = await PaymentCodeSheet.show(
+      context,
+      subtitle: '$name · ${getDateStr(local)}',
+      initial: _paymentCode,
+      amount: record!.value?.abs(),
+    );
+    if (result == null) return;
+    final code = result.trim().isEmpty ? null : result.trim();
+    final pattern =
+        await database.getRecurrentRecordPattern(record!.recurrencePatternId);
+    if (pattern == null) return;
+    // Codes and marks stay on the recurrence's day, even once moved.
+    final day = pattern.occurrenceDayOf(record!);
+    final key = RecurrentRecordPattern.occurrenceKey(day);
+    final chargeKey = RecurrentRecordPattern.chargeValueKey(day);
+    final dueBefore = pattern.dueDateFor(day);
+    pattern.paymentCodes.remove(chargeKey);
+    DateTime? due;
+    if (code == null) {
+      pattern.paymentCodes.remove(key);
+    } else {
+      pattern.paymentCodes[key] = code;
+      // A Pix charge (electricity bill) keeps its amount at the bank.
+      final charge = await PixCharge.fetch(code);
+      if (charge != null && charge.isOpen) {
+        pattern.paymentCodes[chargeKey] = charge.amount.toStringAsFixed(2);
+      }
+      due = charge?.dueDate ?? PixCode.dueDateOf(code);
+    }
+    pattern.setDueDate(day, due);
+    await database.updateRecordPatternById(pattern.id, pattern);
+    final dueAfter = pattern.dueDateFor(day);
+    final shownBefore = dueBefore ?? day;
+    final shownAfter = dueAfter ?? day;
+    final moved = DateTime(shownBefore.year, shownBefore.month, shownBefore.day) !=
+        DateTime(shownAfter.year, shownAfter.month, shownAfter.day);
+    if (!mounted) return;
+    // The code's amount is this occurrence's only (see valueFor).
+    final before = record!.value;
+    final after = pattern.valueFor(day);
+    final shown = dueAfter ?? day;
+    setState(() {
+      _paymentCode = pattern.paymentCodeFor(day);
+      record!.paymentCode = _paymentCode;
+      record!.dueDateUnknown = pattern.dueDateMissing(day);
+      if (moved) {
+        localDisplayDate = DateTime(shown.year, shown.month, shown.day,
+            local.hour, local.minute);
+      }
+      if (after != null) {
+        record!.value = after;
+        final v = after.abs();
+        _textEditingController.text = v % 1 == 0
+            ? v.toInt().toString()
+            : v.toString().replaceAll('.', getDecimalSeparator());
+      }
+    });
+    final valueChanged =
+        after != null && before != null && (after - before).abs() >= 0.005;
+    final String message;
+    if (valueChanged) {
+      message = (moved ? 'Vencimento ${getDateStr(shown)}. ' : '') +
+          (code == null
+              ? 'Valor desta conta voltou para '
+                  '${getCurrencyValueString(after.abs())}.'
+              : 'Valor desta conta alterado de '
+                  '${getCurrencyValueString(before.abs())} para '
+                  '${getCurrencyValueString(after.abs())}, que é o valor '
+                  'do ${PixCharge.urlOf(code) != null ? 'Pix de cobrança' : Record.paymentCodeKind(code)}. '
+                  'O recorrente continua com '
+                  '${getCurrencyValueString(pattern.value?.abs())}.');
+    } else if (moved) {
+      message = code == null
+          ? 'Esta conta voltou para ${getDateStr(shown)}.'
+          : 'Esta conta passou para ${getDateStr(shown)}, o vencimento do '
+              'código.';
+    } else {
+      message = code == null ? 'Código removido.' : 'Código salvo.';
+    }
+    // Saved: back to the list, where the message shows.
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    messenger.showSnackBar(SnackBar(
+      duration: Duration(seconds: valueChanged || moved ? 6 : 3),
+      content: Text(message),
+    ));
+  }
+
+  /// Which estimate this real record was linked to (see EstimateLink).
+  Widget _createEstimateLinkTile(EstimateLink link) {
+    final details = [
+      getDateStr(link.utcDateTime.toLocal()),
+      if (link.value != null) getCurrencyValueString(link.value),
+    ].join(' · ');
+    return ListTile(
+      leading: const Icon(Icons.link, color: Color(0xFFF9A825)),
+      title: Text('Vinculado à estimativa "${link.title ?? ''}"'),
+      subtitle: Text(details),
+    );
+  }
+
+  /// Leaves the record out of the budget ([outOfBudgetTag]): neither income
+  /// for the 100% nor spending. Works on Dinzo records too: the sync keeps
+  /// tags it did not write.
+  Widget _createOutOfBudgetCard() {
+    return CheckboxListTile(
+      value: _selectedTags.contains(outOfBudgetTag),
+      onChanged: (v) => setState(() {
+        if (v ?? false) {
+          _selectedTags.add(outOfBudgetTag);
+        } else {
+          _selectedTags.remove(outOfBudgetTag);
+        }
+      }),
+      secondary: const Icon(Icons.money_off, color: Color(0xFF78909C)),
+      title: const Text('Não considerar no orçamento'),
+      subtitle: const Text(
+          'Não conta como gasto nem entra nos 100% da receita. Ex.: comprou '
+          'algo para alguém e a pessoa te devolveu por Pix: marque os dois.'),
+    );
+  }
+
+  Future<void> _pushCategoryToDinzo() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await DinzoSyncService.pushCategory(record!);
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Categoria atualizada também na Dinzo')));
+    } catch (e, st) {
+      _logger.handle(e, st, 'Failed to change category in Dinzo');
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Salvo aqui, mas não foi possível mudar a categoria na Dinzo: '
+              '${e is DinzoApiException ? e.message : e}')));
+    }
+  }
+
+  Future<void> _pushTitleToDinzo() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await DinzoSyncService.pushTitle(record!);
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Nome atualizado também na Dinzo')));
+    } catch (e, st) {
+      _logger.handle(e, st, 'Failed to rename transaction in Dinzo');
+      messenger.showSnackBar(SnackBar(
+          content: Text('Salvo aqui, mas não foi possível renomear na Dinzo: $e')));
+    }
   }
 
   Future<void> _initWallet() async {
@@ -1373,12 +1799,13 @@ class EditRecordPageState extends State<EditRecordPage> {
       _selectedDestinationWallet = null;
       return;
     }
-    final allWallets = await database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
+    final allWallets = await database.getAllWallets();
     final activeWallets = allWallets.where((w) => !w.isArchived).toList();
 
     Wallet? walletToSelect;
-    if (record?.walletId != null) {
+    if (_sourceLocked) {
+      walletToSelect = await database.getDefaultWallet();
+    } else if (record?.walletId != null) {
       // Fall back to the Predefined Wallet if the assigned wallet no longer exists
       walletToSelect = await database.getWalletById(record!.walletId!) ??
           await database.getPredefinedWallet() ??
@@ -1406,16 +1833,6 @@ class EditRecordPageState extends State<EditRecordPage> {
       if (destWallet != null && mounted) {
         setState(() {
           _selectedDestinationWallet = destWallet;
-          if (record!.transferValue != null || passedRecord != null ||
-              passedRecurrentRecordPattern != null) {
-            _receivedAmountIsManual = true;
-            _setReceivedAmountText(record!.transferValue ?? record!.value?.abs());
-          } else if (readOnly) {
-            // Legacy transfers without a received amount use the sent amount.
-            _setReceivedAmountText(record!.value?.abs());
-          } else {
-            _suggestReceivedAmount();
-          }
         });
       }
     }
@@ -1461,16 +1878,12 @@ class EditRecordPageState extends State<EditRecordPage> {
 
     // Assign wallet and transfer fields before creating the pattern
     if (ServiceConfig.walletsEnabled) {
-      _updateTransferValue();
       record!.walletId = _selectedWallet?.id;
       record!.transferWalletId = _selectedDestinationWallet?.id;
     } else if (id == null) {
       // New recurrent pattern while wallets are disabled: silently assign the
       // default wallet. Existing patterns keep their wallet assignment.
       record!.walletId = (await database.getDefaultWallet())?.id;
-    }
-    if (id == null) {
-      _appendTransferNoteToDescription();
     }
     // Create a new recurrent pattern from the updated record
     RecurrentRecordPattern recordPattern = RecurrentRecordPattern.fromRecord(
@@ -1485,8 +1898,22 @@ class EditRecordPageState extends State<EditRecordPage> {
           ? _customIntervalUnit
           : null,
     );
+    _applyOriginTag(isTransfer: record!.transferWalletId != null);
     recordPattern.tags =
         _selectedTags; // Assign selected tags to the recurrent pattern
+    // Fork: editing the pattern keeps the occurrences' payment codes.
+    recordPattern.paymentCodes =
+        Map.of(passedRecurrentRecordPattern?.paymentCodes ?? const {})
+          ..remove(RecurrentRecordPattern.defaultPixKey)
+          ..remove(RecurrentRecordPattern.pixNameKey);
+    if (Record.billingKindOf(_selectedTags) == 'Pix' && _defaultPix != null) {
+      recordPattern.paymentCodes[RecurrentRecordPattern.defaultPixKey] =
+          _defaultPix!;
+      if (_pixName != null && !PixCode.isPayload(_defaultPix!)) {
+        recordPattern.paymentCodes[RecurrentRecordPattern.pixNameKey] =
+            _pixName!;
+      }
+    }
     if (id != null) {
       // Preserve utcLastUpdate from the existing pattern so that
       // generateRecurrentRecordsFromDateTime does not regenerate all records
@@ -1510,33 +1937,27 @@ class EditRecordPageState extends State<EditRecordPage> {
     } else {
       await database.addRecurrentRecordPattern(recordPattern);
     }
-    await _refreshTransferRatesIfCustomRate();
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _openTagSelectionDialog() async {
-    dismissInAppKeyboard();
-    if (ServiceConfig.isPremium) {
-      final selectedTags = await Navigator.push<Set<String>>(
-        context,
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (context) => TagSelectionDialog(
-            initialSelectedTags: _selectedTags,
-          ),
+    final selectedTags = await Navigator.push<Set<String>>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => TagSelectionDialog(
+          initialSelectedTags: _selectedTags,
         ),
-      );
+      ),
+    );
 
-      if (selectedTags != null) {
-        _logger.debug(
-            'Tag selection applied: ${selectedTags.length} tags selected');
-        setState(() {
-          _selectedTags = selectedTags;
-        });
-      }
-    } else {
-      _logger.debug('Tag selection blocked: not a premium user');
-      goToPremiumSplashScreen();
+    if (selectedTags != null) {
+      _logger.debug(
+          'Tag selection applied: ${selectedTags.length} tags selected');
+      setState(() {
+        _selectedTags = selectedTags;
+        _applyOriginTag(isTransfer: _selectedDestinationWallet != null);
+      });
     }
   }
 
@@ -1548,30 +1969,33 @@ class EditRecordPageState extends State<EditRecordPage> {
         foregroundColor: fgColor,
         leading: BackButton(onPressed: () => Navigator.pop(context)),
         title: Text(
-          readOnly ? 'View record'.i18n : 'Edit record'.i18n,
+          readOnly ? 'View record' : 'Editar Item',
         ),
         actions: <Widget>[
           Visibility(
-              visible: (widget.passedRecord != null ||
-                      widget.passedRecurrentRecordPattern != null) &&
-                  !readOnly,
+              visible: ((widget.passedRecord != null ||
+                          widget.passedRecurrentRecordPattern != null) &&
+                      !readOnly) ||
+                  _singleOccurrencePattern != null,
               child: IconButton(
                   icon: Semantics(
                       identifier: "delete-button",
                       child: const Icon(Icons.delete)),
-                  tooltip: 'Delete'.i18n,
+                  tooltip: 'Excluir',
                   onPressed: () async {
                     AlertDialogBuilder deleteDialog =
-                        AlertDialogBuilder("Critical action".i18n)
-                            .addTrueButtonName("Yes".i18n)
-                            .addFalseButtonName("No".i18n);
-                    if (widget.passedRecord != null) {
+                        AlertDialogBuilder('Ação crítica')
+                            .addTrueButtonName('Sim')
+                            .addFalseButtonName('Não');
+                    if (_singleOccurrencePattern != null) {
                       deleteDialog = deleteDialog.addSubtitle(
-                          "Do you really want to delete this record?".i18n);
+                          'Quer mesmo excluir este Item?');
+                    } else if (widget.passedRecord != null) {
+                      deleteDialog = deleteDialog.addSubtitle(
+                          'Você realmente deseja excluir este Item?');
                     } else {
                       deleteDialog = deleteDialog.addSubtitle(
-                          "Do you really want to delete this recurrent record?"
-                              .i18n);
+                          'Quer mesmo excluir este Item?');
                     }
                     var continueDelete = await showDialog(
                         context: context,
@@ -1579,22 +2003,18 @@ class EditRecordPageState extends State<EditRecordPage> {
                           return deleteDialog.build(context);
                         });
                     if (continueDelete) {
-                      if (widget.passedRecord != null) {
-                        await database.deleteRecordById(record!.id);
-                        final restoreAmount =
-                            PreferencesUtils.getOrDefault<bool>(
-                                ServiceConfig.sharedPreferences!,
-                                PreferencesKeys.restoreAmountOnDelete)!;
-                        if (!restoreAmount &&
-                            record!.walletId != null &&
-                            record!.value != null) {
-                          final wallet =
-                              await database.getWalletById(record!.walletId!);
-                          if (wallet != null) {
-                            wallet.initialAmount += record!.value!;
-                            await database.updateWallet(wallet.id!, wallet);
-                          }
+                      if (_singleOccurrencePattern != null) {
+                        final patternId = _singleOccurrencePattern!.id!;
+                        await database.deleteFutureRecordsByPatternId(
+                            patternId, DateTime.now().toUtc());
+                        await database
+                            .deleteRecurrentRecordPatternById(patternId);
+                      } else if (widget.passedRecord != null) {
+                        if (record!.dinzoId != null) {
+                          await DinzoSyncService.ignoreDeleted(
+                              [record!.dinzoId!]);
                         }
+                        await database.deleteRecordById(record!.id);
                       } else {
                         String patternId =
                             widget.passedRecurrentRecordPattern!.id!;
@@ -1624,11 +2044,45 @@ class EditRecordPageState extends State<EditRecordPage> {
           Divider(height: 1),
           if (ServiceConfig.walletsEnabled) ...[
             _createWalletCard(),
-            _createReceivedAmountCard(),
+            // Fork: part of a Dinzo purchase paid with a caixinha.
+            if (!readOnly && SplitPayment.supports(record))
+              SplitPaymentTile(purchase: record!),
             Divider(height: 1),
           ],
           _createDateAndRepeatCard(),
           Divider(height: 1),
+          if (EstimateLink.decode(record?.estimateLink) case final link?) ...[
+            _createEstimateLinkTile(link),
+            Divider(height: 1),
+          ],
+          if ((_sourceLocked || passedRecurrentRecordPattern != null) &&
+              !_fromDinzo &&
+              _selectedDestinationWallet == null) ...[
+            _createEstimateCard(),
+            Divider(height: 1),
+          ],
+          if (_showsBillingCard) ...[
+            _createBillingCard(),
+            Divider(height: 1),
+          ],
+          if (_isEstimateOccurrence || _isBillingOccurrence) ...[
+            _createPaymentCodeTile(),
+            Divider(height: 1),
+            _createDueDateTile(),
+            Divider(height: 1),
+            if (_canMarkPaid) ...[
+              _createMarkedPaidTile(),
+              Divider(height: 1),
+            ],
+            if (_isEstimateOccurrence) ...[
+              _createMakeRealTile(),
+              Divider(height: 1),
+            ],
+          ],
+          if (!readOnly) ...[
+            _createOutOfBudgetCard(),
+            Divider(height: 1),
+          ],
           _createTagsSection(),
           Divider(height: 1),
           _createAddNoteCard(),
@@ -1656,12 +2110,12 @@ class EditRecordPageState extends State<EditRecordPage> {
                   ),
                 ),
               ),
-              if (readOnly && _selectedTags.isEmpty)
+              if (_locked && _selectedTags.isEmpty)
                 Expanded(
                   child: Container(
                     margin: EdgeInsets.fromLTRB(20, 10, 10, 10),
                     child: Text(
-                      "No tags applied.".i18n,
+                      'Nenhuma tag aplicada.',
                       style: TextStyle(
                         fontSize: 18,
                         color: Theme.of(context)
@@ -1672,7 +2126,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                     ),
                   ),
                 ),
-              if (!readOnly && _selectedTags.isEmpty)
+              if (!_locked && _selectedTags.isEmpty)
                 Expanded(
                   child: InkWell(
                     onTap: _openTagSelectionDialog,
@@ -1680,7 +2134,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                       margin: EdgeInsets.fromLTRB(20, 10, 10, 10),
                       width: double.infinity,
                       child: Text(
-                        "Add tags".i18n,
+                        'Adicionar tags',
                         style: TextStyle(
                           fontSize: 18,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1697,11 +2151,15 @@ class EditRecordPageState extends State<EditRecordPage> {
                       spacing: 8.0,
                       runSpacing: 4.0,
                       children: [
-                        ..._selectedTags.map((tag) {
+                        ...KnownTag.sortForDisplay(_selectedTags).map((tag) {
                           return TagChip(
                             labelText: tag,
                             isSelected: true,
-                            onSelected: readOnly
+                            onSelected: _locked ||
+                                    tag == DinzoSyncService.manualTag ||
+                                    tag == DinzoSyncService.virtualTag ||
+                                    tag == DinzoSyncService.estimateTag ||
+                                    tag == outOfBudgetTag
                                 ? null
                                 : (selected) {
                                     setState(() {
@@ -1711,7 +2169,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                                   },
                           );
                         }).toList(),
-                        if (!readOnly)
+                        if (!_locked)
                           TagChip(
                             labelText: "+",
                             isSelected: false,
@@ -1725,7 +2183,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                 ),
             ],
           ),
-          if (!readOnly && _suggestedTags.isNotEmpty) ...[
+          if (!_locked && _suggestedTags.isNotEmpty) ...[
             Padding(
               padding: EdgeInsets.only(left: 60, bottom: 6),
               child: _createSuggestedTagsChips(),
@@ -1740,7 +2198,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Suggested tags".i18n,
+        Text('Tags sugeridas',
             style: TextStyle(fontSize: 14, color: Colors.grey[600])),
         SizedBox(height: 5),
         Wrap(
@@ -1751,7 +2209,7 @@ class EditRecordPageState extends State<EditRecordPage> {
               return TagChip(
                 labelText: tag,
                 isSelected: _selectedTags.contains(tag),
-                onSelected: readOnly
+                onSelected: _locked
                     ? null
                     : (selected) {
                         setState(() {
@@ -1780,26 +2238,19 @@ class EditRecordPageState extends State<EditRecordPage> {
     return Scaffold(
       appBar: _getAppBar(),
       resizeToAvoidBottomInset: false,
-      body: ValueListenableBuilder<double>(
-        valueListenable: inAppKeyboardHeight,
-        builder: (context, kbHeight, _) => SingleChildScrollView(
-          padding: EdgeInsets.only(bottom: kbHeight),
-          child: _getForm(),
-        ),
-      ),
+      body: SingleChildScrollView(child: _getForm()),
       floatingActionButton: readOnly
           ? null
-          : ValueListenableBuilder<double>(
-              valueListenable: inAppKeyboardHeight,
-              builder: (context, kbHeight, child) => Padding(
-                padding: EdgeInsets.only(bottom: kbHeight),
-                child: child,
-              ),
-              child: FloatingActionButton(
+          : FloatingActionButton(
                 heroTag: null,
                 onPressed: () async {
                   _resolvePendingAmountExpression();
                   if (_formKey.currentState!.validate()) {
+                    // A new estimate needs a future date; an existing one
+                    // (its pattern) keeps its dates.
+                    if (_isEstimate && _sourceLocked && !_prepareEstimate()) {
+                      return;
+                    }
                     if (isARecurrentPattern()) {
                       String? recurrentPatternId;
                       if (passedRecurrentRecordPattern != null) {
@@ -1814,11 +2265,10 @@ class EditRecordPageState extends State<EditRecordPage> {
                     }
                   }
                 },
-                tooltip: 'Save'.i18n,
+                tooltip: 'Salvar',
                 child: Semantics(
                     identifier: 'save-button', child: const Icon(Icons.save)),
               ),
-            ),
     );
   }
 }

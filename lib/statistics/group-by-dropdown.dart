@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/record-filters.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/record-filters.dart';
+import 'package:aupp/services/service-config.dart';
 
 /// A toggle widget that allows switching between Category, Tags, and Records views.
 ///
@@ -73,7 +72,7 @@ class GroupByDropdown extends StatelessWidget {
     void addRecordsToggle() {
       addSeparator();
       tokens.add(_buildToggle(
-        label: "Records".i18n,
+        label: 'Registros',
         isSelected: groupByType == GroupByType.records,
         onTap: () => onGroupByTypeChanged(GroupByType.records),
       ));
@@ -82,9 +81,18 @@ class GroupByDropdown extends StatelessWidget {
     void addCategoriesToggle() {
       addSeparator();
       tokens.add(_buildToggle(
-        label: "Categories".i18n,
+        label: 'Categorias',
         isSelected: groupByType == GroupByType.category,
         onTap: () => onGroupByTypeChanged(GroupByType.category),
+      ));
+    }
+
+    void addSubcategoriesToggle() {
+      addSeparator();
+      tokens.add(_buildToggle(
+        label: 'Subcategorias',
+        isSelected: groupByType == GroupByType.subcategory,
+        onTap: () => onGroupByTypeChanged(GroupByType.subcategory),
       ));
     }
 
@@ -113,10 +121,12 @@ class GroupByDropdown extends StatelessWidget {
     if (isDetailView) {
       if (showRecordsToggle) addRecordsToggle();
       if (!hideCategorySelection) addCategoriesToggle();
+      if (!hideCategorySelection) addSubcategoriesToggle();
       if (!hideTagsSelection) addTagsToggle();
       if (!hideWalletsSelection) addWalletsToggle();
     } else {
       if (!hideCategorySelection) addCategoriesToggle();
+      if (!hideCategorySelection) addSubcategoriesToggle();
       if (!hideTagsSelection) addTagsToggle();
       if (!hideWalletsSelection) addWalletsToggle();
       if (showRecordsToggle) addRecordsToggle();
@@ -154,6 +164,7 @@ class GroupByDropdown extends StatelessWidget {
           topCategories: topCategories,
         );
       case GroupByType.category:
+      case GroupByType.subcategory:
       case GroupByType.records:
         return RecordFilters.byMultipleCriteria(
           records,
@@ -192,14 +203,14 @@ class GroupByDropdown extends StatelessWidget {
     required BuildContext context,
   }) {
     final label = tagCount > 0
-        ? "Tags (%d)".i18n.fill([tagCount])
-        : "Tags (%d)".i18n.fill([0]);
+        ? 'Etiquetas (${tagCount})'
+        : 'Etiquetas (${0})';
 
     return InkWell(
       onTap: () {
         if (!hasTagRecords) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("No tags found".i18n),
+            content: Text('Nenhuma tag encontrada'),
             duration: Duration(seconds: 2),
           ));
           return;
@@ -225,14 +236,14 @@ class GroupByDropdown extends StatelessWidget {
     required BuildContext context,
   }) {
     final label = walletCount > 0
-        ? "Wallets (%d)".i18n.fill([walletCount])
-        : "Wallets (%d)".i18n.fill([0]);
+        ? 'Carteiras (${walletCount})'
+        : 'Carteiras (${0})';
 
     return InkWell(
       onTap: () {
         if (!hasWalletRecords) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("No wallets found".i18n),
+            content: Text('Nenhuma carteira encontrada'),
             duration: Duration(seconds: 2),
           ));
           return;

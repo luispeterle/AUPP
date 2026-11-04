@@ -1,3 +1,0 @@
-- Add Croatian translations
-- Bug fix
-- Add recurrent period of 1 year

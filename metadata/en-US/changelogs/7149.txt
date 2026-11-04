@@ -1,3 +1,0 @@
-- Temporary hide your balance with Privacy Mode (enable it in the Settings)
-- Now you can specify a custom folder for your backups
-- Add All time time interval

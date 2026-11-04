@@ -1,88 +1,17 @@
 import 'package:intl/intl.dart';
-import 'package:piggybank/settings/constants/overview-time-interval.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
 
-import '../../helpers/records-utility-functions.dart';
 import '../../services/service-config.dart';
-import '../backup-retention-period.dart';
-import 'homepage-time-interval.dart';
 
 class PreferencesDefaultValues {
   static final defaultValues = <String, dynamic>{
-    PreferencesKeys.themeColor: 0, // Default theme color index
-    PreferencesKeys.themeMode: 0, // Default theme mode index
-    PreferencesKeys.languageLocale: "system",
-    PreferencesKeys.firstDayOfWeek: 0, // Default to system
-    PreferencesKeys.dateFormat: "system",
-    PreferencesKeys.decimalSeparator:
-        getLocaleDecimalSeparator, // Default locale
-    PreferencesKeys.groupSeparator:
-        getLocaleGroupingSeparator, // Default locale
-    PreferencesKeys.numberDecimalDigits: 2, // Default to 2 decimal places
-    PreferencesKeys.amountInputAutoDecimalShift: false,
-    PreferencesKeys.currencySymbolPosition: 0, // Default (follows locale)
-    PreferencesKeys.currencySymbolSpacing: 0, // Default to with space
-    PreferencesKeys.overwriteDotValueWithComma:
-        getOverwriteDotValueWithCommaDefaultValue,
-    PreferencesKeys.overwriteCommaValueWithDot:
-        getOverwriteCommaValueWithDotDefaultValue,
-    PreferencesKeys.enableAutomaticBackup: false, // Default to disabled
-    PreferencesKeys.enableEncryptedBackup: false,
-    PreferencesKeys.enableVersionAndDateInBackupName: true,
-    PreferencesKeys.backupIncludeDatabase: false,
-    PreferencesKeys.backupRetentionIntervalIndex:
-        BackupRetentionPeriod.ALWAYS.index, // Default retention period index
-    PreferencesKeys.backupPassword: '', // Default to empty password
-    PreferencesKeys.backupFolderPath: '', // Empty means the default folder
-    PreferencesKeys.backupFolderUri: '', // No custom folder picked yet
-    PreferencesKeys.databaseCopyFolderPath:
-        '', // Empty means the backup destination
-    PreferencesKeys.databaseCopyFolderUri: '',
     PreferencesKeys.databaseFolderPath: '', // Empty means the default location
-    PreferencesKeys.enableAppLock: false, // Default to disabled
-    PreferencesKeys.restoreAmountOnDelete:
-        true, // Default to restoring the amount
-    PreferencesKeys.enableRecordNameSuggestions: true, // Default to enabled
-    PreferencesKeys.amountInputKeyboardType: getAmountInputKeyboardTypeDefault,
-    PreferencesKeys.homepageTimeInterval: HomepageTimeInterval
-        .CurrentMonth.index, // Default interval (e.g., current month)
-    PreferencesKeys.homepageRecordsMonthStartDay:
-        1, // Default start day (e.g., 1st day of the month)
-    PreferencesKeys.homepageOverviewWidgetTimeInterval: OverviewTimeInterval
-        .DisplayedRecords.index, // Default interval (e.g., current month)
-    PreferencesKeys.homepageRecordNotesVisible: 0,
-    PreferencesKeys.visualiseTagsInMainPage: true, // Default to enabled
-    PreferencesKeys.showWalletInRecordList: false, // Default to disabled
-    PreferencesKeys.showFutureRecords: true, // Default to enabled
     PreferencesKeys.walletsEnabled: true, // Default to enabled
-    PreferencesKeys.budgetsEnabled: true, // Default to enabled
-    PreferencesKeys.showCategoriesAtBottom: false, // Default to disabled
-    PreferencesKeys.walletBalanceMode:
-        0, // 0 = always latest, 1 = end of interval
     PreferencesKeys.showWalletBarOnHomepage: true, // Default to enabled
-    PreferencesKeys.showCurrencySymbol:
-        true, // Default to show currency symbols
-    PreferencesKeys.colorizeAmounts: false, // Default to disabled
-    PreferencesKeys.showHomepageImage: true, // Default to enabled
-    PreferencesKeys.enableNavigationBarAnimations: true,
-    PreferencesKeys.privacyMode: false, // Default to feature disarmed
-    PreferencesKeys.privacyModeHidden: false, // Default to visible amounts
-    PreferencesKeys.privacyModeOnStart:
-        false, // Default to respecting the last state
-    PreferencesKeys.reverseMonthlyImages: false, // Default to no reversal
-    PreferencesKeys.homeWidgetBudgetMap: '{}',
-    PreferencesKeys.statisticsPieChartUseCategoryColors: false,
-    PreferencesKeys.statisticsPieChartNumberOfCategoriesToDisplay: 4,
-    PreferencesKeys.inAppKeyboardScale: 1,
-    PreferencesKeys.inAppKeyboardBackgroundColorIndex: 0,
-    PreferencesKeys.inAppKeyboardButtonColorIndex: 0,
-    PreferencesKeys.inAppKeyboardTextColorIndex: 0,
+    // Fork: manual one-off records allowed on a fresh install (the
+    // Dinzo is optional); "Dinzo only" users switch it off.
+    PreferencesKeys.allowManualRecords: true,
   };
-
-  static int getAmountInputKeyboardTypeDefault() {
-    // The in-app keyboard is the default on every platform, including Windows.
-    return 2;
-  }
 
   static String getLocaleGroupingSeparator() {
     if (ServiceConfig.currencyLocale == null) {
@@ -104,13 +33,5 @@ class PreferencesDefaultValues {
     NumberFormat currencyLocaleNumberFormat =
         new NumberFormat.currency(locale: existingCurrencyLocale);
     return currencyLocaleNumberFormat.symbols.DECIMAL_SEP;
-  }
-
-  static bool getOverwriteDotValueWithCommaDefaultValue() {
-    return getDecimalSeparator() == ",";
-  }
-
-  static bool getOverwriteCommaValueWithDotDefaultValue() {
-    return getDecimalSeparator() == ".";
   }
 }

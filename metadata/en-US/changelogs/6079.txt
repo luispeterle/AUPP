@@ -1,2 +1,0 @@
-- Pie chart with colors, prioritize the sorting on values
-- Update translations

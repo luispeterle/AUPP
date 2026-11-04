@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/categories/categories-list.dart';
-import 'package:piggybank/categories/category-sort-option.dart';
-import 'package:piggybank/categories/edit-category-page.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/i18n.dart';
+import 'package:aupp/categories/categories-list.dart';
+import 'package:aupp/categories/category-sort-option.dart';
+import 'package:aupp/categories/edit-category-page.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
 
 class TabCategories extends StatefulWidget {
   /// The category page that you can select from the bottom navigation bar.
@@ -28,7 +27,7 @@ class TabCategoriesState extends State<TabCategories>
   TabController? _tabController;
   DatabaseInterface database = ServiceConfig.database;
   bool showArchived = false;
-  String activeCategoryTitle = 'Categories'.i18n;
+  String activeCategoryTitle = 'Categorias';
   late String titleBarStr;
   double _fabRotation = 0.0;
   int _previousTabIndex = 0;
@@ -134,7 +133,7 @@ class TabCategoriesState extends State<TabCategories>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        "Order by".i18n,
+                        'Ordenar por',
                         style: TextStyle(
                           fontSize: 22,
                         ),
@@ -150,7 +149,7 @@ class TabCategoriesState extends State<TabCategories>
                               });
                             },
                           ),
-                          Text("Make it default".i18n),
+                          Text('Tornar padrão'),
                         ],
                       ),
                     ],
@@ -160,7 +159,7 @@ class TabCategoriesState extends State<TabCategories>
                 ListTile(
                   leading: Icon(Icons.update),
                   title: Text(
-                    "Last Used".i18n,
+                    'Último uso',
                     style: TextStyle(
                       color: pendingOption == SortOption.lastUsed
                           ? Theme.of(context).colorScheme.primary
@@ -180,7 +179,7 @@ class TabCategoriesState extends State<TabCategories>
                 ListTile(
                   leading: Icon(Icons.abc),
                   title: Text(
-                    "Name (Alphabetically)".i18n,
+                    'Nome (alfabético)',
                     style: TextStyle(
                       color: pendingOption == SortOption.alphabetical
                           ? Theme.of(context).colorScheme.primary
@@ -200,7 +199,7 @@ class TabCategoriesState extends State<TabCategories>
                 ListTile(
                   leading: Icon(Icons.trending_up),
                   title: Text(
-                    "Most Used".i18n,
+                    'Mais Usados',
                     style: TextStyle(
                       color: pendingOption == SortOption.mostUsed
                           ? Theme.of(context).colorScheme.primary
@@ -220,7 +219,7 @@ class TabCategoriesState extends State<TabCategories>
                 ListTile(
                   leading: Icon(Icons.reorder),
                   title: Text(
-                    "Original Order".i18n,
+                    'Ordem original',
                     style: TextStyle(
                       color: pendingOption == SortOption.original
                           ? Theme.of(context).colorScheme.primary
@@ -252,7 +251,7 @@ class TabCategoriesState extends State<TabCategories>
                         storeOnUserPreferences();
                         Navigator.pop(context);
                       },
-                      child: Text("Apply".i18n),
+                      child: Text('Aplicar'),
                     ),
                   ),
                 ),
@@ -324,10 +323,10 @@ class TabCategoriesState extends State<TabCategories>
               controller: _tabController,
               tabs: [
                 Tab(
-                  text: "Expenses".i18n.toUpperCase(),
+                  text: 'Despesas'.toUpperCase(),
                 ),
                 Tab(
-                  text: "Income".i18n.toUpperCase(),
+                  text: 'Rendas'.toUpperCase(),
                 ),
               ],
             ),
@@ -341,7 +340,9 @@ class TabCategoriesState extends State<TabCategories>
                     }),
                   )
                 : null,
-            automaticallyImplyLeading: false,
+            // Shows a back arrow when opened from Settings (fork: no longer a
+            // bottom-bar tab); a root tab route has nothing to pop.
+            automaticallyImplyLeading: true,
             actions: [
               IconButton(
                 icon: Icon(Icons.sort),
@@ -359,7 +360,7 @@ class TabCategoriesState extends State<TabCategories>
                     setState(() {
                       showArchived = !showArchived;
                       if (showArchived) {
-                        titleBarStr = "Archived Categories".i18n;
+                        titleBarStr = 'Categorias arquivadas';
                       } else {
                         titleBarStr = activeCategoryTitle;
                       }
@@ -368,8 +369,8 @@ class TabCategoriesState extends State<TabCategories>
                 },
                 itemBuilder: (BuildContext context) {
                   var archivedOptionStr = showArchived
-                      ? "Show active categories".i18n
-                      : "Show archived categories".i18n;
+                      ? 'Exibir categorias ativas'
+                      : 'Exibir categorias arquivadas';
                   return {archivedOptionStr: 1}.entries.map((entry) {
                     return PopupMenuItem<int>(
                       padding: EdgeInsets.all(20),

@@ -1,6 +1,6 @@
 import 'dart:math';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/category.dart';
 
 class RecordsGenerator {
   /// Methods for creating random Movements from a set of pre-defined data.

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/records/components/styled_popup_menu_button.dart';
 
 import '../controllers/tab_records_controller.dart';
 import 'styled_action_buttons.dart';
@@ -11,7 +9,6 @@ class TabRecordsSearchAppBar extends StatelessWidget
   final VoidCallback onBackPressed;
   final VoidCallback onDatePickerPressed;
   final VoidCallback onStatisticsPressed;
-  final Function(int) onMenuItemSelected;
   final VoidCallback onFilterPressed;
   final bool hasActiveFilters; // Add this property
 
@@ -21,7 +18,6 @@ class TabRecordsSearchAppBar extends StatelessWidget
     required this.onBackPressed,
     required this.onDatePickerPressed,
     required this.onStatisticsPressed,
-    required this.onMenuItemSelected,
     required this.onFilterPressed,
     this.hasActiveFilters = false, // Default to false
   }) : super(key: key);
@@ -70,10 +66,6 @@ class TabRecordsSearchAppBar extends StatelessWidget
         semanticsId: 'statistics',
         scaleFactor: actionButtonScale,
       ),
-      StyledPopupMenuButton(
-        onSelected: onMenuItemSelected,
-        scaleFactor: actionButtonScale,
-      ),
     ];
   }
 
@@ -104,7 +96,7 @@ class TabRecordsSearchAppBar extends StatelessWidget
                 cursorWidth: cursorWidth,
                 cursorHeight: cursorHeight,
                 decoration: InputDecoration(
-                  hintText: 'Search records...'.i18n,
+                  hintText: 'Pesquisar itens...',
                   hintStyle: TextStyle(
                     color: Colors.white70,
                     fontSize: fontSize,
@@ -161,7 +153,7 @@ class TabRecordsSearchAppBar extends StatelessWidget
     final filterButton = StyledActionButton(
       icon: Icons.filter_list,
       onPressed: onFilterPressed,
-      tooltip: 'Filter records'.i18n,
+      tooltip: 'Filtrar Itens',
       scaleFactor: scaleFactor,
     );
 

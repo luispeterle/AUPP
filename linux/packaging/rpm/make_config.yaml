@@ -1,15 +1,13 @@
-display_name: Oinkoin
-package_name: oinkoin
+display_name: AUPP
+package_name: aupp
 version: 1.1.6
 
 maintainer:
-  name: Oinkoin Team
-  email: support@oinkoin.com
+  name: AUPP
 
 # RPM specific fields
 group: Applications/Productivity
-license: MIT
-url: https://github.com/emavgl/oinkoin
+license: GPL-3.0-only
 
 # Dependencies required to run the application on the end user's system
 # These are RPM equivalents of the debian dependencies
@@ -18,7 +16,7 @@ dependencies:
   - gtk3
   - glib2
 
-icon: linux/assets/oinkoin.png
+icon: linux/assets/aupp.png
 
 keywords:
   - expense
@@ -26,10 +24,9 @@ keywords:
   - finance
   - budget
   - money
-  - piggybank
-  - oinkoin
+  - aupp
 
-generic_name: Expense Tracker
+generic_name: Finanças pessoais
 categories:
   - Office
   - Finance

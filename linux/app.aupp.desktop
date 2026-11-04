@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AUPP
+GenericName=Expense Tracker
+Comment=Track your expenses and manage your budget
+Exec=aupp
+Icon=aupp
+Terminal=false
+Categories=Office;Finance;Utility;
+Keywords=expense;tracker;finance;budget;money;aupp;aupp;
+StartupNotify=true
+StartupWMClass=aupp

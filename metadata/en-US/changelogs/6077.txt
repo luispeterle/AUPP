@@ -1,1 +1,0 @@
-- Fix recurrent pattern issue due to timezone

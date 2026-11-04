@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/components/category_icon_circle.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
-import 'package:piggybank/statistics/category-tag-records-page.dart';
-import 'package:piggybank/statistics/category-tag-balance-page.dart';
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/components/category_icon_circle.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
+import 'package:aupp/statistics/category-tag-records-page.dart';
+import 'package:aupp/statistics/category-tag-balance-page.dart';
+import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
 
 /// Base widget for summary rows displaying aggregated data.
 ///
@@ -26,10 +26,7 @@ abstract class SummaryRow extends StatelessWidget {
   final AggregationMethod? aggregationMethod;
   final bool showPercentage;
   final bool showProgressBar;
-  final String? currency;
 
-  final double originalValue;
-  final String? originalCurrency;
 
   /// Signed (non-absolute) values used to color the amounts by sign.
   ///
@@ -37,7 +34,6 @@ abstract class SummaryRow extends StatelessWidget {
   /// totals carry their sign already (e.g. category sums) these stay null and
   /// the signed values fall back to [value]/[originalValue].
   final double? signedValue;
-  final double? signedOriginalValue;
 
   const SummaryRow({
     Key? key,
@@ -52,11 +48,7 @@ abstract class SummaryRow extends StatelessWidget {
     this.aggregationMethod,
     this.showPercentage = true,
     this.showProgressBar = true,
-    this.currency,
-    this.originalValue = 0.0,
-    this.originalCurrency,
     this.signedValue,
-    this.signedOriginalValue,
   }) : super(key: key);
 
   @override
@@ -65,48 +57,10 @@ abstract class SummaryRow extends StatelessWidget {
     final percentageBar = value.abs() / maxSum;
     final percentageStr = percentage.toStringAsFixed(2);
     final biggerFont = const TextStyle(fontSize: 16.0);
-    final secondaryFont = const TextStyle(fontSize: 14.0, color: Colors.grey);
-
-    final bool hasCurrencyConversion = currency != null &&
-        currency!.isNotEmpty &&
-        originalCurrency != null &&
-        originalCurrency!.isNotEmpty &&
-        originalCurrency != currency;
 
     Widget amountWidget;
-    if (hasCurrencyConversion) {
-      final originalStr =
-          formatCurrencyAmount(originalValue.abs(), originalCurrency!);
-      final convertedStr = formatCurrencyAmount(value.abs(), currency!);
-      final primaryText =
-          showPercentage ? '$convertedStr ($percentageStr%)' : convertedStr;
-      final primaryColor = getAmountColor(
-          signedValue ?? value, Theme.of(context).brightness);
-      final secondaryColor = getAmountColor(
-          signedOriginalValue ?? originalValue, Theme.of(context).brightness);
-      amountWidget = Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(primaryText,
-              style: primaryColor != null
-                  ? biggerFont.copyWith(color: primaryColor)
-                  : biggerFont,
-              textAlign: TextAlign.right),
-          Text(originalStr,
-              style: secondaryColor != null
-                  ? secondaryFont.copyWith(color: secondaryColor)
-                  : secondaryFont,
-              textAlign: TextAlign.right),
-        ],
-      );
-    } else {
-      String valueStr;
-      if (currency != null && currency!.isNotEmpty) {
-        valueStr = formatCurrencyAmount(value.abs(), currency!);
-      } else {
-        valueStr = getCurrencyValueString(value.abs());
-      }
+    {
+      final valueStr = getCurrencyValueString(value.abs());
       // Colorize by sign (red for expenses, green for income) using the real
       // signed value, matching the rest of the colorized amounts in the app.
       final amountColor = getAmountColor(
@@ -188,9 +142,6 @@ class CategorySummaryRow extends SummaryRow {
     DateTime? to,
     DateTime? selectedDate,
     AggregationMethod? aggregationMethod,
-    String? currency,
-    double originalValue = 0.0,
-    String? originalCurrency,
   }) : super(
           key: key,
           label: category.name!,
@@ -202,9 +153,6 @@ class CategorySummaryRow extends SummaryRow {
           to: to,
           selectedDate: selectedDate,
           aggregationMethod: aggregationMethod,
-          currency: currency,
-          originalValue: originalValue,
-          originalCurrency: originalCurrency,
         );
 
   @override
@@ -278,11 +226,7 @@ class TagSummaryRow extends SummaryRow {
     DateTime? selectedDate,
     AggregationMethod? aggregationMethod,
     this.isBalance = false,
-    String? currency,
-    double originalValue = 0.0,
-    String? originalCurrency,
     double? signedValue,
-    double? signedOriginalValue,
   }) : super(
           key: key,
           label: tag,
@@ -294,11 +238,7 @@ class TagSummaryRow extends SummaryRow {
           to: to,
           selectedDate: selectedDate,
           aggregationMethod: aggregationMethod,
-          currency: currency,
-          originalValue: originalValue,
-          originalCurrency: originalCurrency,
           signedValue: signedValue,
-          signedOriginalValue: signedOriginalValue,
         );
 
   @override
@@ -380,9 +320,6 @@ class ViewAllSummaryRow extends SummaryRow {
     required double totalAmount,
     required this.onTapCallback,
     List<Record?> records = const [],
-    String? currency,
-    double originalValue = 0.0,
-    String? originalCurrency,
   }) : super(
           label: label,
           value: totalAmount,
@@ -391,9 +328,6 @@ class ViewAllSummaryRow extends SummaryRow {
           records: records,
           showPercentage: false,
           showProgressBar: false,
-          currency: currency,
-          originalValue: originalValue,
-          originalCurrency: originalCurrency,
         );
 
   @override
@@ -426,11 +360,7 @@ class WalletSummaryRow extends SummaryRow {
     DateTime? selectedDate,
     AggregationMethod? aggregationMethod,
     this.isBalance = false,
-    String? currency,
-    double originalValue = 0.0,
-    String? originalCurrency,
     double? signedValue,
-    double? signedOriginalValue,
   }) : super(
           key: key,
           label: wallet.name,
@@ -442,11 +372,7 @@ class WalletSummaryRow extends SummaryRow {
           to: to,
           selectedDate: selectedDate,
           aggregationMethod: aggregationMethod,
-          currency: currency,
-          originalValue: originalValue,
-          originalCurrency: originalCurrency,
           signedValue: signedValue,
-          signedOriginalValue: signedOriginalValue,
         );
 
   @override

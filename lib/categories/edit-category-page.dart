@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:piggybank/components/icon_color_picker_section.dart';
-import 'package:piggybank/helpers/alert-dialog-builder.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/components/icon_color_picker_section.dart';
+import 'package:aupp/helpers/alert-dialog-builder.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
 import '../style.dart';
-import 'package:piggybank/i18n.dart';
 
 class EditCategoryPage extends StatefulWidget {
   /// EditCategoryPage is a page containing forms for the editing of a Category object.
@@ -123,7 +122,7 @@ class EditCategoryPageState extends State<EditCategoryPage> {
             },
             validator: (value) {
               if (value!.isEmpty) {
-                return "Please enter the category name".i18n;
+                return 'Por favor, informe o nome da categoria';
               }
               return null;
             },
@@ -131,7 +130,7 @@ class EditCategoryPageState extends State<EditCategoryPage> {
             style: TextStyle(
                 fontSize: 22.0, color: Theme.of(context).colorScheme.onSurface),
             decoration: InputDecoration(
-              hintText: "Category name".i18n,
+              hintText: 'Nome da categoria',
               errorStyle: TextStyle(
                 fontSize: 16.0,
               ),
@@ -141,7 +140,7 @@ class EditCategoryPageState extends State<EditCategoryPage> {
   }
 
   Widget _getAppBar() {
-    return AppBar(title: Text("Edit category".i18n), actions: <Widget>[
+    return AppBar(title: Text('Editar Categoria'), actions: <Widget>[
       Visibility(
           visible: widget.passedCategory != null,
           child: IconButton(
@@ -153,25 +152,24 @@ class EditCategoryPageState extends State<EditCategoryPage> {
             tooltip: widget.passedCategory == null
                 ? ""
                 : !(widget.passedCategory!.isArchived)
-                    ? "Archive".i18n
-                    : "Unarchive".i18n,
+                    ? 'Arquivar'
+                    : 'Desarquivar',
             onPressed: () async {
               bool isCurrentlyArchived = widget.passedCategory!.isArchived;
 
               String dialogMessage = !isCurrentlyArchived
-                  ? "Do you really want to archive the category?".i18n
-                  : "Do you really want to unarchive the category?".i18n;
+                  ? 'Você realmente quer arquivar a categoria?'
+                  : 'Você realmente quer desarquivar a categoria?';
 
               // Prompt confirmation
               AlertDialogBuilder archiveDialog =
                   AlertDialogBuilder(dialogMessage)
-                      .addTrueButtonName("Yes".i18n)
-                      .addFalseButtonName("No".i18n);
+                      .addTrueButtonName('Sim')
+                      .addFalseButtonName('Não');
 
               if (!isCurrentlyArchived) {
                 archiveDialog.addSubtitle(
-                    "Archiving the category you will NOT remove the associated records"
-                        .i18n);
+                    'Arquivando a categoria NÃO removerá os registros associados');
               }
 
               var continueArchivingAction = await showDialog(
@@ -200,12 +198,11 @@ class EditCategoryPageState extends State<EditCategoryPage> {
             if (index == 1) {
               // Prompt confirmation
               AlertDialogBuilder deleteDialog = AlertDialogBuilder(
-                      "Do you really want to delete the category?".i18n)
+                      'Deseja realmente excluir esta categoria?')
                   .addSubtitle(
-                      "Deleting the category you will remove all the associated records"
-                          .i18n)
-                  .addTrueButtonName("Yes".i18n)
-                  .addFalseButtonName("No".i18n);
+                      'Excluindo a categoria que você irá remover todos os Itens associados a ela')
+                  .addTrueButtonName('Sim')
+                  .addFalseButtonName('Não');
 
               var continueDelete = await showDialog(
                   context: context,
@@ -221,7 +218,7 @@ class EditCategoryPageState extends State<EditCategoryPage> {
             }
           },
           itemBuilder: (BuildContext context) {
-            var deleteStr = "Delete".i18n;
+            var deleteStr = 'Excluir';
             return {deleteStr: 1}.entries.map((entry) {
               return PopupMenuItem<int>(
                 padding: EdgeInsets.all(20),
@@ -258,7 +255,7 @@ class EditCategoryPageState extends State<EditCategoryPage> {
     return Container(
         child: Column(
       children: [
-        _getPageSeparatorLabel("Name".i18n),
+        _getPageSeparatorLabel('Nome'),
         Divider(
           thickness: 0.5,
         ),
@@ -311,7 +308,7 @@ class EditCategoryPageState extends State<EditCategoryPage> {
       floatingActionButton: FloatingActionButton(
         heroTag: null,
         onPressed: saveCategory,
-        tooltip: 'Add a new category'.i18n,
+        tooltip: 'Adicionar uma nova categoria',
         child: const Icon(Icons.save),
       ),
     );

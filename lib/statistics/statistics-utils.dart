@@ -3,11 +3,10 @@ import 'dart:ui';
 
 import "package:collection/collection.dart";
 import 'package:intl/intl.dart';
-import 'package:piggybank/helpers/datetime-utility-functions.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
+import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/statistics/statistics-models.dart';
 
 double computeNumberOfMonthsBetweenTwoDates(DateTime from, DateTime to) {
   var apprxSizeOfMonth = 30;
@@ -134,34 +133,19 @@ DateTime truncateDateTime(
 /// only where a magnitude is needed for representation (chart bars,
 /// percentages, formatted amounts) so multi-currency amounts are aggregated
 /// in a single currency instead of summing raw numeric values (issue #411).
-double getRecordValueInDefaultCurrency(
-    Record record, Map<int, String?> walletCurrencyMap) {
-  final raw = record.value ?? 0.0;
-  final defaultCurrency = getDefaultCurrency();
-  if (defaultCurrency == null || defaultCurrency.isEmpty) return raw;
-  final currency =
-      record.walletId != null ? walletCurrencyMap[record.walletId] : null;
-  if (currency == null || currency.isEmpty || currency == defaultCurrency) {
-    return raw;
-  }
-  final converted = convertAmount(raw, currency, defaultCurrency);
-  return converted ?? raw;
-}
-
 List<DateTimeSeriesRecord> aggregateRecordsByDate(
     List<Record?> records, AggregationMethod? aggregationMethod,
-    {bool useTagWeight = false,
-    Map<int, String?> walletCurrencyMap = const {}}) {
+    {bool useTagWeight = false}) {
   /// Record Day 1: 100 euro Food, 20 euro Food, 30 euro Transport
   /// Record Day 1: 150 euro,
   /// Available grouping: by day, month, year.
   Map<DateTime?, DateTimeSeriesRecord> aggregatedByDay = {};
   for (var record in records) {
-    if (record == null || record.isTransfer || record.value == null) continue;
+    if (record == null || record.isOwnMove || record.value == null) continue;
     DateTime? dateTime = truncateDateTime(record.dateTime, aggregationMethod);
     // Keep real (signed) values in the aggregation; consumers apply abs()
     // where the magnitude is needed for rendering.
-    double valueToAdd = getRecordValueInDefaultCurrency(record, walletCurrencyMap);
+    double valueToAdd = record.value!;
     if (useTagWeight) {
       valueToAdd *= record.tags.length;
     }
@@ -183,7 +167,7 @@ List<Record?> aggregateRecordsByDateAndCategory(
     return records; // don't aggregate
   List<Record?> newAggregatedRecords = [];
   final categorizedRecords = records
-      .where((record) => record?.category != null && !record!.isTransfer)
+      .where((record) => record?.category != null && !record!.isOwnMove)
       .toList();
   Map<DateTime?, List<Record?>> mapDateTimeRecords = groupBy(categorizedRecords,
       (Record? obj) => truncateDateTime(obj!.dateTime, aggregationMethod));

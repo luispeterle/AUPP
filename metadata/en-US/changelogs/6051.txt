@@ -1,3 +1,0 @@
-- Update translations
-- Bug fix csv export
-- Bug fix cursor in text fields

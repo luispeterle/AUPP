@@ -1,7 +1,6 @@
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
-import 'package:piggybank/i18n.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
 
 /// Utility class for filtering records based on various criteria.
 ///
@@ -46,7 +45,7 @@ class RecordFilters {
       return List.from(records);
     }
 
-    final isOthers = category == "Others".i18n;
+    final isOthers = category == 'Outros';
 
     if (isOthers) {
       // If "Others" but no topCategories provided, return all records
@@ -78,7 +77,7 @@ class RecordFilters {
       return List.from(records);
     }
 
-    final isOthers = tag == "Others".i18n;
+    final isOthers = tag == 'Outros';
 
     if (isOthers) {
       // If "Others" but no topCategories provided, return records with any tag
@@ -115,7 +114,7 @@ class RecordFilters {
       return List.from(records);
     }
 
-    final isOthers = walletId == "Others".i18n;
+    final isOthers = walletId == 'Outros';
 
     if (isOthers) {
       // If "Others" but no topWallets provided, return records with a wallet

@@ -1,24 +1,15 @@
 import 'dart:async';
 
-import 'package:piggybank/models/budget.dart';
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/profile.dart';
-import 'package:piggybank/models/record-tag-association.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/recurrent-record-pattern.dart';
-import 'package:piggybank/models/wallet.dart';
+import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record-tag-association.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/recurrent-record-pattern.dart';
+import 'package:aupp/models/wallet.dart';
 
 abstract class DatabaseInterface {
   /// DatabaseInterface is an interface that the database classes
   /// must implement. It contains basic CRUD methods for categories and records
-
-  // Budget CRUD
-  Future<List<Budget>> getBudgets({int? profileId});
-  Future<int> addBudget(Budget budget);
-  Future<void> updateBudget(Budget budget);
-  Future<void> deleteBudget(int id);
-  Future<void> archiveBudget(int id, bool isArchived);
 
   // Category CRUD
 
@@ -44,15 +35,14 @@ abstract class DatabaseInterface {
   Future<void> updateRecordWalletInBatch(List<int> ids, int? walletId);
   Future<void> duplicateRecordsInBatch(List<int> ids);
   Future<DateTime?> getDateTimeFirstRecord();
-  Future<List<Record?>> getAllRecords({int? profileId});
+  Future<List<Record?>> getAllRecords();
 
   /// Main→other rates from the latest completed cross-currency transfers,
-  /// across all profiles (currency settings are shared). Ties use record ID.
+  /// Ties use record ID.
   Future<Map<String, double>> getLatestMainCurrencyTransferRates(
       String mainCurrency, DateTime asOf);
   Future<int> getCountRecords();
-  Future<List<Record?>> getAllRecordsInInterval(DateTime? from, DateTime? to,
-      {int? profileId});
+  Future<List<Record?>> getAllRecordsInInterval(DateTime? from, DateTime? to);
   Future<Record?> getMatchingRecord(Record? record);
   Future<void> deleteFutureRecordsByPatternId(
       String recurrentPatternId, DateTime startingTime);
@@ -72,20 +62,21 @@ abstract class DatabaseInterface {
   Future<void> deleteTag(String tagToDelete);
 
   // Recurrent Records Patterns CRUD
-  Future<List<RecurrentRecordPattern>> getRecurrentRecordPatterns(
-      {int? profileId});
+  Future<List<RecurrentRecordPattern>> getRecurrentRecordPatterns();
   Future<RecurrentRecordPattern?> getRecurrentRecordPattern(
       String? recurrentPatternId);
   Future<void> addRecurrentRecordPattern(RecurrentRecordPattern recordPattern);
   Future<void> deleteRecurrentRecordPatternById(String? recurrentPatternId);
+
+  /// Fork: the estimate_link of every record linked to an estimate.
+  Future<List<String>> getEstimateLinks();
   Future<void> updateRecordPatternById(
       String? recurrentPatternId, RecurrentRecordPattern pattern);
 
   // Wallet CRUD
 
   /// Returns all wallets ordered by [Wallet.sortOrder], including archived ones.
-  /// When [profileId] is provided, only wallets for that profile are returned.
-  Future<List<Wallet>> getAllWallets({int? profileId});
+  Future<List<Wallet>> getAllWallets();
 
   /// Returns all wallets with balance computed only from records dated on or
   /// before [asOfDate] (inclusive) — a point-in-time snapshot, e.g. "balance
@@ -95,26 +86,13 @@ abstract class DatabaseInterface {
   /// applied uniformly, exactly as it is for the live balance. If the user
   /// adjusts it to correct balance drift, the correction bleeds backward into
   /// every past snapshot too.
-  Future<List<Wallet>> getWalletsBalanceAsOf(DateTime asOfDate,
-      {int? profileId});
-
-  // Profile CRUD
-  /// Returns all profiles ordered by [Profile.sortOrder].
-  Future<List<Profile>> getAllProfiles();
-  Future<Profile?> getDefaultProfile();
-  Future<void> setDefaultProfile(int id);
-  Future<Profile?> getProfileById(int id);
-  Future<int> addProfile(Profile profile);
-  Future<void> updateProfile(Profile profile);
-  Future<void> deleteProfileAndRecords(int id);
-  /// Persists the [sortOrder] of each profile according to [ordered]'s position.
-  Future<void> resetProfileOrderIndexes(List<Profile> ordered);
+  Future<List<Wallet>> getWalletsBalanceAsOf(DateTime asOfDate);
 
   /// Returns the wallet with [id], or null if not found.
   Future<Wallet?> getWalletById(int id);
 
-  /// Returns the wallet with [name] for [profileId], or null if not found.
-  Future<Wallet?> getWalletByName(String name, int? profileId);
+  /// Returns the wallet with [name], or null if not found.
+  Future<Wallet?> getWalletByName(String name);
 
   /// Inserts [wallet] and returns its new database ID.
   Future<int> addWallet(Wallet wallet);

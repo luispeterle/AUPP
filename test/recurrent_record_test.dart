@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/recurrent-period.dart';
-import 'package:piggybank/models/recurrent-record-pattern.dart';
-import 'package:piggybank/services/recurrent-record-service.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/recurrent-period.dart';
+import 'package:aupp/models/recurrent-record-pattern.dart';
+import 'package:aupp/services/recurrent-record-service.dart';
+import 'package:aupp/services/service-config.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 
 // A helper method to perform the common date assertions.
@@ -274,6 +274,52 @@ void main() {
       ];
 
       _assertRecordsMatchDates(records, expectedDates);
+    });
+
+    test('weekly: a changed start weekday moves the next occurrences', () {
+      // Was every Monday (last stored: Mon 2026-10-26); now starts on Wed.
+      final recordPattern = RecurrentRecordPattern(1, "Weekly", category1,
+          DateTime.utc(2026, 10, 7, 10), RecurrentPeriod.EveryWeek,
+          utcLastUpdate: DateTime.utc(2026, 10, 26, 10));
+
+      final records = recurrentRecordService.generateRecurrentRecordsFromDateTime(
+          recordPattern, DateTime.utc(2026, 11, 12, 12));
+
+      _assertRecordsMatchDates(records, [
+        DateTime(2026, 10, 28),
+        DateTime(2026, 11, 4),
+        DateTime(2026, 11, 11),
+      ]);
+    });
+
+    test('monthly: a later day this month still comes this month', () {
+      // Was day 5 (last stored: 2026-10-05); now day 20.
+      final recordPattern = RecurrentRecordPattern(1, "Monthly", category1,
+          DateTime.utc(2026, 1, 20, 10), RecurrentPeriod.EveryMonth,
+          utcLastUpdate: DateTime.utc(2026, 10, 5, 10));
+
+      final records = recurrentRecordService.generateRecurrentRecordsFromDateTime(
+          recordPattern, DateTime.utc(2026, 12, 25));
+
+      _assertRecordsMatchDates(records, [
+        DateTime(2026, 10, 20),
+        DateTime(2026, 11, 20),
+        DateTime(2026, 12, 20),
+      ]);
+    });
+
+    test('a start moved past the last stored one begins on the start', () {
+      final recordPattern = RecurrentRecordPattern(1, "Moved", category1,
+          DateTime.utc(2026, 12, 3, 10), RecurrentPeriod.EveryTwoWeeks,
+          utcLastUpdate: DateTime.utc(2026, 10, 26, 10));
+
+      final records = recurrentRecordService.generateRecurrentRecordsFromDateTime(
+          recordPattern, DateTime.utc(2026, 12, 20));
+
+      _assertRecordsMatchDates(records, [
+        DateTime(2026, 12, 3),
+        DateTime(2026, 12, 17),
+      ]);
     });
 
     test('recurrent pattern in the future must return no records', () {

@@ -1,2 +1,0 @@
-- Generate future records from recurrent patterns (enabled by default, can be disabled in the settings)
-- Minor UI changes in categories and recurrent patterns pages

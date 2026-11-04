@@ -28,4 +28,6 @@ class StringSeriesRecord {
 
 enum AggregationMethod { DAY, WEEK, MONTH, YEAR, NOT_AGGREGATED }
 
-enum GroupByType { category, tag, wallet, records }
+/// [category] groups by top-level category (subcategories roll up into their
+/// parent); [subcategory] keeps the record's own category (fork-only).
+enum GroupByType { category, subcategory, tag, wallet, records }

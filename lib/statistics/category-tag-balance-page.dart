@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/statistics/balance-tab-page.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/statistics/balance-tab-page.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
+import 'package:aupp/services/service-config.dart';
 
 class CategoryTagBalancePage extends StatefulWidget {
   final String title;
@@ -18,7 +16,6 @@ class CategoryTagBalancePage extends StatefulWidget {
   final Category? category;
   final String? walletName;
   final DateTime? selectedDate;
-  final Map<int, String?> walletCurrencyMap;
 
   CategoryTagBalancePage({
     required this.title,
@@ -29,7 +26,6 @@ class CategoryTagBalancePage extends StatefulWidget {
     this.category,
     this.walletName,
     this.selectedDate,
-    this.walletCurrencyMap = const {},
   });
 
   @override
@@ -40,7 +36,6 @@ class _CategoryTagBalancePageState extends State<CategoryTagBalancePage> {
   late List<Record?> _currentRecords;
   String? _selectedIntervalTitle;
   DateTime? _selectedIntervalDate;
-  Map<int, String?> _effectiveCurrencyMap = {};
   Map<int, Wallet> _effectiveWalletMap = {};
 
   @override
@@ -60,20 +55,14 @@ class _CategoryTagBalancePageState extends State<CategoryTagBalancePage> {
 
     _currentRecords.sort((a, b) => b!.dateTime.compareTo(a!.dateTime));
 
-    if (widget.walletCurrencyMap.isEmpty) {
-      _loadWalletData();
-    } else {
-      _effectiveCurrencyMap = widget.walletCurrencyMap;
-    }
+    _loadWalletData();
   }
 
   Future<void> _loadWalletData() async {
     final db = ServiceConfig.database;
-    final wallets = await db.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
+    final wallets = await db.getAllWallets();
     if (!mounted) return;
     setState(() {
-      _effectiveCurrencyMap = buildWalletCurrencyMap(wallets);
       _effectiveWalletMap = {
         for (final w in wallets)
           if (w.id != null) w.id!: w
@@ -102,7 +91,6 @@ class _CategoryTagBalancePageState extends State<CategoryTagBalancePage> {
         hideCategorySelection: widget.category != null,
         hideTagsSelection: widget.category == null && widget.walletName == null,
         hideWalletsSelection: widget.walletName != null,
-        walletCurrencyMap: _effectiveCurrencyMap,
         walletMap: _effectiveWalletMap,
         onListBackCallback: () {
           setState(() {});

@@ -1,3 +1,0 @@
-- Export PDF (pro)
-- Easier way to switch to Pro from the free app
-- Bug fixes

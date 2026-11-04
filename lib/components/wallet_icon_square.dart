@@ -5,6 +5,9 @@ class WalletIconSquare extends StatelessWidget {
   final IconData? iconDataFromDefaultIconSet;
   final Color? backgroundColor;
   final IconData? overlayIcon;
+
+  /// A logo in place of the icon (a coin's), filling the square.
+  final String? imageAsset;
   final double mainIconSize;
   final double size;
   final double cornerRadius;
@@ -15,12 +18,16 @@ class WalletIconSquare extends StatelessWidget {
     this.iconDataFromDefaultIconSet,
     this.backgroundColor,
     this.overlayIcon,
+    this.imageAsset,
     this.mainIconSize = 20.0,
     this.size = 40.0,
     this.cornerRadius = 10.0,
   }) : super(key: key);
 
   Widget _buildSquare(BuildContext context) {
+    if (imageAsset != null) {
+      return Image.asset(imageAsset!, width: size, height: size);
+    }
     final bg = backgroundColor ?? Theme.of(context).colorScheme.surface;
     final iconColor = iconEmoji == null
         ? (backgroundColor != null

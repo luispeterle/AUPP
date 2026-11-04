@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/components/markup_text.dart';
-import 'package:piggybank/components/wallet_icon_square.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/wallets/wallet-sort-option.dart';
+import 'package:aupp/components/markup_text.dart';
+import 'package:aupp/components/wallet_icon_square.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
+import 'package:aupp/wallets/wallet-sort-option.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Displays the localized instruction for the current transfer wallet step.
@@ -29,11 +27,11 @@ class TransferWalletInstruction extends StatelessWidget {
 
     return hasOrigin
         ? MarkupText(
-            "Select the <b>destination</b> wallet".i18n,
+            'Selecione a carteira de <b>destino</b>',
             style: instructionStyle,
           )
         : MarkupText(
-            "Select the <b>origin</b> wallet".i18n,
+            'Selecione a carteira de <b>origem</b>',
             style: instructionStyle,
           );  }
 }
@@ -70,8 +68,7 @@ class _TransferWalletSelectorState extends State<TransferWalletSelector> {
   }
 
   Future<void> _loadWallets() async {
-    final wallets = await _database.getAllWallets(
-        profileId: ProfileService.instance.activeProfileId);
+    final wallets = await _database.getAllWallets();
     final prefs = await SharedPreferences.getInstance();
     final savedIndex = prefs.getInt(PreferencesKeys.walletListSortOption);
     final sortOption = (savedIndex != null &&
@@ -184,18 +181,11 @@ class _TransferWalletSelectorState extends State<TransferWalletSelector> {
 
   Widget _buildWalletBalanceWidget(Wallet wallet) {
     final balance = wallet.balance ?? 0.0;
-    final walletCurrency = wallet.currency;
     final color = getAmountColor(balance, Theme.of(context).brightness);
     final style =
         TextStyle(fontSize: 18.0, fontWeight: FontWeight.normal, color: color);
 
-    if (walletCurrency == null || walletCurrency.isEmpty) {
-      return Text(getCurrencyValueString(balance), style: style);
-    }
-
-    return buildAmountWithCurrencyWidget(wallet.balance ?? 0.0, walletCurrency,
-        mainStyle: style,
-        brightness: Theme.of(context).brightness);
+    return Text(formatMoney(balance), style: style);
   }
 
   @override
@@ -205,7 +195,7 @@ class _TransferWalletSelectorState extends State<TransferWalletSelector> {
       return const Center(child: CircularProgressIndicator());
     }
     if (wallets.isEmpty) {
-      return Center(child: Text("No wallets available".i18n));
+      return Center(child: Text('Nenhuma carteira disponível'));
     }
 
     final canContinue = _origin != null && _destination != null;
@@ -255,7 +245,7 @@ class _TransferWalletSelectorState extends State<TransferWalletSelector> {
                 onPressed: canContinue
                     ? () => widget.onContinue(_origin!, _destination!)
                     : null,
-                child: Text("Continue".i18n),
+                child: Text('Continuar'),
               ),
             ),
           ),        ),

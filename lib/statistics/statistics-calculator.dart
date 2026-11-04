@@ -1,6 +1,6 @@
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/statistics/statistics-utils.dart';
 
 /// Utility class for calculating statistics from records.
 ///
@@ -25,7 +25,6 @@ class StatisticsCalculator {
     DateTime? from,
     DateTime? to, {
     bool isBalance = false,
-    Map<int, String?> walletCurrencyMap = const {},
   }) {
     if (records.isEmpty || from == null || to == null) return 0.0;
 
@@ -36,7 +35,7 @@ class StatisticsCalculator {
       if (record == null) continue;
       double value = isBalance
           ? record.value!
-          : getRecordValueInDefaultCurrency(record, walletCurrencyMap);
+          : record.value!;
       total += value;
     }
 
@@ -62,7 +61,6 @@ class StatisticsCalculator {
     DateTime? from,
     DateTime? to, {
     bool isBalance = false,
-    Map<int, String?> walletCurrencyMap = const {},
   }) {
     if (records.isEmpty || from == null || to == null) return 0.0;
 
@@ -73,7 +71,6 @@ class StatisticsCalculator {
       from,
       to,
       isBalance: isBalance,
-      walletCurrencyMap: walletCurrencyMap,
     );
 
     // Filter out zero values
@@ -112,7 +109,6 @@ class StatisticsCalculator {
     DateTime? from,
     DateTime? to, {
     bool isBalance = false,
-    Map<int, String?> walletCurrencyMap = const {},
   }) {
     final values = _getPeriodValues(
       records,
@@ -120,7 +116,6 @@ class StatisticsCalculator {
       from,
       to,
       isBalance: isBalance,
-      walletCurrencyMap: walletCurrencyMap,
     );
 
     if (values.isEmpty) return 0.0;
@@ -151,7 +146,6 @@ class StatisticsCalculator {
     DateTime? from,
     DateTime? to, {
     bool isBalance = false,
-    Map<int, String?> walletCurrencyMap = const {},
   }) {
     final values = _getPeriodValues(
       records,
@@ -159,7 +153,6 @@ class StatisticsCalculator {
       from,
       to,
       isBalance: isBalance,
-      walletCurrencyMap: walletCurrencyMap,
     );
 
     // Filter out zero values for more meaningful median
@@ -190,7 +183,6 @@ class StatisticsCalculator {
     DateTime? from,
     DateTime? to, {
     required bool isBalance,
-    Map<int, String?> walletCurrencyMap = const {},
   }) {
     // Group records by aggregation period and sum values
     // Use string keys (YYYY-MM-DD) to avoid timezone issues with DateTime objects
@@ -206,7 +198,7 @@ class StatisticsCalculator {
       final key = dateKey(period);
       double value = isBalance
           ? record.value!
-          : getRecordValueInDefaultCurrency(record, walletCurrencyMap);
+          : record.value!;
 
       periodSums[key] = (periodSums[key] ?? 0.0) + value;
     }

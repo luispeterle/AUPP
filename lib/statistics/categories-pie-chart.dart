@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
 import 'package:community_charts_flutter/community_charts_flutter.dart'
     as charts;
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
 
-import '../services/service-config.dart';
-import '../settings/constants/preferences-keys.dart';
-import '../settings/preferences-utils.dart';
 
 class LinearRecord {
   final String? category;
@@ -28,12 +23,10 @@ class CategoriesPieChart extends StatefulWidget {
   final List<Record?> records;
   final Function(double?, String?, List<String>?)? onSelectionChanged;
   final String? selectedCategory;
-  final Map<int, String?> walletCurrencyMap;
 
   CategoriesPieChart(this.records,
       {this.onSelectionChanged,
-      this.selectedCategory,
-      this.walletCurrencyMap = const {}});
+      this.selectedCategory});
 
   @override
   _CategoriesPieChartState createState() => _CategoriesPieChartState();
@@ -74,9 +67,7 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
   }
 
   void _initializeData() {
-    categoryCount = PreferencesUtils.getOrDefault<int>(
-        ServiceConfig.sharedPreferences!,
-        PreferencesKeys.statisticsPieChartNumberOfCategoriesToDisplay)!;
+    categoryCount = 4;
     defaultColorsPalette = charts.MaterialPalette.getOrderedPalettes(categoryCount)
         .map((palette) => palette.shadeDefault).toList();
     defaultColorsPalette.add(charts.ColorUtil.fromDartColor(otherCategoryColor));
@@ -90,7 +81,7 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
   void _updateSeriesList() {
     seriesList = [
       charts.Series<LinearRecord, String>(
-        id: 'Expenses'.i18n,
+        id: 'Despesas',
         colorFn: (LinearRecord datum, i) {
           final color = _preparedColors[i!];
           if (_selectedCategory == null || _selectedCategory == datum.category) {
@@ -117,7 +108,7 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
     for (var record in records) {
       if (record?.category == null || record?.value == null) continue;
       final value =
-          getRecordValueInDefaultCurrency(record!, widget.walletCurrencyMap);
+          record!.value!;
       aggregatedCategoriesValuesTemporaryMap.update(
         record.category!,
         (current) => current + value,
@@ -127,9 +118,6 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
     final totalSum = aggregatedCategoriesValuesTemporaryMap.values
         .fold<double>(0.0, (sum, value) => sum + value.abs());
 
-    bool useCategoriesColor = PreferencesUtils.getOrDefault<bool>(
-        ServiceConfig.sharedPreferences!,
-        PreferencesKeys.statisticsPieChartUseCategoryColors)!;
 
     // Step 1: Sort by magnitude descending (ignoring color)
     var aggregatedCategoriesAndValues =
@@ -145,36 +133,6 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
 
     var topCategoriesAndValue = aggregatedCategoriesAndValues.sublist(0, limit);
 
-    // Step 3: If color sorting is enabled, sort by color-related rules
-    if (useCategoriesColor) {
-      Map<int, double> colorSumMap = {};
-
-      // Compute sum per color
-      for (var entry in topCategoriesAndValue) {
-        int colorKey = getColorSortValue(entry.key.color ?? chartColorForCategoryWithoutBackgroundColor);
-        colorSumMap.update(colorKey, (sum) => sum + entry.value, ifAbsent: () => entry.value);
-      }
-
-      topCategoriesAndValue.sort((a, b) {
-        int colorA = getColorSortValue(a.key.color ?? chartColorForCategoryWithoutBackgroundColor);
-        int colorB = getColorSortValue(b.key.color ?? chartColorForCategoryWithoutBackgroundColor);
-
-        // Compare by total sum of the color group (Descending)
-        int totalSumComparison = colorSumMap[colorB]!.compareTo(colorSumMap[colorA]!);
-        if (totalSumComparison != 0) {
-          return totalSumComparison;
-        }
-
-        // If total sum is the same, compare by color value (Ascending)
-        int colorComparison = colorA.compareTo(colorB);
-        if (colorComparison != 0) {
-          return colorComparison;
-        }
-
-        // If color is the same, sort by individual value (Descending)
-        return b.value.compareTo(a.value);
-      });
-    }
 
     // Store data and colors
     List<LinearRecord> data = [];
@@ -196,7 +154,7 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
         0,
         (dynamic value, element) => value + element.value,
       );
-      var remainingCategoryKey = "Others".i18n;
+      var remainingCategoryKey = 'Outros';
       var percentage = (100 * sumOfRemainingCategories.abs()) / totalSum;
       var lr = LinearRecord(remainingCategoryKey, percentage);
       data.add(lr);
@@ -206,13 +164,7 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
     linearRecords = data;
 
     // Color palette to use
-    List<charts.Color> colorsToUse = [];
-    if (useCategoriesColor) {
-      colorsToUse =
-          linearRecordsColors.map((f) => charts.ColorUtil.fromDartColor(f)).toList();
-    } else {
-      colorsToUse = defaultColorsPalette;
-    }
+    final colorsToUse = defaultColorsPalette;
 
     return ChartData(data, colorsToUse);
   }
@@ -231,19 +183,18 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
           final double categorySum = widget.records
               .where((r) =>
                   r?.category?.name == categoryName ||
-                  (categoryName == "Others".i18n &&
+                  (categoryName == 'Outros' &&
                       r?.category?.name != null &&
                       !_isTopCategory(r!.category!.name!)))
               .fold(
                   0.0,
                   (double acc, r) => acc +
-                      getRecordValueInDefaultCurrency(
-                          r!, widget.walletCurrencyMap))
+                      r!.value!)
               .abs();
 
           // Get names of top categories (excluding "Others")
           final List<String> topCategoryNames = linearRecords
-              .where((lr) => lr.category != "Others".i18n)
+              .where((lr) => lr.category != 'Outros')
               .map((lr) => lr.category!)
               .toList();
 
@@ -268,7 +219,7 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
   bool _isTopCategory(String name) {
     // Helper to determine if a category is among the top displayed ones
     // This is needed for the "Others" calculation logic
-    return linearRecords.any((lr) => lr.category == name && lr.category != "Others".i18n);
+    return linearRecords.any((lr) => lr.category == name && lr.category != 'Outros');
   }
 
   Widget _buildPieChart(BuildContext context) {

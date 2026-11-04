@@ -1,5 +1,6 @@
+import 'package:aupp/services/database/change-log.dart';
+import 'package:aupp/services/database/money-model-migration.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:piggybank/i18n.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/category-type.dart';
@@ -63,7 +64,8 @@ class SqliteMigrationService {
               is_predefined INTEGER DEFAULT 0,
               sort_order    INTEGER DEFAULT 0,
               currency      TEXT,
-              profile_id    INTEGER
+              profile_id    INTEGER,
+              kind          TEXT NOT NULL DEFAULT 'normal'
           );
       """;
     batch.execute(query);
@@ -227,19 +229,19 @@ class SqliteMigrationService {
   // Default Data
   static List<Category> getDefaultCategories() {
     List<Category> defaultCategories = <Category>[];
-    defaultCategories.add(new Category("House".i18n,
+    defaultCategories.add(new Category('Casa',
         color: Category.colors[0],
         iconCodePoint: FontAwesomeIcons.house.codePoint,
         categoryType: CategoryType.expense));
-    defaultCategories.add(new Category("Transport".i18n,
+    defaultCategories.add(new Category('Transporte',
         color: Category.colors[1],
         iconCodePoint: FontAwesomeIcons.bus.codePoint,
         categoryType: CategoryType.expense));
-    defaultCategories.add(new Category("Food".i18n,
+    defaultCategories.add(new Category('Alimentação',
         color: Category.colors[2],
         iconCodePoint: FontAwesomeIcons.burger.codePoint,
         categoryType: CategoryType.expense));
-    defaultCategories.add(new Category("Salary".i18n,
+    defaultCategories.add(new Category('Salário',
         color: Category.colors[3],
         iconCodePoint: FontAwesomeIcons.wallet.codePoint,
         categoryType: CategoryType.income));
@@ -420,7 +422,7 @@ class SqliteMigrationService {
     // Step 3: Insert default wallet and get its id
     int defaultWalletId = await db.rawInsert(
       "INSERT INTO wallets (name, is_default, sort_order) VALUES (?, 1, 0)",
-      ["Default Wallet".i18n],
+      ['Carteira padrão'],
     );
 
     // Step 4: Backfill all existing records with the default wallet id
@@ -489,7 +491,7 @@ class SqliteMigrationService {
     // This migration restores the correct default.
 
     // Find the original Default Wallet by name or fallback to oldest wallet
-    final localizedDefault = "Default Wallet".i18n;
+    final localizedDefault = 'Carteira padrão';
     var defaultWalletId = Sqflite.firstIntValue(await db.rawQuery(
         "SELECT id FROM wallets WHERE name = ?", [localizedDefault]));
     defaultWalletId ??= Sqflite.firstIntValue(await db.rawQuery(
@@ -517,7 +519,7 @@ class SqliteMigrationService {
     // Step 2: Insert Default Profile and get its id
     final defaultProfileId = await db.rawInsert(
       "INSERT INTO profiles (name, is_default) VALUES (?, 1)",
-      ["Default Profile".i18n],
+      ['Perfil padrão'],
     );
 
     // Step 3: Add color column to profiles (for databases created before this column existed)
@@ -587,6 +589,16 @@ class SqliteMigrationService {
         db, "ALTER TABLE profiles ADD COLUMN sort_order INTEGER DEFAULT 0;");
   }
 
+  static Future<void> _migrateTo33(Database db) async {
+    await safeAlterTable(
+        db, "ALTER TABLE wallets ADD COLUMN kind TEXT NOT NULL DEFAULT 'normal';");
+    await ensureForkSchema(db);
+    await MoneyModelMigration.run(db);
+  }
+
+  /// The free wallet became part of the wallet to invest.
+  static Future<void> _migrateTo34(Database db) => MoneyModelMigration.run(db);
+
   static Map<int, Function(Database)?> migrationFunctions = {
     6: SqliteMigrationService._migrateTo6,
     7: SqliteMigrationService._migrateTo7,
@@ -614,7 +626,61 @@ class SqliteMigrationService {
     30: SqliteMigrationService._migrateTo30,
     31: SqliteMigrationService._migrateTo31,
     32: SqliteMigrationService._migrateTo32,
+    33: SqliteMigrationService._migrateTo33,
+    34: SqliteMigrationService._migrateTo34,
   };
+
+  /// Fork-only schema (Dinzo integration). Runs on every open instead of
+  /// being tied to [SqliteDatabase.version], so upstream migrations can keep
+  /// their numbering without colliding with ours. Idempotent.
+  static Future<void> ensureForkSchema(Database db) async {
+    final columns = (await db.rawQuery("PRAGMA table_info(records)"))
+        .map((c) => c['name'] as String)
+        .toSet();
+    if (!columns.contains('dinzo_id')) {
+      await db.execute("ALTER TABLE records ADD COLUMN dinzo_id TEXT");
+    }
+    if (!columns.contains('dinzo_snapshot')) {
+      await db.execute("ALTER TABLE records ADD COLUMN dinzo_snapshot TEXT");
+    }
+    if (!columns.contains('estimate_link')) {
+      await db.execute("ALTER TABLE records ADD COLUMN estimate_link TEXT");
+    }
+    final patternColumns =
+        (await db.rawQuery("PRAGMA table_info(recurrent_record_patterns)"))
+            .map((c) => c['name'] as String)
+            .toSet();
+    if (!patternColumns.contains('payment_codes')) {
+      await db.execute(
+          "ALTER TABLE recurrent_record_patterns ADD COLUMN payment_codes TEXT");
+    }
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_records_dinzo_id ON records(dinzo_id)");
+    final categoryColumns = (await db.rawQuery("PRAGMA table_info(categories)"))
+        .map((c) => c['name'] as String)
+        .toSet();
+    if (!categoryColumns.contains('parent_name')) {
+      await db.execute("ALTER TABLE categories ADD COLUMN parent_name TEXT");
+    }
+    await db.execute(ChangeLog.createTable);
+    // Tags that exist before any record uses them: the payment methods,
+    // always, and the banks the Dinzo sync finds (see ForkTags).
+    await db.execute(
+        "CREATE TABLE IF NOT EXISTS fork_tags (name TEXT PRIMARY KEY)");
+    for (final tag in defaultForkTags) {
+      await db.rawInsert(
+          "INSERT OR IGNORE INTO fork_tags (name) VALUES (?)", [tag]);
+    }
+  }
+
+  /// Payment methods every install starts with (names match KnownTag).
+  static const defaultForkTags = [
+    'Pix',
+    'Crédito',
+    'Débito',
+    'Boleto',
+    'Transferência',
+  ];
 
   // Public Methods
   static Future<void> onUpgrade(
@@ -643,13 +709,16 @@ class SqliteMigrationService {
     _createRecurrentRecordPatternsTable(batch);
     _createWalletsTable(batch);
     _createProfilesTable(batch);
-    _createBudgetsTable(batch);
 
     // Create Triggers
     _createAddRecordTrigger(batch);
     _createUpdateRecordTrigger(batch);
     _createDeleteRecordTrigger(batch);
     _createDeleteRecordTagsTrigger(batch);
+    await batch.commit();
+    // Fork columns must exist before rows are written with Model.toMap().
+    await ensureForkSchema(db);
+    batch = db.batch();
 
     // Insert Default Categories
     List<Category> defaultCategories = getDefaultCategories();
@@ -663,13 +732,13 @@ class SqliteMigrationService {
     // Insert Default Profile (need its id for wallet)
     final defaultProfileId = await db.rawInsert(
       "INSERT INTO profiles (name, is_default) VALUES (?, 1)",
-      ["Default Profile".i18n],
+      ['Perfil padrão'],
     );
 
     // Insert Default Wallet with profile_id
     await db.rawInsert(
       "INSERT INTO wallets (name, is_default, sort_order, profile_id) VALUES (?, 1, 0, ?)",
-      ["Default Wallet".i18n, defaultProfileId],
+      ['Carteira padrão', defaultProfileId],
     );
 
     _logger.info('Database created successfully');

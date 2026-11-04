@@ -1,10 +1,10 @@
+import 'package:aupp/components/known-tags.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
-import 'package:piggybank/components/tag_chip.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/logger.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/components/tag_chip.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/logger.dart';
+import 'package:aupp/services/service-config.dart';
 
 class TagSelectionDialog extends StatefulWidget {
   final Set<String> initialSelectedTags;
@@ -98,7 +98,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
       resizeToAvoidBottomInset: true,
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: Text("Add tags".i18n),
+        title: Text('Adicionar tags'),
         elevation: 0,
         backgroundColor: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
@@ -120,7 +120,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Search or create tags".i18n,
+                      'Pesquise ou crie etiquetas',
                       style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w500,
                         color: colorScheme.onSurface.withValues(alpha: 0.8),
@@ -180,7 +180,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
                         ),
                         SizedBox(width: 8),
                         Text(
-                          "Available Tags".i18n,
+                          'Tags disponíveis',
                           style: textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w500,
                             color: colorScheme.onSurface.withValues(alpha: 0.8),
@@ -195,6 +195,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
                   ],
                 ),
               ),
+              _buildKnownTagSuggestions(textTheme, colorScheme),
             ],
           ),
         ),
@@ -212,9 +213,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
             elevation: 8,
             icon: Icon(Icons.check),
             label: Text(
-              "Add selected tags (%s)".i18n.fill([
-                _selectedTags.length.toString(),
-              ]),
+              'Adicionar tags selecionadas (${_selectedTags.length.toString()})',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
           ),
@@ -247,7 +246,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
                   focusNode: focusNode,
                   style: TextStyle(fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: "Search or add new tag...".i18n,
+                    hintText: 'Pesquise ou adicione uma nova tag...',
                     hintStyle: TextStyle(
                       color: colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
@@ -321,6 +320,64 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
     );
   }
 
+  /// Fork: banks and payment methods that are not tags yet, ready to add
+  /// with their logo/icon (tags only exist once used, so nothing is created
+  /// up front).
+  Widget _buildKnownTagSuggestions(
+      TextTheme textTheme, ColorScheme colorScheme) {
+    final existing = {
+      ..._allTags.map((t) => t.toLowerCase()),
+      ..._selectedTags.map((t) => t.toLowerCase()),
+    };
+    final query = _searchController.text.trim().toLowerCase();
+    final suggestions = [
+      ...KnownTag.banks,
+      ...KnownTag.others.where((t) => t.kind == KnownTagKind.method),
+    ]
+        .where((t) => !existing.contains(t.name.toLowerCase()))
+        .where((t) => query.isEmpty || t.name.toLowerCase().contains(query))
+        .toList();
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.account_balance_outlined,
+                  size: 20,
+                  color: colorScheme.onSurface.withValues(alpha: 0.7)),
+              const SizedBox(width: 8),
+              Text(
+                'Bancos e formas de pagamento',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: colorScheme.onSurface.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final t in suggestions)
+                ActionChip(
+                  avatar: t.kind == KnownTagKind.bank
+                      ? BankMark(t, size: 20)
+                      : Icon(t.icon, size: 18, color: t.color),
+                  label: Text(t.name),
+                  onPressed: () => _toggleTagSelection(t.name),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTagsGrid(ColorScheme colorScheme) {
     // Removed SingleChildScrollView here (already inside global scroll)
     return Wrap(
@@ -349,7 +406,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
           ),
           SizedBox(height: 16),
           Text(
-            "No tags found".i18n,
+            'Nenhuma tag encontrada',
             style: textTheme.titleMedium?.copyWith(
               color: colorScheme.onSurface.withValues(alpha: 0.6),
               fontWeight: FontWeight.w500,
@@ -357,7 +414,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
           ),
           SizedBox(height: 8),
           Text(
-            "Try searching or create a new tag".i18n,
+            'Tente pesquisar ou criar uma nova tag',
             style: textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurface.withValues(alpha: 0.5),
             ),
@@ -377,7 +434,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
           'Rejected tag "$tag": tags must be a single word without commas');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Tags must be a single word without commas.".i18n),
+          content: Text('As tags devem ser uma única palavra, sem vírgulas.'),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),

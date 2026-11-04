@@ -1,9 +1,7 @@
 import 'dart:convert';
 
-import 'package:piggybank/models/category-icons.dart';
-import 'package:piggybank/services/logger.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/settings/constants/preferences-options.dart';
+import 'package:aupp/services/logger.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Handles the portable subset of SharedPreferences used by backup files.
@@ -14,169 +12,72 @@ import 'package:shared_preferences/shared_preferences.dart';
 class PreferencesBackupService {
   static final _logger = Logger.withContext('PreferencesBackupService');
 
-  static const _savedCsvMappingsKey = 'csv_import_saved_mappings';
-
   static final Set<String> _portableKeys = {
-    // Appearance and localization
-    PreferencesKeys.themeColor,
-    PreferencesKeys.themeMode,
-    PreferencesKeys.languageLocale,
-    PreferencesKeys.firstDayOfWeek,
-    PreferencesKeys.dateFormat,
-    PreferencesKeys.colorizeAmounts,
-    PreferencesKeys.enableNavigationBarAnimations,
-    PreferencesKeys.privacyMode,
-    PreferencesKeys.privacyModeHidden,
-    PreferencesKeys.privacyModeOnStart,
-
     // Number and currency formatting
-    PreferencesKeys.decimalSeparator,
-    PreferencesKeys.groupSeparator,
-    PreferencesKeys.numberDecimalDigits,
-    PreferencesKeys.overwriteDotValueWithComma,
-    PreferencesKeys.overwriteCommaValueWithDot,
-    PreferencesKeys.amountInputAutoDecimalShift,
-    PreferencesKeys.currencySymbolPosition,
-    PreferencesKeys.currencySymbolSpacing,
-    PreferencesKeys.showCurrencySymbol,
-    PreferencesKeys.defaultCurrency,
-    PreferencesKeys.currencyConversionRates,
-    PreferencesKeys.userCurrencies,
 
     // Homepage and records
-    PreferencesKeys.homepageTimeInterval,
-    PreferencesKeys.homepageRecordsMonthStartDay,
-    PreferencesKeys.homepageOverviewWidgetTimeInterval,
-    PreferencesKeys.homepageRecordNotesVisible,
-    PreferencesKeys.enableRecordNameSuggestions,
-    PreferencesKeys.visualiseTagsInMainPage,
-    PreferencesKeys.showWalletInRecordList,
-    PreferencesKeys.showFutureRecords,
-    PreferencesKeys.showCategoriesAtBottom,
-    PreferencesKeys.restoreAmountOnDelete,
 
-    // Categories, wallets, and budgets
+    // Categories and wallets
     PreferencesKeys.categoryListSortOption,
     // Kept because this legacy key is still written by the category tab.
     'defaultCategorySortOption',
     PreferencesKeys.walletListSortOption,
-    PreferencesKeys.profileListSortOption,
     PreferencesKeys.walletsEnabled,
-    PreferencesKeys.budgetsEnabled,
-    PreferencesKeys.walletBalanceMode,
     PreferencesKeys.showWalletBarOnHomepage,
-    PreferencesKeys.transferIconCodePoint,
-    PreferencesKeys.transferIconEmoji,
-    PreferencesKeys.transferIconColor,
 
     // Statistics
-    PreferencesKeys.statisticsPieChartUseCategoryColors,
-    PreferencesKeys.statisticsPieChartNumberOfCategoriesToDisplay,
 
     // In-app keyboard
-    PreferencesKeys.amountInputKeyboardType,
-    PreferencesKeys.inAppKeyboardScale,
-    PreferencesKeys.inAppKeyboardBackgroundColorIndex,
-    PreferencesKeys.inAppKeyboardButtonColorIndex,
-    PreferencesKeys.inAppKeyboardTextColorIndex,
 
     // Portable saved data that lives in SharedPreferences
-    PreferencesKeys.reverseMonthlyImages,
-    _savedCsvMappingsKey,
+
+    // Dinzo integration (fork-only). The API key is deliberately absent.
+    PreferencesKeys.dinzoConfig,
+    PreferencesKeys.assetLots,
+    PreferencesKeys.dailyBanks,
+    PreferencesKeys.companies,
+    PreferencesKeys.assetNotes,
+    PreferencesKeys.portfolioDiagram,
+    PreferencesKeys.allowManualRecords,
+    PreferencesKeys.budgetPlan,
+    PreferencesKeys.totalWallets,
+    PreferencesKeys.disguiseEnabled,
   };
+
+  /// Adds a preference of a sync extension to the backup.
+  static void registerPortable(String key, bool Function(Object) validator) {
+    _portableKeys.add(key);
+    _validators[key] = validator;
+  }
 
   static final Map<String, bool Function(Object)> _validators = {
     // Booleans
     for (final key in [
-      PreferencesKeys.overwriteDotValueWithComma,
-      PreferencesKeys.overwriteCommaValueWithDot,
-      PreferencesKeys.amountInputAutoDecimalShift,
-      PreferencesKeys.colorizeAmounts,
-      PreferencesKeys.enableNavigationBarAnimations,
-      PreferencesKeys.privacyMode,
-      PreferencesKeys.privacyModeHidden,
-      PreferencesKeys.privacyModeOnStart,
-      PreferencesKeys.showCurrencySymbol,
-      PreferencesKeys.enableRecordNameSuggestions,
-      PreferencesKeys.visualiseTagsInMainPage,
-      PreferencesKeys.showWalletInRecordList,
-      PreferencesKeys.showFutureRecords,
-      PreferencesKeys.showCategoriesAtBottom,
-      PreferencesKeys.restoreAmountOnDelete,
       PreferencesKeys.walletsEnabled,
-      PreferencesKeys.budgetsEnabled,
       PreferencesKeys.showWalletBarOnHomepage,
-      PreferencesKeys.statisticsPieChartUseCategoryColors,
-      PreferencesKeys.reverseMonthlyImages,
     ])
       key: (value) => value is bool,
 
     // Integer options
-    PreferencesKeys.themeColor: _intIn({0, 1, 2}),
-    PreferencesKeys.themeMode: _intIn({0, 1, 2}),
-    PreferencesKeys.firstDayOfWeek: _intIn({0, 1, 6, 7}),
-    PreferencesKeys.numberDecimalDigits: _intIn({0, 1, 2, 3, 4, 5, 6, 7, 8}),
-    PreferencesKeys.currencySymbolPosition: _intIn({0, 1, 2}),
-    PreferencesKeys.currencySymbolSpacing: _intIn({0, 1}),
-    PreferencesKeys.homepageTimeInterval: _intIn({0, 1, 2, 3}),
-    PreferencesKeys.homepageRecordsMonthStartDay: _intInRange(1, 31),
-    PreferencesKeys.homepageOverviewWidgetTimeInterval: _intIn({0, 1, 2, 3}),
-    PreferencesKeys.homepageRecordNotesVisible: _intIn({0, 1, 2, 3, 1000}),
-    PreferencesKeys.amountInputKeyboardType: _intIn({0, 1, 2}),
     PreferencesKeys.categoryListSortOption: _intIn({0, 1, 2, 3}),
     'defaultCategorySortOption': _intIn({0, 1, 2, 3}),
     PreferencesKeys.walletListSortOption: _intIn({0, 1, 2, 3}),
-    PreferencesKeys.profileListSortOption: _intIn({0, 1}),
-    PreferencesKeys.walletBalanceMode: _intIn({0, 1}),
-    PreferencesKeys.statisticsPieChartNumberOfCategoriesToDisplay: _intIn({
-      4,
-      5,
-      6,
-      8,
-      10,
-      999,
-    }),
-    PreferencesKeys.inAppKeyboardScale: _intIn({0, 1, 2}),
-    PreferencesKeys.inAppKeyboardBackgroundColorIndex: _intInRange(0, 8),
-    PreferencesKeys.inAppKeyboardButtonColorIndex: _intInRange(0, 4),
-    PreferencesKeys.inAppKeyboardTextColorIndex: _intIn({0, 1, 2}),
 
     // Strings with finite option sets.
-    // The language whitelist is the language picker itself, so a language
-    // added there is restorable without a second list going stale.
-    PreferencesKeys.languageLocale: (value) =>
-        value is String && PreferencesOptions.languageLocaleValues.contains(value),
-    PreferencesKeys.dateFormat: (value) =>
-        value is String &&
-        {
-          'system',
-          'dd/MM/yyyy',
-          'MM/dd/yyyy',
-          'yyyy-MM-dd',
-          'd MMM yyyy',
-          'MMM d, yyyy',
-        }.contains(value),
-    PreferencesKeys.decimalSeparator: (value) => value == '.' || value == ',',
-    PreferencesKeys.groupSeparator: (value) =>
-        value == '' ||
-        value == '.' ||
-        value == ',' ||
-        value == '\u00A0' ||
-        value == '_' ||
-        value == "'",
 
     // Free-form but typed strings
-    PreferencesKeys.defaultCurrency: (value) => value is String,
-    PreferencesKeys.transferIconEmoji: (value) => value is String,
-    PreferencesKeys.transferIconColor: _isSerializedColor,
-    PreferencesKeys.currencyConversionRates: _isJsonObject,
-    PreferencesKeys.userCurrencies: _isJsonObject,
-    _savedCsvMappingsKey: _isSavedCsvMappings,
+    PreferencesKeys.dinzoConfig: _isJsonObject,
+    PreferencesKeys.assetLots: _isJsonObject,
+    PreferencesKeys.dailyBanks: _isJsonObject,
+    PreferencesKeys.companies: _isJsonObject,
+    PreferencesKeys.assetNotes: _isJsonObject,
+    PreferencesKeys.portfolioDiagram: _isJsonObject,
+    PreferencesKeys.allowManualRecords: (value) => value is bool,
+    PreferencesKeys.budgetPlan: _isJsonObject,
+    PreferencesKeys.disguiseEnabled: (value) => value is bool,
+    PreferencesKeys.totalWallets: (value) =>
+        value is List && value.every((item) => item is String),
 
-    // A custom icon must still exist in the current shared icon set.
-    PreferencesKeys.transferIconCodePoint: (value) =>
-        value is int &&
-        CategoryIcons.pro_category_icons.any((icon) => icon.codePoint == value),
   };
 
   /// Exports only recognized, portable, JSON-safe preferences that are
@@ -306,9 +207,6 @@ class PreferencesBackupService {
   static bool Function(Object) _intIn(Set<int> allowed) =>
       (value) => value is int && allowed.contains(value);
 
-  static bool Function(Object) _intInRange(int min, int max) =>
-      (value) => value is int && value >= min && value <= max;
-
   static bool _isJsonObject(Object value) {
     if (value is! String || value.isEmpty) return false;
     try {
@@ -318,19 +216,4 @@ class PreferencesBackupService {
     }
   }
 
-  static bool _isSerializedColor(Object value) {
-    if (value is! String) return false;
-    final parts = value.split(':').map(int.tryParse).toList();
-    return parts.length == 4 &&
-        parts.every(
-          (component) =>
-              component != null && component >= 0 && component <= 255,
-        );
-  }
-
-  static bool _isSavedCsvMappings(Object value) {
-    if (!_isJsonObject(value)) return false;
-    final decoded = jsonDecode(value as String) as Map<String, dynamic>;
-    return decoded.values.every((mapping) => mapping is String);
-  }
 }

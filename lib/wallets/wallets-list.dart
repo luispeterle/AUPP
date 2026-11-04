@@ -1,12 +1,12 @@
+import 'package:aupp/services/crypto-quote-service.dart';
 import 'package:flutter/material.dart';
-import 'package:piggybank/components/wallet_icon_square.dart';
-import 'package:piggybank/helpers/list-utility-functions.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/wallets/edit-wallet-page.dart';
+import 'package:aupp/components/wallet_icon_square.dart';
+import 'package:aupp/helpers/list-utility-functions.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/wallets/edit-wallet-page.dart';
 
 class WalletsList extends StatefulWidget {
   /// A list of wallets. When [enableManualSorting] is true, drag handles
@@ -82,13 +82,12 @@ class _WalletsListState extends State<WalletsList> {
                 ),
                 title: Text(
                   wallet.isPredefined
-                      ? "Already predefined for new records".i18n
-                      : "Set as predefined for new records".i18n,
+                      ? 'Já predefinido para novos registros'
+                      : 'Definir como predefinido para novos registros',
                   style: const TextStyle(fontSize: 17),
                 ),
                 subtitle: Text(
-                  "This wallet will be pre-selected when adding new entries"
-                      .i18n,
+                  'Esta carteira será pré-selecionada ao adicionar novas entradas',
                   style: const TextStyle(fontSize: 13),
                 ),
                 enabled: !wallet.isPredefined,
@@ -116,7 +115,6 @@ class _WalletsListState extends State<WalletsList> {
 
   Widget _buildWalletBalanceWidget(Wallet wallet) {
     final balance = wallet.balance ?? 0.0;
-    final walletCurrency = wallet.currency;
     final color = getAmountColor(balance, Theme.of(context).brightness);
     final style = TextStyle(
       fontSize: 18.0,
@@ -124,23 +122,7 @@ class _WalletsListState extends State<WalletsList> {
       color: color,
     );
 
-    return ValueListenableBuilder<bool>(
-      valueListenable: ServiceConfig.privacyModeHiddenNotifier,
-      builder: (context, hidden, _) {
-        if (hidden) {
-          return obscuredAmountTextWidget(style);
-        }
-        if (walletCurrency == null || walletCurrency.isEmpty) {
-          return Text(getCurrencyValueString(balance), style: style);
-        }
-        return buildAmountWithCurrencyWidget(
-          balance,
-          walletCurrency,
-          mainStyle: style,
-          brightness: Theme.of(context).brightness,
-        );
-      },
-    );
+    return Text(formatMoney(balance), style: style);
   }
 
   @override
@@ -151,7 +133,7 @@ class _WalletsListState extends State<WalletsList> {
           const SizedBox(height: 40),
           Image.asset('assets/images/no_entry_2.png', width: 200),
           Text(
-            "No wallets yet.".i18n,
+            'Nenhuma carteira ainda.',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 22.0),
           ),
@@ -190,6 +172,7 @@ class _WalletsListState extends State<WalletsList> {
                         const SizedBox(width: 8),
                         WalletIconSquare(
                           iconEmoji: wallet.iconEmoji,
+                          imageAsset: cryptoLogoOf(wallet.currency),
                           iconDataFromDefaultIconSet: wallet.icon,
                           backgroundColor: wallet.color,
                           overlayIcon: wallet.isPredefined ? Icons.check : null,
@@ -198,6 +181,7 @@ class _WalletsListState extends State<WalletsList> {
                     )
                   : WalletIconSquare(
                       iconEmoji: wallet.iconEmoji,
+                      imageAsset: cryptoLogoOf(wallet.currency),
                       iconDataFromDefaultIconSet: wallet.icon,
                       backgroundColor: wallet.color,
                       overlayIcon: wallet.isPredefined ? Icons.check : null,

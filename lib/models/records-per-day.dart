@@ -1,5 +1,4 @@
-import 'package:piggybank/models/category-type.dart';
-import 'package:piggybank/models/record.dart';
+import 'package:aupp/models/record.dart';
 
 class RecordsPerDay {
   /// Object containing a list of records (movements).
@@ -20,9 +19,7 @@ class RecordsPerDay {
     double total = 0;
     List<Record?> expenseRecords = this
         .records!
-        .where((e) =>
-            e?.category?.categoryType == CategoryType.expense &&
-            !e!.isTransfer)
+        .where((e) => e?.countsAsExpense ?? false)
         .toList();
     for (var movement in expenseRecords) {
       total += movement!.value!;
@@ -34,9 +31,7 @@ class RecordsPerDay {
     double total = 0;
     List<Record?> incomeRecords = this
         .records!
-        .where((e) =>
-            e?.category?.categoryType == CategoryType.income &&
-            !e!.isTransfer)
+        .where((e) => e?.countsAsIncome ?? false)
         .toList();
     for (var movement in incomeRecords) {
       total += movement!.value!;
@@ -44,8 +39,14 @@ class RecordsPerDay {
     return total;
   }
 
+  /// Fork: money set aside (negative) or taken back (positive), see
+  /// [Record.countsAsSetAside].
+  double get setAside => records!
+      .where((e) => (e?.countsAsSetAside ?? false) || (e?.isInvestmentBuy ?? false))
+      .fold(0.0, (total, e) => total + (e!.value ?? 0));
+
   double get balance {
-    return income - (expenses * -1);
+    return income - (expenses * -1) + setAside;
   }
 
   void addMovement(Record movement) {

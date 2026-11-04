@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/service-config.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
 
 class TagsPageView extends StatefulWidget {
   @override
@@ -60,25 +59,23 @@ class TagsPageViewState extends State<TagsPageView> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Delete tags'.i18n),
+          title: Text('Excluir tags'),
           content: Text(
             selectedTags.length == 1
-                ? 'Are you sure you want to delete this tag?'.i18n
-                : 'Are you sure you want to delete these %s tags?'.i18n.fill([
-                    selectedTags.length.toString(),
-                  ]),
+                ? 'Tem certeza de que deseja excluir essa tag?'
+                : 'Tem certeza de que deseja excluir essas ${selectedTags.length.toString()} tags?',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'.i18n),
+              child: Text('Cancelar'),
             ),
             TextButton(
               onPressed: () {
                 _performDelete();
                 Navigator.of(context).pop();
               },
-              child: Text('Delete'.i18n),
+              child: Text('Excluir'),
             ),
           ],
         );
@@ -101,11 +98,11 @@ class TagsPageViewState extends State<TagsPageView> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Edit Tag'.i18n),
+          title: Text('Editar Tag'),
           content: TextField(
             controller: controller,
             decoration: InputDecoration(
-              labelText: 'Tag name'.i18n,
+              labelText: 'Nome da tag',
               border: OutlineInputBorder(),
             ),
             autofocus: true,
@@ -113,7 +110,7 @@ class TagsPageViewState extends State<TagsPageView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'.i18n),
+              child: Text('Cancelar'),
             ),
             TextButton(
               onPressed: () {
@@ -123,7 +120,7 @@ class TagsPageViewState extends State<TagsPageView> {
                 }
                 Navigator.of(context).pop();
               },
-              child: Text('Save'.i18n),
+              child: Text('Salvar'),
             ),
           ],
         );
@@ -148,24 +145,24 @@ class TagsPageViewState extends State<TagsPageView> {
   }
 
   PreferredSizeWidget _buildNormalAppBar() {
-    return AppBar(title: Text('Tags'.i18n));
+    return AppBar(title: Text('Etiquetas'));
   }
 
   PreferredSizeWidget _buildSelectionAppBar() {
     return AppBar(
-      title: Text('%s selected'.i18n.fill([selectedTags.length.toString()])),
+      title: Text('${selectedTags.length.toString()} selecionada(s)'),
       leading: IconButton(icon: Icon(Icons.close), onPressed: _clearSelection),
       actions: [
         if (selectedTags.length == 1)
           IconButton(
             icon: Icon(Icons.edit),
             onPressed: _editSelectedTag,
-            tooltip: 'Edit tag'.i18n,
+            tooltip: 'Editar tag',
           ),
         IconButton(
           icon: Icon(Icons.delete),
           onPressed: _deleteSelectedTags,
-          tooltip: 'Delete tags'.i18n,
+          tooltip: 'Excluir tags',
         ),
       ],
     );
@@ -184,7 +181,7 @@ class TagsPageViewState extends State<TagsPageView> {
             Icon(Icons.label_outline, size: 64, color: Colors.grey[400]),
             SizedBox(height: 16),
             Text(
-              'No tags found'.i18n,
+              'Nenhuma tag encontrada',
               style: TextStyle(fontSize: 18, color: Colors.grey[600]),
             ),
           ],

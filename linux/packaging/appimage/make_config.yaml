@@ -1,17 +1,16 @@
-display_name: Oinkoin
-package_name: oinkoin
-executable: piggybank
+display_name: AUPP
+package_name: aupp
+executable: aupp
 version: 1.1.6
 
 maintainer:
-  name: Oinkoin Team
-  email: support@oinkoin.com
+  name: AUPP
 
-icon: linux/assets/oinkoin.png
+icon: linux/assets/aupp.png
 
 # Optional: Desktop file integration
 # AppImage will use the desktop file for metadata
-desktop_file: linux/com.github.emavgl.oinkoin.desktop
+desktop_file: linux/app.aupp.desktop
 
 # AppImage specific settings
 appimage:
@@ -28,8 +27,7 @@ keywords:
   - finance
   - budget
   - money
-  - piggybank
-  - oinkoin
+  - aupp
 
 # Categories for desktop integration
 categories:
@@ -37,6 +35,6 @@ categories:
   - Finance
   - Utility
 
-generic_name: Expense Tracker
+generic_name: Finanças pessoais
 comment: Track your expenses and manage your budget
 

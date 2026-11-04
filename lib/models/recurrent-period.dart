@@ -1,4 +1,3 @@
-import 'package:piggybank/i18n.dart';
 
 enum RecurrentPeriod {
   EveryDay,
@@ -24,15 +23,15 @@ enum CustomIntervalUnit {
 }
 
 String recurrentPeriodString(RecurrentPeriod? r) {
-  if (r == RecurrentPeriod.EveryDay) return "Every day".i18n;
-  if (r == RecurrentPeriod.EveryWeek) return "Every week".i18n;
-  if (r == RecurrentPeriod.EveryMonth) return "Every month".i18n;
-  if (r == RecurrentPeriod.EveryTwoWeeks) return "Every two weeks".i18n;
-  if (r == RecurrentPeriod.EveryFourWeeks) return "Every four weeks".i18n;
-  if (r == RecurrentPeriod.EveryThreeMonths) return "Every three months".i18n;
-  if (r == RecurrentPeriod.EveryFourMonths) return "Every four months".i18n;
-  if (r == RecurrentPeriod.EveryYear) return "Every year".i18n;
-  if (r == RecurrentPeriod.Custom) return "Custom".i18n;
+  if (r == RecurrentPeriod.EveryDay) return 'Todo dia';
+  if (r == RecurrentPeriod.EveryWeek) return 'Toda semana';
+  if (r == RecurrentPeriod.EveryMonth) return 'Todo mês';
+  if (r == RecurrentPeriod.EveryTwoWeeks) return 'A cada duas semanas';
+  if (r == RecurrentPeriod.EveryFourWeeks) return 'A cada quatro semanas';
+  if (r == RecurrentPeriod.EveryThreeMonths) return 'A cada três meses';
+  if (r == RecurrentPeriod.EveryFourMonths) return 'A cada quatro meses';
+  if (r == RecurrentPeriod.EveryYear) return 'Anualmente';
+  if (r == RecurrentPeriod.Custom) return 'Personalizado';
   new Exception("Unexpected value");
   return "";
 }
@@ -40,21 +39,21 @@ String recurrentPeriodString(RecurrentPeriod? r) {
 String customIntervalUnitString(CustomIntervalUnit unit) {
   switch (unit) {
     case CustomIntervalUnit.day:
-      return "Days".i18n;
+      return 'Dias';
     case CustomIntervalUnit.week:
-      return "Weeks".i18n;
+      return 'Semanas';
     case CustomIntervalUnit.month:
-      return "Months".i18n;
+      return 'Meses';
     case CustomIntervalUnit.year:
-      return "Years".i18n;
+      return 'Anos';
   }
 }
 
 /// Label for a fully-specified custom interval, e.g. "Every 6 Months".
 /// Falls back to the generic "Custom" label when the interval is incomplete.
 String customIntervalString(int? value, CustomIntervalUnit? unit) {
-  if (value == null || unit == null) return "Custom".i18n;
-  return "Every %d %s".i18n.fill([value, customIntervalUnitString(unit)]);
+  if (value == null || unit == null) return 'Personalizado';
+  return 'A cada ${value} ${customIntervalUnitString(unit)}';
 }
 
 /// Display label for a recurrent pattern's period, expanding

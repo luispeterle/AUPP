@@ -1,16 +1,12 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emojipicker;
+import 'package:aupp/services/locale-service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:i18n_extension/i18n_extension.dart';
-import 'package:piggybank/models/category-icons.dart';
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/premium/splash-screen.dart';
-import 'package:piggybank/premium/util-widgets.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/style.dart';
+import 'package:aupp/models/category-icons.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/style.dart';
 
-import '../i18n.dart';
 
 /// Shared icon + color picker used by EditCategoryPage and EditWalletPage.
 ///
@@ -70,9 +66,7 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
   @override
   void initState() {
     super.initState();
-    _icons = ServiceConfig.isPremium
-        ? CategoryIcons.pro_category_icons
-        : CategoryIcons.free_category_icons;
+    _icons = CategoryIcons.category_icons;
 
     _currentEmoji = widget.initialIconEmoji ?? '😎';
 
@@ -124,7 +118,7 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("Choose a color".i18n,
+                Text('Escolha uma cor',
                     style: TextStyle(color: Colors.white)),
                 IconButton(
                   icon: const Icon(Icons.close),
@@ -233,7 +227,6 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
               ),
             ),
           ),
-          ServiceConfig.isPremium ? Container() : getProLabel(),
         ],
       ),
     );
@@ -263,20 +256,11 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
                     child:
                         Icon(Icons.colorize, color: Colors.white, size: 30),
                   ),
-                  onTap: ServiceConfig.isPremium
-                      ? _openColorPicker
-                      : () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => PremiumSplashScreen()),
-                          );
-                        },
+                  onTap: _openColorPicker,
                 ),
               ),
             ),
           ),
-          ServiceConfig.isPremium ? Container() : getProLabel(),
         ],
       ),
     );
@@ -323,7 +307,7 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
           child: emojipicker.EmojiPicker(
             textEditingController: _emojiController,
             config: emojipicker.Config(
-              locale: I18n.locale,
+              locale: LocaleService.locale,
               height: 256,
               checkPlatformCompatibility: true,
               emojiViewConfig: emojipicker.EmojiViewConfig(
@@ -364,25 +348,8 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
             Container(
               alignment: Alignment.center,
               child: IconButton(
-                icon: ServiceConfig.isPremium
-                    ? Text(_currentEmoji, style: TextStyle(fontSize: 24))
-                    : Stack(children: [
-                        Text(_currentEmoji, style: TextStyle(fontSize: 24)),
-                        if (!ServiceConfig.isPremium)
-                          Container(
-                            margin: EdgeInsets.fromLTRB(20, 20, 0, 0),
-                            child: getProLabel(labelFontSize: 10.0),
-                          ),
-                      ]),
-                onPressed: ServiceConfig.isPremium
-                    ? () => setState(() => _emojiShowing = !_emojiShowing)
-                    : () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => PremiumSplashScreen()),
-                        );
-                      },
+                icon: Text(_currentEmoji, style: TextStyle(fontSize: 24)),
+                onPressed: () => setState(() => _emojiShowing = !_emojiShowing),
               ),
             ),
             ...List.generate(_icons.length, (index) {
@@ -438,8 +405,8 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildExpansionTile("Color".i18n, _createColorsList()),
-        _buildExpansionTile("Icon".i18n, _getIconsGrid()),
+        _buildExpansionTile('Cor', _createColorsList()),
+        _buildExpansionTile('Ícone', _getIconsGrid()),
       ],
     );
   }

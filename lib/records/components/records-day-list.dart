@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/models/record.dart';
-import 'package:piggybank/models/records-per-day.dart';
-import 'package:piggybank/records/components/records-per-day-card.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/models/records-per-day.dart';
+import 'package:aupp/records/components/records-per-day-card.dart';
 
 class RecordsDayList extends StatefulWidget {
   /// MovementsPage is the page showing the list of movements grouped per day.
@@ -13,24 +13,30 @@ class RecordsDayList extends StatefulWidget {
   final Function? onListBackCallback;
   final bool isSliver;
   final int batchSize;
-  final Map<int, String?> walletCurrencyMap;
   final bool isSelectMode;
   final Set<int> selectedRecordIds;
   final void Function(int)? onRecordLongPressed;
   final void Function(int)? onRecordTapped;
   final void Function(DateTime date)? onDateTapped;
+  final Record? linkingEstimate;
+  final void Function(Record estimate)? onEstimateLongPressed;
+  final void Function(Record target)? onLinkTarget;
+  final void Function(Record estimate)? onLinkMatch;
 
   RecordsDayList(
     this.records, {
     this.onListBackCallback,
     this.isSliver = true,
     this.batchSize = 50,
-    this.walletCurrencyMap = const {},
     this.isSelectMode = false,
     this.selectedRecordIds = const {},
     this.onRecordLongPressed,
     this.onRecordTapped,
     this.onDateTapped,
+    this.linkingEstimate,
+    this.onEstimateLongPressed,
+    this.onLinkTarget,
+    this.onLinkMatch,
   });
 
   @override
@@ -89,12 +95,15 @@ class _RecordsDayListState extends State<RecordsDayList> {
             return RecordsPerDayCard(
               _daysShown[index],
               onListBackCallback: widget.onListBackCallback,
-              walletCurrencyMap: widget.walletCurrencyMap,
               isSelectMode: widget.isSelectMode,
               selectedRecordIds: widget.selectedRecordIds,
               onRecordLongPressed: widget.onRecordLongPressed,
               onRecordTapped: widget.onRecordTapped,
               onDateTapped: widget.onDateTapped,
+              linkingEstimate: widget.linkingEstimate,
+              onEstimateLongPressed: widget.onEstimateLongPressed,
+              onLinkTarget: widget.onLinkTarget,
+              onLinkMatch: widget.onLinkMatch,
             );
           },
           childCount: _displayedCount + (hasMore ? 1 : 0),
@@ -113,12 +122,15 @@ class _RecordsDayListState extends State<RecordsDayList> {
           return RecordsPerDayCard(
             _daysShown[index],
             onListBackCallback: widget.onListBackCallback,
-            walletCurrencyMap: widget.walletCurrencyMap,
             isSelectMode: widget.isSelectMode,
             selectedRecordIds: widget.selectedRecordIds,
             onRecordLongPressed: widget.onRecordLongPressed,
             onRecordTapped: widget.onRecordTapped,
             onDateTapped: widget.onDateTapped,
+            linkingEstimate: widget.linkingEstimate,
+            onEstimateLongPressed: widget.onEstimateLongPressed,
+            onLinkTarget: widget.onLinkTarget,
+              onLinkMatch: widget.onLinkMatch,
           );
         },
       );

@@ -1,4 +1,28 @@
 #!/usr/bin/env bash
 
 echo "Running pre-commit git-hooks"
-dart format lib
+
+# Checks what is being committed (the index), not the working tree: with
+# private/ plugged in, files such as pubspec.lock differ between the two.
+set -eu
+root=$PWD
+staged=$(mktemp -d)
+trap 'rm -rf "$staged"' EXIT
+
+files=()
+while IFS= read -r -d '' file; do
+  if [ "$(git ls-files -s -- "$file" | cut -d' ' -f1)" = 120000 ]; then
+    if git show ":$file" | grep -q 'private/'; then
+      echo "$file: link para private/ não pode ir para o repositório." >&2
+      exit 1
+    fi
+    continue
+  fi
+  git checkout-index --ignore-skip-worktree-bits --prefix="$staged/" -- "$file"
+  files+=("$staged/$file")
+done < <(git diff --cached --name-only --diff-filter=d -z)
+
+[ ${#files[@]} -eq 0 ] && exit 0
+set +e
+"$root/scripts/check-public.sh" "${files[@]}" 2>&1 | sed "s|$staged/||g"
+exit "${PIPESTATUS[0]}"

@@ -1,17 +1,11 @@
-import 'dart:ui';
+import 'package:aupp/services/locale-service.dart';
 
-import 'package:i18n_extension/i18n_extension.dart';
 import 'package:intl/intl.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/homepage-time-interval.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/settings/preferences-utils.dart';
-import 'package:piggybank/statistics/statistics-models.dart';
-import 'package:piggybank/utils/constants.dart';
+import 'package:aupp/settings/constants/homepage-time-interval.dart';
+import 'package:aupp/statistics/statistics-models.dart';
+import 'package:aupp/utils/constants.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-import 'intl-locale-utils.dart';
 
 
 DateTime addDuration(DateTime start, Duration duration) {
@@ -36,8 +30,7 @@ DateTime getEndOfMonth(int year, int month) {
 
 String getDateRangeStr(DateTime start, DateTime end) {
   /// Returns a string representing the range from earliest to latest date
-  Locale myLocale = I18n.locale;
-  final localeTag = resolveDateFormatLocaleTag(myLocale.languageCode);
+  final localeTag = LocaleService.tag;
 
   // Ensure earlier date goes to left, latest to right
   DateTime earlier = start.isBefore(end) ? start : end;
@@ -65,15 +58,14 @@ String getDateRangeStr(DateTime start, DateTime end) {
 
 String getMonthStr(DateTime dateTime) {
   /// Returns the header string identifying the current visualised month.
-  Locale myLocale = I18n.locale;
   String localeRepr =
-      DateFormat.yMMMM(resolveDateFormatLocaleTag(myLocale.languageCode))
+      DateFormat.yMMMM(LocaleService.tag)
           .format(dateTime);
   return localeRepr[0].toUpperCase() + localeRepr.substring(1); // capitalize
 }
 
 String getYearStr(DateTime dateTime) {
-  return "${"Year".i18n} ${dateTime.year}";
+  return "${'Ano'} ${dateTime.year}";
 }
 
 String getWeekStr(DateTime dateTime) {
@@ -92,33 +84,7 @@ String getWeekStr(DateTime dateTime) {
 /// - US, Brazil, China, Japan: Sunday (7)
 /// - Arabic regions: Saturday (6)  
 /// - Most European and other locales: Monday (1)
-int getFirstDayOfWeekIndex() {
-  try {
-    // Check if user has set a preference
-    if (ServiceConfig.sharedPreferences != null) {
-      int? userPreference = PreferencesUtils.getOrDefault<int>(
-          ServiceConfig.sharedPreferences!, PreferencesKeys.firstDayOfWeek);
-
-      if (userPreference != null && userPreference != 0) {
-        // User has explicitly set a preference (not "System")
-        return userPreference;
-      }
-    }
-
-    // Fall back to locale-based logic
-    String localeStr = I18n.locale.toString();
-    
-    if (localeStr == 'en_US') return DateTime.sunday;
-    if (localeStr.startsWith('pt_BR')) return DateTime.sunday;
-    if (localeStr.startsWith('zh')) return DateTime.sunday;
-    if (localeStr.startsWith('ja')) return DateTime.sunday;
-    if (localeStr.startsWith('ar')) return DateTime.saturday;
-  } catch (e) {
-    // Locale not initialized or error, use default
-  }
-  
-  return DateTime.monday; // Default for most locales
-}
+int getFirstDayOfWeekIndex() => DateTime.sunday;
 
 /// Returns the last day of the week based on the first day.
 int _getLastDayOfWeek(int firstDayOfWeek) {
@@ -154,8 +120,7 @@ DateTime getEndOfWeek(DateTime date) {
 
 
 String getDateStr(DateTime? dateTime, {AggregationMethod? aggregationMethod, bool shortYear = false}) {
-  Locale myLocale = I18n.locale;
-  final localeTag = resolveDateFormatLocaleTag(myLocale.toString());
+  final localeTag = LocaleService.tag;
   if (aggregationMethod != null) {
     if (aggregationMethod == AggregationMethod.WEEK) {
       // Format as week interval (e.g., "1-7", "8-14")
@@ -176,17 +141,6 @@ String getDateStr(DateTime? dateTime, {AggregationMethod? aggregationMethod, boo
     }
   }
 
-  // Check for user preference
-  if (ServiceConfig.sharedPreferences != null) {
-    String? dateFormatPref = PreferencesUtils.getOrDefault<String>(
-        ServiceConfig.sharedPreferences!, PreferencesKeys.dateFormat);
-
-    if (dateFormatPref != null && dateFormatPref != "system" && dateFormatPref.isNotEmpty) {
-      final pattern = shortYear ? dateFormatPref.replaceAll('yyyy', 'yy') : dateFormatPref;
-      return DateFormat(pattern, localeTag).format(dateTime!);
-    }
-  }
-
   final baseFormat = DateFormat.yMd(localeTag);
   if (shortYear) {
     final shortPattern = baseFormat.pattern!.replaceAll('yyyy', 'yy').replaceAll(RegExp(r'(?<!y)y(?!y)'), 'yy');
@@ -196,21 +150,18 @@ String getDateStr(DateTime? dateTime, {AggregationMethod? aggregationMethod, boo
 }
 
 String extractMonthString(DateTime dateTime) {
-  Locale myLocale = I18n.locale;
   return DateFormat
-      .MMMM(resolveDateFormatLocaleTag(myLocale.languageCode))
+      .MMMM(LocaleService.tag)
       .format(dateTime);
 }
 
 String extractYearString(DateTime dateTime) {
-  Locale myLocale = I18n.locale;
-  return new DateFormat.y(resolveDateFormatLocaleTag(myLocale.languageCode))
+  return new DateFormat.y(LocaleService.tag)
       .format(dateTime);
 }
 
 String extractWeekdayString(DateTime dateTime) {
-  Locale myLocale = I18n.locale;
-  return DateFormat.EEEE(resolveDateFormatLocaleTag(myLocale.languageCode))
+  return DateFormat.EEEE(LocaleService.tag)
       .format(dateTime);
 }
 
@@ -220,9 +171,11 @@ bool isFullMonth(DateTime from, DateTime to) {
 }
 
 bool isFullYear(DateTime from, DateTime to) {
+  // The year picker ends at 23:59, calculateInterval at 23:59:59.
   return from.month == 1 &&
       from.day == 1 &&
-      new DateTime(from.year, 12, 31, 23, 59).isAtSameMomentAs(to);
+      !to.isBefore(new DateTime(from.year, 12, 31, 23, 59)) &&
+      to.isBefore(new DateTime(from.year + 1, 1, 1));
 }
 
 bool isFullWeek(DateTime intervalFrom, DateTime intervalTo) {

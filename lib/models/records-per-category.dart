@@ -1,5 +1,5 @@
-import 'package:piggybank/models/category.dart';
-import 'package:piggybank/models/record.dart';
+import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
 
 class RecordsPerCategory {
   List<Record>? records;

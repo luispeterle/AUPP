@@ -1,41 +1,8 @@
-import 'dart:developer';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:piggybank/services/locale-service.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/settings/preferences-utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:system_theme/system_theme.dart';
-
-import 'helpers/records-utility-functions.dart';
 
 const String FontNameDefault = 'Montserrat';
-
-/// The bundled Noto family that renders [locale]'s CJK glyphs, or null when
-/// the locale needs no CJK font. Chinese splits by script: Traditional
-/// locales (zh-TW and other Hant regions) get Noto Sans TC, every other
-/// Chinese locale the Simplified variant.
-String? getCjkFontFamilyForLocale(Locale locale) {
-  switch (locale.languageCode) {
-    case 'ja':
-      return 'Noto Sans JP';
-    case 'zh':
-      return LocaleService.usesTraditionalChinese(locale)
-          ? 'Noto Sans TC'
-          : 'Noto Sans SC';
-    default:
-      return null;
-  }
-}
-
-/// Returns the CJK font fallback matching the given locale, so that localized
-/// glyph variants (Japanese vs Simplified vs Traditional Chinese) are
-/// rendered with the appropriate font. Returns null when the locale needs no
-/// special CJK font.
-List<String>? getFontFamilyFallbackForLocale(Locale locale) {
-  final family = getCjkFontFamilyForLocale(locale);
-  return family == null ? null : [family];
-}
 
 class MaterialThemeInstance {
   static ThemeData? lightTheme;
@@ -50,63 +17,47 @@ class MaterialThemeInstance {
     return defaultColorScheme;
   }
 
-  static Future<ColorScheme> getColorScheme(Brightness brightness) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? dynamicColorScheme =
-        PreferencesUtils.getOrDefault<int>(prefs, PreferencesKeys.themeColor);
+  /// Always the AUPP yellow, whatever the system's accent colour.
+  static Future<ColorScheme> getColorScheme(Brightness brightness) async =>
+      getDefaultColorScheme(brightness);
 
-    switch (dynamicColorScheme) {
-      case 1:
-        {
-          log("Using system colors");
-          await SystemTheme.accentColor.load();
-          SystemTheme.fallbackColor = defaultSeedColor;
-          final accentColor = SystemTheme.accentColor.accent;
-          if (accentColor == defaultSeedColor) {
-            log("Failed to retrieve system color, using default instead");
-          }
-          return ColorScheme.fromSeed(
-              seedColor: accentColor, brightness: brightness);
-        }
-
-      case 2:
-        {
-          log("Using dynamic colors");
-          ImageProvider backgroundImage =
-              getBackgroundImage(DateTime.now().month);
-          try {
-            ColorScheme colorScheme = await ColorScheme.fromImageProvider(
-                provider: backgroundImage, brightness: brightness);
-            return colorScheme;
-          } catch (e) {
-            log("Failed to derive colors from the banner image: $e");
-            return getDefaultColorScheme(brightness);
-          }
-        }
-
-      default:
-        {
-          return getDefaultColorScheme(brightness);
-        }
-    }
+  /// Fork: on the computer the dark theme is a dim gray instead of near black,
+  /// easier to read for hours on a large screen. The phone keeps the darker one.
+  static ColorScheme liftedDarkScheme(ColorScheme scheme) {
+    Color lift(Color color, double amount) =>
+        Color.lerp(color, Colors.white, amount)!;
+    final base = scheme.surface;
+    return scheme.copyWith(
+      surface: lift(base, 0.11),
+      surfaceDim: lift(base, 0.09),
+      surfaceBright: lift(base, 0.24),
+      surfaceContainerLowest: lift(base, 0.07),
+      surfaceContainerLow: lift(base, 0.14),
+      surfaceContainer: lift(base, 0.16),
+      surfaceContainerHigh: lift(base, 0.20),
+      surfaceContainerHighest: lift(base, 0.25),
+      outlineVariant: lift(scheme.outlineVariant, 0.08),
+    );
   }
+
+  static bool get _desktop =>
+      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
 
   static getMaterialThemeData(Brightness brightness) async {
     var colorScheme = await getColorScheme(brightness);
-    final locale = LocaleService.resolveLanguageLocale();
+    if (brightness == Brightness.dark && _desktop) {
+      colorScheme = liftedDarkScheme(colorScheme);
+    }
     return ThemeData(
       colorScheme: colorScheme,
       useMaterial3: true,
       brightness: brightness,
-      fontFamilyFallback: getFontFamilyFallbackForLocale(locale),
     );
   }
 
   static Future<ThemeMode> getThemeMode() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? themeModeIndex =
-        PreferencesUtils.getOrDefault<int>(prefs, PreferencesKeys.themeMode);
-    themeMode = ThemeMode.values[themeModeIndex!];
+    // Light or dark as the system says; the colour stays the app's.
+    themeMode = ThemeMode.system;
     return themeMode!;
   }
 

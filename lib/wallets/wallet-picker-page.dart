@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/services/crypto-quote-service.dart';
 import 'package:intl/intl.dart';
-import 'package:piggybank/components/wallet_icon_square.dart';
-import 'package:piggybank/helpers/records-utility-functions.dart';
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/models/wallet.dart';
-import 'package:piggybank/services/database/database-interface.dart';
-import 'package:piggybank/services/profile-service.dart';
-import 'package:piggybank/services/service-config.dart';
-import 'package:piggybank/settings/constants/preferences-keys.dart';
-import 'package:piggybank/wallets/wallet-sort-option.dart';
+import 'package:aupp/components/wallet_icon_square.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
+import 'package:aupp/models/wallet.dart';
+import 'package:aupp/services/database/database-interface.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:aupp/settings/constants/preferences-keys.dart';
+import 'package:aupp/wallets/wallet-sort-option.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WalletPickerPage extends StatefulWidget {
@@ -32,37 +31,75 @@ class WalletPickerPage extends StatefulWidget {
   /// the user of this.
   final DateTime? asOfDate;
 
+  /// Fork (Extrato): balances already computed by the caller (wallet id →
+  /// balance, planned records included), shown instead of reading them.
+  final Map<int, double>? balances;
+
+  /// Fork (Extrato): when set, each wallet gets a second checkbox, "Total",
+  /// for the wallets counted in the totals and balance; the page then pops a
+  /// [WalletPickerResult].
+  final List<Wallet>? initiallyCounted;
+
+  /// Fork (Extrato, with [initiallyCounted]): the "Exibir ocultos" switch
+  /// and how many hidden records the period has.
+  final bool initiallyShowHidden;
+  final int hiddenCount;
+
   WalletPickerPage({
     this.excludeWalletId,
     this.multiSelect = false,
     this.initiallySelected = const [],
     this.preferencesKey,
     this.asOfDate,
+    this.balances,
+    this.initiallyCounted,
+    this.initiallyShowHidden = false,
+    this.hiddenCount = 0,
   });
 
   @override
   _WalletPickerPageState createState() => _WalletPickerPageState();
 }
 
+/// What the Extrato's picker returns: the listed wallets and the wallets
+/// counted in the totals (empty = same as listed), and whether hidden
+/// records are listed too.
+class WalletPickerResult {
+  final List<Wallet> listed;
+  final List<Wallet> counted;
+  final bool showHidden;
+
+  WalletPickerResult(this.listed, this.counted, {this.showHidden = false});
+}
+
 class _WalletPickerPageState extends State<WalletPickerPage> {
   DatabaseInterface database = ServiceConfig.database;
   List<Wallet>? _wallets;
   late Set<int?> _selectedIds;
+  late Set<int?> _countedIds;
   bool _saveAsDefault = false;
+  late bool _showHidden = widget.initiallyShowHidden;
+
+  bool get _withTotals => widget.initiallyCounted != null;
 
   @override
   void initState() {
     super.initState();
     _selectedIds = widget.initiallySelected.map((w) => w.id).toSet();
+    _countedIds = (widget.initiallyCounted ?? []).map((w) => w.id).toSet();
     _loadWallets();
   }
 
   Future<void> _loadWallets() async {
     final wallets = widget.asOfDate != null
-        ? await database.getWalletsBalanceAsOf(widget.asOfDate!,
-            profileId: ProfileService.instance.activeProfileId)
-        : await database.getAllWallets(
-            profileId: ProfileService.instance.activeProfileId);
+        ? await database.getWalletsBalanceAsOf(widget.asOfDate!)
+        : await database.getAllWallets();
+    final balances = widget.balances;
+    if (balances != null) {
+      for (final w in wallets) {
+        if (balances.containsKey(w.id)) w.balance = balances[w.id];
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     final savedIndex = prefs.getInt(PreferencesKeys.walletListSortOption);
     final sortOption = (savedIndex != null &&
@@ -87,6 +124,16 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
     }
     setState(() {
       _wallets = filtered;
+      // "Nothing ticked" means all of them: show it that way.
+      if (_withTotals && _selectedIds.isEmpty) {
+        _selectedIds = filtered.map((w) => w.id).toSet();
+      }
+    });
+  }
+
+  void _toggleCounted(Wallet wallet) {
+    setState(() {
+      if (!_countedIds.remove(wallet.id)) _countedIds.add(wallet.id);
     });
   }
 
@@ -108,7 +155,16 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
       final ids = selected.map((w) => w.id.toString()).toList();
       await prefs.setStringList(widget.preferencesKey!, ids);
     }
-    if (mounted) Navigator.of(context).pop(selected);
+    if (!mounted) return;
+    if (_withTotals) {
+      Navigator.of(context).pop(WalletPickerResult(
+        selected,
+        _wallets!.where((w) => _countedIds.contains(w.id)).toList(),
+        showHidden: _showHidden,
+      ));
+      return;
+    }
+    Navigator.of(context).pop(selected);
   }
 
   void _toggleSelectAll() {
@@ -121,6 +177,23 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
     });
   }
 
+  /// Column header of the two-checkbox mode; the "Lista" one also toggles
+  /// all.
+  Widget _columnLabel(String label, bool? value, VoidCallback? onTap) =>
+      SizedBox(
+        width: 52,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12)),
+            if (value != null)
+              Checkbox(value: value, onChanged: (_) => onTap?.call())
+            else
+              const SizedBox(height: 48),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final allSelected =
@@ -128,12 +201,12 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
 
     final scaffold = Scaffold(
       appBar: AppBar(
-        title: Text("Select Wallet".i18n),
+        title: Text('Selecionar carteira'),
       ),
       body: _wallets == null
           ? Center(child: CircularProgressIndicator())
           : _wallets!.isEmpty
-              ? Center(child: Text("No wallets available".i18n))
+              ? Center(child: Text('Nenhuma carteira disponível'))
               : Column(
                   children: [
                     if (widget.asOfDate != null)
@@ -145,9 +218,7 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                             .colorScheme
                             .surfaceContainerHighest,
                         child: Text(
-                          "Balance as of %s"
-                              .i18n
-                              .fill([DateFormat.yMMMd().format(widget.asOfDate!)]),
+                          'Saldo em ${DateFormat.yMMMd().format(widget.asOfDate!)}',
                           style: const TextStyle(
                               fontSize: 13, fontStyle: FontStyle.italic),
                         ),
@@ -155,13 +226,29 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                     if (widget.multiSelect)
                       ListTile(
                         title: Text(
-                          allSelected ? "Deselect all".i18n : "Select all".i18n,
+                          allSelected ? 'Deselect all' : 'Selecionar tudo',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        trailing: Checkbox(
-                          value: allSelected,
-                          onChanged: (_) => _toggleSelectAll(),
-                        ),
+                        subtitle: _withTotals
+                            ? const Text(
+                                'Lista: lançamentos que aparecem no Extrato. '
+                                'Total: o que entra nas receitas, despesas e '
+                                'saldo do topo (nenhuma = as da lista).',
+                              )
+                            : null,
+                        trailing: _withTotals
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _columnLabel('Lista', allSelected,
+                                      _toggleSelectAll),
+                                  _columnLabel('Total', null, null),
+                                ],
+                              )
+                            : Checkbox(
+                                value: allSelected,
+                                onChanged: (_) => _toggleSelectAll(),
+                              ),
                         onTap: _toggleSelectAll,
                       ),
                     if (widget.multiSelect) const Divider(height: 1),
@@ -177,18 +264,42 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                             return ListTile(
                               leading: WalletIconSquare(
                                 iconEmoji: wallet.iconEmoji,
+                                imageAsset: cryptoLogoOf(wallet.currency),
                                 iconDataFromDefaultIconSet: wallet.icon,
                                 backgroundColor: wallet.color,
                               ),
                               title: Text(wallet.name,
                                   style: TextStyle(fontSize: 18)),
                               subtitle: wallet.balance != null
-                                  ? Text(formatWalletBalance(wallet))
+                                  ? Text(formatMoney(wallet.balance ?? 0.0))
                                   : null,
-                              trailing: Checkbox(
-                                value: isSelected,
-                                onChanged: (_) => _toggleSelection(wallet),
-                              ),
+                              trailing: _withTotals
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 52,
+                                          child: Checkbox(
+                                            value: isSelected,
+                                            onChanged: (_) =>
+                                                _toggleSelection(wallet),
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 52,
+                                          child: Checkbox(
+                                            value: _countedIds
+                                                .contains(wallet.id),
+                                            onChanged: (_) =>
+                                                _toggleCounted(wallet),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Checkbox(
+                                      value: isSelected,
+                                      onChanged: (_) => _toggleSelection(wallet),
+                                    ),
                               onTap: () => _toggleSelection(wallet),
                             );
                           }
@@ -196,17 +307,18 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                           return ListTile(
                             leading: WalletIconSquare(
                               iconEmoji: wallet.iconEmoji,
+                              imageAsset: cryptoLogoOf(wallet.currency),
                               iconDataFromDefaultIconSet: wallet.icon,
                               backgroundColor: wallet.color,
                             ),
                             title: Text(wallet.name,
                                 style: TextStyle(fontSize: 18)),
                             subtitle: wallet.isPredefined
-                                ? Text("Predefined".i18n)
+                                ? Text('Predefinido')
                                 : null,
                             trailing: wallet.balance != null
                                 ? Text(
-                                    formatWalletBalance(wallet),
+                                    formatMoney(wallet.balance ?? 0.0),
                                     style: TextStyle(fontSize: 16),
                                   )
                                 : null,
@@ -222,13 +334,28 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (_withTotals) ...[
+                    SwitchListTile(
+                      value: _showHidden,
+                      onChanged: (v) => setState(() => _showHidden = v),
+                      secondary: const Icon(Icons.visibility_off),
+                      title: const Text('Exibir ocultos',
+                          style: TextStyle(fontSize: 17)),
+                      subtitle: Text(widget.hiddenCount == 0
+                          ? 'Nenhum oculto neste período'
+                          : '${widget.hiddenCount} oculto(s) neste período'),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 4),
+                    ),
+                    const Divider(height: 1),
+                  ],
                   if (widget.preferencesKey != null) ...[
                     CheckboxListTile(
                       value: _saveAsDefault,
                       onChanged: (v) =>
                           setState(() => _saveAsDefault = v ?? false),
                       title: Text(
-                        "Save as default selection".i18n,
+                        'Salvar como seleção padrão',
                         style: const TextStyle(fontSize: 17),
                       ),
                       controlAffinity: ListTileControlAffinity.leading,
@@ -243,7 +370,7 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: _confirmSelection,
-                        child: Text("Apply".i18n),
+                        child: Text('Aplicar'),
                       ),
                     ),
                   ),

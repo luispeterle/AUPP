@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:piggybank/models/record.dart';
+import 'package:aupp/models/record.dart';
 import 'package:community_charts_flutter/community_charts_flutter.dart'
     as charts;
-import 'package:piggybank/i18n.dart';
-import 'package:piggybank/statistics/statistics-utils.dart';
 
-import '../services/service-config.dart';
-import '../settings/constants/preferences-keys.dart';
-import '../settings/preferences-utils.dart';
 
 class LinearTagRecord {
   final String? tag;
@@ -20,12 +15,10 @@ class TagsPieChart extends StatefulWidget {
   final List<Record?> records;
   final Function(double?, String?, List<String>?)? onSelectionChanged;
   final String? selectedTag;
-  final Map<int, String?> walletCurrencyMap;
 
   TagsPieChart(this.records,
       {this.onSelectionChanged,
-      this.selectedTag,
-      this.walletCurrencyMap = const {}});
+      this.selectedTag});
 
   @override
   _TagsPieChartState createState() => _TagsPieChartState();
@@ -65,9 +58,7 @@ class _TagsPieChartState extends State<TagsPieChart> {
   }
 
   void _initializeData() {
-    tagCount = PreferencesUtils.getOrDefault<int>(
-        ServiceConfig.sharedPreferences!,
-        PreferencesKeys.statisticsPieChartNumberOfCategoriesToDisplay)!;
+    tagCount = 4;
     defaultColorsPalette = charts.MaterialPalette.getOrderedPalettes(tagCount)
         .map((palette) => palette.shadeDefault).toList();
     defaultColorsPalette.add(charts.ColorUtil.fromDartColor(otherTagColor));
@@ -81,7 +72,7 @@ class _TagsPieChartState extends State<TagsPieChart> {
   void _updateSeriesList() {
     seriesList = [
       charts.Series<LinearTagRecord, String>(
-        id: 'Tags'.i18n,
+        id: 'Etiquetas',
         colorFn: (LinearTagRecord datum, i) {
           final color = _preparedColors[i!];
           if (_selectedTag == null || _selectedTag == datum.tag) {
@@ -106,7 +97,7 @@ class _TagsPieChartState extends State<TagsPieChart> {
     for (var record in records) {
       if (record != null) {
         final value =
-            getRecordValueInDefaultCurrency(record, widget.walletCurrencyMap);
+            record.value!;
         for (var tag in record.tags) {
           aggregatedTagsValuesTemporaryMap.update(
             tag,
@@ -147,7 +138,7 @@ class _TagsPieChartState extends State<TagsPieChart> {
         0.0,
         (dynamic value, element) => value + element.value,
       );
-      var remainingTagKey = "Others".i18n;
+      var remainingTagKey = 'Outros';
       var percentage = (100 * sumOfRemainingTags.abs()) / totalSum;
       var lr = LinearTagRecord(remainingTagKey, percentage);
       data.add(lr);
@@ -171,8 +162,8 @@ class _TagsPieChartState extends State<TagsPieChart> {
           for (var r in widget.records) {
             if (r == null) continue;
             final value =
-                getRecordValueInDefaultCurrency(r, widget.walletCurrencyMap);
-            if (tagName == "Others".i18n) {
+                r.value!;
+            if (tagName == 'Outros') {
               // Add value for each tag that is NOT a top tag
               int otherTagsInRecord = r.tags.where((t) => !_isTopTag(t)).length;
               tagSum += value * otherTagsInRecord;
@@ -183,7 +174,7 @@ class _TagsPieChartState extends State<TagsPieChart> {
           tagSum = tagSum.abs();
 
           final List<String> topTagNames = linearRecords
-              .where((lr) => lr.tag != "Others".i18n)
+              .where((lr) => lr.tag != 'Outros')
               .map((lr) => lr.tag!)
               .toList();
 
@@ -205,7 +196,7 @@ class _TagsPieChartState extends State<TagsPieChart> {
   }
 
   bool _isTopTag(String name) {
-    return linearRecords.any((lr) => lr.tag == name && lr.tag != "Others".i18n);
+    return linearRecords.any((lr) => lr.tag == name && lr.tag != 'Outros');
   }
 
   Widget _buildPieChart(BuildContext context) {

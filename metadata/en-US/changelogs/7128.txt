@@ -1,2 +1,0 @@
-Added Armenian
-Fix language selector

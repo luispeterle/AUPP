@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://oinkoin.com/sitemap-index.xml
-
