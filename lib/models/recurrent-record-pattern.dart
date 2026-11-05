@@ -49,6 +49,42 @@ class RecurrentRecordPattern {
     }
   }
 
+  /// Happens on one day only (a one-off estimate, or an occurrence edited
+  /// into an item of its own): it ends on the day it starts.
+  bool get happensOnce {
+    final end = localEndDate;
+    if (end == null) return false;
+    final start = localDateTime;
+    return !DateTime(end.year, end.month, end.day)
+        .isAfter(DateTime(start.year, start.month, start.day));
+  }
+
+  /// One occurrence taken out of the recurrence: edited by hand, it became an
+  /// item of its own ([RecurrentRecordService.saveOccurrence]), or it was
+  /// deleted alone. Keyed by the recurrence's day, like codes and marks.
+  static String skipKey(DateTime local) => 'pular:${occurrenceKey(local)}';
+
+  bool isSkipped(DateTime local) => paymentCodes.containsKey(skipKey(local));
+
+  void skip(DateTime local) => paymentCodes[skipKey(local)] = '1';
+
+  /// Moves what belongs to the occurrence on [from] (its code, "Já paguei"
+  /// mark and Pix charge amount) to [to] on the item [target] made from it.
+  /// Its day is now set by hand, so a code there counts as checked.
+  void moveOccurrenceTo(
+      RecurrentRecordPattern target, DateTime from, DateTime to) {
+    final code = paymentCodes.remove(occurrenceKey(from));
+    final paid = paymentCodes.remove(paidKey(from));
+    final charge = paymentCodes.remove(chargeValueKey(from));
+    paymentCodes.remove(dueKey(from));
+    if (code != null) {
+      target.paymentCodes[occurrenceKey(to)] = code;
+      target.setDueDate(to, to);
+    }
+    if (paid != null) target.paymentCodes[paidKey(to)] = paid;
+    if (charge != null) target.paymentCodes[chargeValueKey(to)] = charge;
+  }
+
   /// The code of the occurrence on [local]: its own, else the default Pix
   /// (a key becomes a copia-e-cola with the occurrence's amount).
   String? paymentCodeFor(DateTime local) {

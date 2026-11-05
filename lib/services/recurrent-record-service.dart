@@ -1,7 +1,10 @@
 import 'package:aupp/services/automatic-writes.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
+import 'package:aupp/dinzo/pix-charge.dart';
+import 'package:aupp/dinzo/pix-code.dart';
 import 'package:aupp/helpers/datetime-utility-functions.dart';
+import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/recurrent-period.dart';
 import 'package:aupp/models/recurrent-record-pattern.dart';
@@ -27,6 +30,110 @@ class RecurrentRecordService {
     pattern.setMarkedPaid(pattern.occurrenceDayOf(occurrence), paid);
     await db.updateRecordPatternById(pattern.id, pattern);
     occurrence.markedPaid = paid;
+  }
+
+  /// Saves the hand edits of one upcoming occurrence: [edited] is the
+  /// occurrence with its new data. A recurrence that happens once takes them
+  /// itself. Otherwise the occurrence leaves the recurrence and becomes an
+  /// item of its own, on its new day, with its code and marks: editing the
+  /// recurrence later leaves it as it is, and that day gets no other
+  /// occurrence. Null when the recurrence is gone.
+  static Future<RecurrentRecordPattern?> saveOccurrence(Record edited) async {
+    final db = ServiceConfig.database;
+    final pattern =
+        await db.getRecurrentRecordPattern(edited.recurrencePatternId);
+    if (pattern == null) return null;
+    final day = pattern.occurrenceDayOf(edited);
+    final newDay = edited.localDateTime;
+    if (pattern.happensOnce) {
+      final updated = RecurrentRecordPattern.fromRecord(
+        edited,
+        pattern.recurrentPeriod!,
+        id: pattern.id,
+        utcEndDate: edited.utcDateTime,
+        customIntervalValue: pattern.customIntervalValue,
+        customIntervalUnit: pattern.customIntervalUnit,
+      )
+        ..tags = Set.of(edited.tags)
+        ..utcLastUpdate = pattern.utcLastUpdate
+        ..paymentCodes = Map.of(pattern.paymentCodes);
+      updated.moveOccurrenceTo(updated, day, newDay);
+      await db.updateRecordPatternById(pattern.id, updated);
+      return updated;
+    }
+    final item = RecurrentRecordPattern.fromRecord(
+      edited,
+      RecurrentPeriod.EveryMonth,
+      utcEndDate: edited.utcDateTime,
+    )..tags = Set.of(edited.tags);
+    for (final key in [
+      RecurrentRecordPattern.defaultPixKey,
+      RecurrentRecordPattern.pixNameKey,
+    ]) {
+      final v = pattern.paymentCodes[key];
+      if (v != null) item.paymentCodes[key] = v;
+    }
+    pattern.moveOccurrenceTo(item, day, newDay);
+    pattern.skip(day);
+    await db.addRecurrentRecordPattern(item);
+    await db.updateRecordPatternById(pattern.id, pattern);
+    return item;
+  }
+
+  /// Deletes one upcoming occurrence: the whole item when it happens once,
+  /// otherwise only that day leaves the recurrence.
+  static Future<void> deleteOccurrence(Record occurrence) async {
+    final db = ServiceConfig.database;
+    final pattern =
+        await db.getRecurrentRecordPattern(occurrence.recurrencePatternId);
+    if (pattern == null) return;
+    if (pattern.happensOnce) {
+      await db.deleteFutureRecordsByPatternId(
+          pattern.id!, DateTime.now().toUtc());
+      await db.deleteRecurrentRecordPatternById(pattern.id);
+      return;
+    }
+    final day = pattern.occurrenceDayOf(occurrence);
+    // Its code and marks go with it.
+    pattern.moveOccurrenceTo(
+        RecurrentRecordPattern.fromRecord(occurrence, RecurrentPeriod.EveryMonth),
+        day,
+        day);
+    pattern.skip(day);
+    await db.updateRecordPatternById(pattern.id, pattern);
+  }
+
+  /// Saves the Pix / boleto [code] of one occurrence on its recurrence (null
+  /// removes it). A Pix charge keeps the amount the bank says; a code with a
+  /// due date moves the occurrence to that day. Null when the recurrence is
+  /// gone.
+  static Future<PaymentCodeSaved?> savePaymentCode(
+      Record occurrence, String? code) async {
+    final db = ServiceConfig.database;
+    final pattern =
+        await db.getRecurrentRecordPattern(occurrence.recurrencePatternId);
+    if (pattern == null) return null;
+    // Codes and marks stay on the recurrence's day, even once moved.
+    final day = pattern.occurrenceDayOf(occurrence);
+    final key = RecurrentRecordPattern.occurrenceKey(day);
+    final chargeKey = RecurrentRecordPattern.chargeValueKey(day);
+    final dueBefore = pattern.dueDateFor(day);
+    pattern.paymentCodes.remove(chargeKey);
+    DateTime? due;
+    if (code == null) {
+      pattern.paymentCodes.remove(key);
+    } else {
+      pattern.paymentCodes[key] = code;
+      // A Pix charge (electricity bill) keeps its amount at the bank.
+      final charge = await PixCharge.fetch(code);
+      if (charge != null && charge.isOpen) {
+        pattern.paymentCodes[chargeKey] = charge.amount.toStringAsFixed(2);
+      }
+      due = charge?.dueDate ?? PixCode.dueDateOf(code);
+    }
+    pattern.setDueDate(day, due);
+    await db.updateRecordPatternById(pattern.id, pattern);
+    return PaymentCodeSaved(pattern, day, dueBefore);
   }
 
   /// The day an occurrence shows: its due date when one was read from its
@@ -244,6 +351,11 @@ class RecurrentRecordService {
           break;
       }
 
+      // Occurrences taken out by hand (edited into an item of their own, or
+      // deleted alone) are not generated again.
+      newRecurrentRecords.removeWhere(
+          (r) => recordPattern.isSkipped(recordPattern.occurrenceDayOf(r)));
+
       _logger.info(
           'Generated ${newRecurrentRecords.length} recurrent records for: ${recordPattern.title}');
       return newRecurrentRecords;
@@ -379,5 +491,58 @@ class RecurrentRecordService {
       _logger.handle(e, st, 'Failed to update recurrent records');
       rethrow;
     }
+  }
+}
+
+/// What [RecurrentRecordService.savePaymentCode] changed on an occurrence.
+class PaymentCodeSaved {
+  final RecurrentRecordPattern pattern;
+
+  /// The occurrence's day on the recurrence (local).
+  final DateTime day;
+
+  /// Its due date before the save, null when it had none.
+  final DateTime? dueBefore;
+
+  PaymentCodeSaved(this.pattern, this.day, this.dueBefore);
+
+  DateTime? get dueAfter => pattern.dueDateFor(day);
+
+  /// The day it shows now.
+  DateTime get shown => dueAfter ?? day;
+
+  /// It now shows on another day than before.
+  bool get moved {
+    final a = dueBefore ?? day;
+    final b = shown;
+    return DateTime(a.year, a.month, a.day) != DateTime(b.year, b.month, b.day);
+  }
+
+  /// Its amount now (the code's, or the recurrence's).
+  double? get value => pattern.valueFor(day);
+
+  /// What changed, for the message after saving: the amount, the day, or
+  /// just that the code was saved. [before] is the amount it had.
+  String message(String? code, double? before) {
+    final after = value;
+    final day = getDateStr(shown);
+    if (after != null && before != null && (after - before).abs() >= 0.005) {
+      return (moved ? 'Vencimento $day. ' : '') +
+          (code == null
+              ? 'Valor desta conta voltou para '
+                  '${getCurrencyValueString(after.abs())}.'
+              : 'Valor desta conta alterado de '
+                  '${getCurrencyValueString(before.abs())} para '
+                  '${getCurrencyValueString(after.abs())}, que é o valor '
+                  'do ${PixCharge.urlOf(code) != null ? 'Pix de cobrança' : Record.paymentCodeKind(code)}. '
+                  'O recorrente continua com '
+                  '${getCurrencyValueString(pattern.value?.abs())}.');
+    }
+    if (moved) {
+      return code == null
+          ? 'Esta conta voltou para $day.'
+          : 'Esta conta passou para $day, o vencimento do código.';
+    }
+    return code == null ? 'Código removido.' : 'Código salvo.';
   }
 }

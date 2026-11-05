@@ -8,11 +8,11 @@ import 'package:aupp/dinzo/dinzo-api.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
 import 'package:aupp/components/payment-code-sheet.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
-import 'package:aupp/dinzo/pix-charge.dart';
 import 'package:aupp/dinzo/pix-code.dart';
 import 'package:aupp/services/recurrent-record-service.dart';
 import 'package:aupp/dinzo/payment-launcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:collection/collection.dart' show SetEquality;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
@@ -117,6 +117,23 @@ class EditRecordPageState extends State<EditRecordPage> {
       record!.isFutureRecord &&
       record!.recurrencePatternId != null &&
       record!.tags.contains(DinzoSyncService.estimateTag);
+
+  /// Fork: an upcoming occurrence of a recurrence (estimate, boleto or
+  /// plain), editable by hand ([_saveOccurrence]). Transfers stay read-only.
+  bool get _isEditableOccurrence =>
+      widget.passedRecord != null &&
+      record != null &&
+      record!.isFutureRecord &&
+      record!.recurrencePatternId != null &&
+      record!.transferWalletId == null &&
+      record!.dinzoId == null;
+
+  /// The occurrence as it was opened, before any edit.
+  Record? _occurrenceBefore;
+
+  /// Its recurrence was read and has more than one occurrence: an edit takes
+  /// this one out of it.
+  bool _occurrenceLeavesRecurrence = false;
 
   /// Upcoming occurrence of a recurrence paid by boleto / Pix
   /// ([Record.billingTags]): its code can be pasted here.
@@ -251,6 +268,13 @@ class EditRecordPageState extends State<EditRecordPage> {
     if (passedRecord != null) {
       // I am editing an existing record
       record = passedRecord;
+      if (_isEditableOccurrence) {
+        // Fork: an upcoming occurrence opens editable (see _saveOccurrence).
+        readOnly = false;
+        _occurrenceBefore =
+            passedRecord!.copyWith(tags: Set.of(passedRecord!.tags))
+              ..occurrenceUtc = passedRecord!.occurrenceUtc;
+      }
       // Capture original values to detect changes for pattern-linked records
       _originalUtcDateTime = passedRecord!.utcDateTime;
       _originalValue = passedRecord!.value;
@@ -275,6 +299,8 @@ class EditRecordPageState extends State<EditRecordPage> {
             final start = value.localDateTime;
             final end = value.localEndDate;
             setState(() {
+              _occurrenceLeavesRecurrence =
+                  record!.isFutureRecord && !value.happensOnce;
               if (record!.isFutureRecord &&
                   end != null &&
                   !DateTime(end.year, end.month, end.day)
@@ -704,21 +730,19 @@ class EditRecordPageState extends State<EditRecordPage> {
                   identifier: 'date-field',
                   child: InkWell(
                     onTap: () async {
-                      // An estimate or boleto occurrence moves by itself.
-                      if (_locked &&
-                          (_isEstimateOccurrence || _isBillingOccurrence)) {
-                        await _editDueDate();
-                        return;
-                      }
                       if (_locked) return;
                       FocusScope.of(context).unfocus();
                       DateTime initialDate = localDisplayDate ?? DateTime.now();
                       int firstDayOfWeek = getFirstDayOfWeekIndex();
+                      // An upcoming occurrence can be months ahead.
+                      final lastDate = DateTime.now().add(Duration(days: 365));
                       DateTime? result = await showDatePicker(
                           context: context,
                           initialDate: initialDate,
                           firstDate: DateTime(1970),
-                          lastDate: DateTime.now().add(Duration(days: 365)),
+                          lastDate: initialDate.isAfter(lastDate)
+                              ? DateTime(initialDate.year + 1, 12, 31)
+                              : lastDate,
                           builder: (BuildContext context, Widget? child) {
                             return DatePickerUtils
                                 .buildDatePickerWithFirstDayOfWeek(
@@ -1376,6 +1400,9 @@ class EditRecordPageState extends State<EditRecordPage> {
               'vira estimativa (data futura). Para um recorrente de verdade, '
               'como o vale-alimentação, escolha uma repetição. Dá pra liberar '
               'lançamentos manuais em Configurações → Integrações com API.'
+          : _isEditableOccurrence
+          ? 'Desmarque e salve para virar um lançamento real nesta data, com '
+              'estes dados. As outras ocorrências continuam estimativa.'
           : 'Para prever os próximos meses. Fica no Extrato até ser vinculada '
               'ao lançamento real: segure a estimativa e toque no lançamento. '
               'Use a repetição para salário e gastos médios.'),
@@ -1472,18 +1499,26 @@ class EditRecordPageState extends State<EditRecordPage> {
   }
 
   /// Fork: Pix copia-e-cola / boleto digitable line of this estimate
-  /// occurrence, saved on the recurrence right away (the view is read-only).
+  /// occurrence, saved on the recurrence right away.
   Widget _createPaymentCodeTile() {
     final code = _paymentCode;
+    final unknown = record!.dueDateUnknown;
     return ListTile(
       leading: const Icon(Icons.qr_code_2),
       title: const Text('Pix / linha digitável'),
       subtitle: Text(
-        code == null
-            ? 'Toque para colar o código desta ocorrência'
-            : '${Record.paymentCodeKind(code)} · $code',
-        maxLines: 2,
+        [
+          code == null
+              ? 'Toque para colar o código desta ocorrência'
+              : '${Record.paymentCodeKind(code)} · $code',
+          if (unknown)
+            'O código não trouxe o vencimento: confira a data acima e salve.',
+        ].join('\n'),
+        maxLines: unknown ? 4 : 2,
         overflow: TextOverflow.ellipsis,
+        style: unknown
+            ? TextStyle(color: Theme.of(context).colorScheme.error)
+            : null,
       ),
       trailing: code == null
           ? null
@@ -1500,54 +1535,6 @@ class EditRecordPageState extends State<EditRecordPage> {
     );
   }
 
-  /// This occurrence's due date: from its code, or checked by hand when the
-  /// code has none (a utility boleto). Moves only this occurrence.
-  Widget _createDueDateTile() {
-    final unknown = record!.dueDateUnknown;
-    final shown = localDisplayDate ?? record!.localDateTime;
-    return ListTile(
-      leading: Icon(
-        Icons.event,
-        color: unknown ? Theme.of(context).colorScheme.error : null,
-      ),
-      title: Text(
-          '${_paymentCode == null ? 'Data desta conta' : 'Vencimento'}: '
-          '${getDateStr(shown)}'),
-      subtitle: Text(unknown
-          ? 'O código não trouxe a data. Toque para conferir.'
-          : 'Toque para mudar o dia só desta conta; o recorrente continua '
-              'como está.'),
-      onTap: _editDueDate,
-    );
-  }
-
-  Future<void> _editDueDate() async {
-    final shown = localDisplayDate ?? record!.localDateTime;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: shown,
-      firstDate: DateTime(shown.year - 1),
-      lastDate: DateTime(shown.year + 1, 12, 31),
-      helpText: 'Data desta conta',
-    );
-    if (picked == null) return;
-    final pattern =
-        await database.getRecurrentRecordPattern(record!.recurrencePatternId);
-    if (pattern == null) return;
-    final day = pattern.occurrenceDayOf(record!);
-    pattern.setDueDate(day, picked);
-    await database.updateRecordPatternById(pattern.id, pattern);
-    if (!mounted) return;
-    // Saved: back to the list, where the message shows.
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-    messenger.showSnackBar(SnackBar(
-      duration: const Duration(seconds: 5),
-      content: Text('Esta conta passou para ${getDateStr(picked)}. O '
-          'recorrente continua no dia ${day.day}.'),
-    ));
-  }
-
   /// "Já paguei" only means something for a bill: a Pix / boleto code on the
   /// occurrence, or a recurrence paid by Pix or boleto. Once marked it stays,
   /// so it can be undone.
@@ -1556,51 +1543,15 @@ class EditRecordPageState extends State<EditRecordPage> {
       Record.billingKindOf(record!.tags) != null ||
       record!.markedPaid;
 
-  /// Turns this estimate occurrence into a stored record of its own: same
-  /// name, amount, category, wallet and note, tagged "Manual". The occurrence
-  /// is consumed like a link ([EstimateLink.link]), so it leaves the estimate,
-  /// which is deleted once nothing is left of it.
-  Widget _createMakeRealTile() {
-    return ListTile(
-      leading: const Icon(Icons.task_alt),
-      title: const Text('Virar lançamento real'),
-      subtitle: const Text(
-          'Cria um lançamento com estes dados, fora do recorrente, e tira '
-          'esta ocorrência da estimativa.'),
-      onTap: _makeReal,
-    );
-  }
-
+  /// Turns this estimate occurrence into a stored record of its own, with
+  /// what is on the screen and on its date, tagged "Manual" ("Estimativa"
+  /// unchecked, then save). The occurrence is consumed like a link
+  /// ([EstimateLink.link]), so it leaves the estimate, which is deleted once
+  /// nothing is left of it.
   Future<void> _makeReal() async {
     final occurrence = record!;
-    final now = DateTime.now();
-    final shown = localDisplayDate ?? occurrence.localDateTime;
-    // What is real already happened: a future date comes to today.
-    final day = shown.isAfter(now) ? now : shown;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Virar lançamento real?'),
-        content: Text(
-          '${occurrence.title ?? occurrence.category?.name ?? ''}, '
-          '${getDateStr(day)}, ${getCurrencyValueString(occurrence.value)}.\n\n'
-          'Vira um lançamento manual, sem ligação com o recorrente. Esta '
-          'ocorrência some da estimativa; as outras continuam.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Virar real'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    final tags = {...occurrence.tags}
+    if (ServiceConfig.walletsEnabled) occurrence.walletId = _selectedWallet?.id;
+    final tags = {..._selectedTags}
       ..remove(DinzoSyncService.estimateTag)
       ..remove(DinzoSyncService.virtualTag)
       ..add(DinzoSyncService.manualTag);
@@ -1608,7 +1559,8 @@ class EditRecordPageState extends State<EditRecordPage> {
       occurrence.value,
       occurrence.title,
       occurrence.category,
-      day.toUtc(),
+      occurrence.utcDateTime,
+      timeZoneName: occurrence.timeZoneName,
       description: occurrence.description,
       walletId: occurrence.walletId,
       tags: tags,
@@ -1619,6 +1571,75 @@ class EditRecordPageState extends State<EditRecordPage> {
     Navigator.of(context).pop();
     messenger.showSnackBar(
         const SnackBar(content: Text('Agora é um lançamento real')));
+  }
+
+  /// Says that changing this occurrence takes it out of its recurrence.
+  Widget _createOccurrenceNote() {
+    return ListTile(
+      leading: const Icon(Icons.link_off),
+      title: const Text('Só esta ocorrência'),
+      subtitle: const Text(
+          'Mudar valor, data ou outro dado aqui solta esta ocorrência do '
+          'recorrente: ela fica como você deixar, mesmo que o recorrente '
+          'mude depois, e não aparece outra no lugar.'),
+    );
+  }
+
+  /// Tags that only say where a record came from; they do not make an edit.
+  static Set<String> _withoutOrigin(Set<String> tags) => {...tags}
+    ..remove(DinzoSyncService.manualTag)
+    ..remove(DinzoSyncService.virtualTag);
+
+  /// Saves an upcoming occurrence edited by hand. Unchecking "Estimativa"
+  /// makes it a real record; any other change makes it an item of its own
+  /// ([RecurrentRecordService.saveOccurrence]). Nothing changed: a code
+  /// without a due date gets the day shown as checked.
+  Future<void> _saveOccurrence() async {
+    _resolvePendingAmountExpression();
+    final before = _occurrenceBefore!;
+    final edited = record!;
+    if (ServiceConfig.walletsEnabled) edited.walletId = _selectedWallet?.id;
+    final wasEstimate = before.tags.contains(DinzoSyncService.estimateTag);
+    if (wasEstimate && !_isEstimate) {
+      await _makeReal();
+      return;
+    }
+    _applyOriginTag(isTransfer: false);
+    edited.tags = Set.of(_selectedTags);
+    final changed = edited.value != before.value ||
+        (edited.title ?? '') != (before.title ?? '') ||
+        (edited.description ?? '') != (before.description ?? '') ||
+        edited.category?.name != before.category?.name ||
+        edited.walletId != before.walletId ||
+        edited.utcDateTime.millisecondsSinceEpoch !=
+            before.utcDateTime.millisecondsSinceEpoch ||
+        !const SetEquality<String>().equals(
+            _withoutOrigin(edited.tags), _withoutOrigin(before.tags));
+    final messenger = ScaffoldMessenger.of(context);
+    if (!changed) {
+      if (before.dueDateUnknown) {
+        final pattern = await database
+            .getRecurrentRecordPattern(before.recurrencePatternId);
+        if (pattern != null) {
+          pattern.setDueDate(
+              pattern.occurrenceDayOf(before), before.localDateTime);
+          await database.updateRecordPatternById(pattern.id, pattern);
+        }
+      }
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final leaves = _occurrenceLeavesRecurrence;
+    final saved = await RecurrentRecordService.saveOccurrence(edited);
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    if (saved != null && leaves) {
+      messenger.showSnackBar(const SnackBar(
+        duration: Duration(seconds: 5),
+        content: Text('Só esta ocorrência mudou. O recorrente continua '
+            'igual nas outras datas.'),
+      ));
+    }
   }
 
   /// "Já paguei" on this occurrence while the real record has not come.
@@ -1650,34 +1671,12 @@ class EditRecordPageState extends State<EditRecordPage> {
     );
     if (result == null) return;
     final code = result.trim().isEmpty ? null : result.trim();
-    final pattern =
-        await database.getRecurrentRecordPattern(record!.recurrencePatternId);
-    if (pattern == null) return;
-    // Codes and marks stay on the recurrence's day, even once moved.
-    final day = pattern.occurrenceDayOf(record!);
-    final key = RecurrentRecordPattern.occurrenceKey(day);
-    final chargeKey = RecurrentRecordPattern.chargeValueKey(day);
-    final dueBefore = pattern.dueDateFor(day);
-    pattern.paymentCodes.remove(chargeKey);
-    DateTime? due;
-    if (code == null) {
-      pattern.paymentCodes.remove(key);
-    } else {
-      pattern.paymentCodes[key] = code;
-      // A Pix charge (electricity bill) keeps its amount at the bank.
-      final charge = await PixCharge.fetch(code);
-      if (charge != null && charge.isOpen) {
-        pattern.paymentCodes[chargeKey] = charge.amount.toStringAsFixed(2);
-      }
-      due = charge?.dueDate ?? PixCode.dueDateOf(code);
-    }
-    pattern.setDueDate(day, due);
-    await database.updateRecordPatternById(pattern.id, pattern);
-    final dueAfter = pattern.dueDateFor(day);
-    final shownBefore = dueBefore ?? day;
-    final shownAfter = dueAfter ?? day;
-    final moved = DateTime(shownBefore.year, shownBefore.month, shownBefore.day) !=
-        DateTime(shownAfter.year, shownAfter.month, shownAfter.day);
+    final saved = await RecurrentRecordService.savePaymentCode(record!, code);
+    if (saved == null) return;
+    final pattern = saved.pattern;
+    final day = saved.day;
+    final dueAfter = saved.dueAfter;
+    final moved = saved.moved;
     if (!mounted) return;
     // The code's amount is this occurrence's only (see valueFor).
     final before = record!.value;
@@ -1701,26 +1700,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     });
     final valueChanged =
         after != null && before != null && (after - before).abs() >= 0.005;
-    final String message;
-    if (valueChanged) {
-      message = (moved ? 'Vencimento ${getDateStr(shown)}. ' : '') +
-          (code == null
-              ? 'Valor desta conta voltou para '
-                  '${getCurrencyValueString(after.abs())}.'
-              : 'Valor desta conta alterado de '
-                  '${getCurrencyValueString(before.abs())} para '
-                  '${getCurrencyValueString(after.abs())}, que é o valor '
-                  'do ${PixCharge.urlOf(code) != null ? 'Pix de cobrança' : Record.paymentCodeKind(code)}. '
-                  'O recorrente continua com '
-                  '${getCurrencyValueString(pattern.value?.abs())}.');
-    } else if (moved) {
-      message = code == null
-          ? 'Esta conta voltou para ${getDateStr(shown)}.'
-          : 'Esta conta passou para ${getDateStr(shown)}, o vencimento do '
-              'código.';
-    } else {
-      message = code == null ? 'Código removido.' : 'Código salvo.';
-    }
+    final message = saved.message(code, before);
     // Saved: back to the list, where the message shows.
     final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
@@ -1990,6 +1970,10 @@ class EditRecordPageState extends State<EditRecordPage> {
                     if (_singleOccurrencePattern != null) {
                       deleteDialog = deleteDialog.addSubtitle(
                           'Quer mesmo excluir este Item?');
+                    } else if (_isEditableOccurrence) {
+                      deleteDialog = deleteDialog.addSubtitle(
+                          'Excluir só esta ocorrência? O recorrente continua '
+                          'nas outras datas.');
                     } else if (widget.passedRecord != null) {
                       deleteDialog = deleteDialog.addSubtitle(
                           'Você realmente deseja excluir este Item?');
@@ -2009,6 +1993,9 @@ class EditRecordPageState extends State<EditRecordPage> {
                             patternId, DateTime.now().toUtc());
                         await database
                             .deleteRecurrentRecordPatternById(patternId);
+                      } else if (_isEditableOccurrence) {
+                        await RecurrentRecordService.deleteOccurrence(
+                            _occurrenceBefore!);
                       } else if (widget.passedRecord != null) {
                         if (record!.dinzoId != null) {
                           await DinzoSyncService.ignoreDeleted(
@@ -2055,7 +2042,13 @@ class EditRecordPageState extends State<EditRecordPage> {
             _createEstimateLinkTile(link),
             Divider(height: 1),
           ],
-          if ((_sourceLocked || passedRecurrentRecordPattern != null) &&
+          if (_isEditableOccurrence && _occurrenceLeavesRecurrence) ...[
+            _createOccurrenceNote(),
+            Divider(height: 1),
+          ],
+          if ((_sourceLocked ||
+                  passedRecurrentRecordPattern != null ||
+                  (_isEditableOccurrence && _isEstimateOccurrence)) &&
               !_fromDinzo &&
               _selectedDestinationWallet == null) ...[
             _createEstimateCard(),
@@ -2068,14 +2061,8 @@ class EditRecordPageState extends State<EditRecordPage> {
           if (_isEstimateOccurrence || _isBillingOccurrence) ...[
             _createPaymentCodeTile(),
             Divider(height: 1),
-            _createDueDateTile(),
-            Divider(height: 1),
             if (_canMarkPaid) ...[
               _createMarkedPaidTile(),
-              Divider(height: 1),
-            ],
-            if (_isEstimateOccurrence) ...[
-              _createMakeRealTile(),
               Divider(height: 1),
             ],
           ],
@@ -2246,6 +2233,10 @@ class EditRecordPageState extends State<EditRecordPage> {
                 onPressed: () async {
                   _resolvePendingAmountExpression();
                   if (_formKey.currentState!.validate()) {
+                    if (_isEditableOccurrence) {
+                      await _saveOccurrence();
+                      return;
+                    }
                     // A new estimate needs a future date; an existing one
                     // (its pattern) keeps its dates.
                     if (_isEstimate && _sourceLocked && !_prepareEstimate()) {

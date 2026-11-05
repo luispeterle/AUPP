@@ -21,6 +21,7 @@ import 'package:aupp/desktop/calculators-area.dart';
 import 'package:flutter/services.dart';
 import 'package:aupp/disguise/calculator-gate.dart';
 import 'package:aupp/records/records-page.dart';
+import 'package:aupp/records/shared-code-page.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/settings-page.dart';
 import 'package:aupp/style.dart';
@@ -35,6 +36,13 @@ class Shell extends StatefulWidget {
 class ShellState extends State<Shell> {
   static const MethodChannel _widgetActionChannel =
       MethodChannel('aupp/widget_action');
+
+  /// A PDF or picture shared from another app (Android), to read its Pix /
+  /// boleto ([SharedCodePage]).
+  static const MethodChannel _sharedFileChannel =
+      MethodChannel('aupp/shared_file');
+  bool _sharedFilesHooked = false;
+  DateTime? _sharedFileOpened;
 
   /// Singleton-like access for external refresh calls (e.g., quick actions).
   static ShellState? _instance;
@@ -225,6 +233,46 @@ class ShellState extends State<Shell> {
     });
   }
 
+  /// Files shared with the app: pushed while it runs, or stashed for a cold
+  /// start. Both open only after unlocking, like the widget's actions.
+  void _handleSharedFiles() {
+    if (_sharedFilesHooked) return;
+    _sharedFilesHooked = true;
+    _sharedFileChannel.setMethodCallHandler((call) async {
+      if (call.method == 'openSharedFile') {
+        final path = call.arguments as String?;
+        if (path == null) return;
+        CalculatorGate.whenUnlocked(() {
+          if (mounted) _openSharedFile(path);
+        });
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      String? path;
+      try {
+        path = await _sharedFileChannel.invokeMethod<String>('getInitialFile');
+      } catch (_) {
+        return; // Not on Android.
+      }
+      if (path != null && mounted) _openSharedFile(path);
+    });
+  }
+
+  Future<void> _openSharedFile(String path) async {
+    // Pushed and read at startup in the same instant: open it once.
+    final now = DateTime.now();
+    if (_sharedFileOpened != null &&
+        now.difference(_sharedFileOpened!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _sharedFileOpened = now;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => SharedCodePage(path: path)),
+    );
+    // The bill changed: the home and the Extrato read again.
+    if (saved == true) _onHybridDataArrived();
+  }
+
   /// Opens the add-record flow on the expense (0) or income (1) tab.
   void _openAddFlow(String? action) {
     final tabIndex = action == 'add_income' ? 1 : 0;
@@ -371,6 +419,7 @@ class ShellState extends State<Shell> {
           return Scaffold(body: Center(child: CircularProgressIndicator()));
         } else {
           _handleWidgetQuickAction();
+          _handleSharedFiles();
           if (!_dinzoAutoSyncStarted && DemoMode.active) {
             // Demo: made-up data, no syncs (public crypto quotes only).
             _dinzoAutoSyncStarted = true;

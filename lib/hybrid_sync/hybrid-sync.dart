@@ -79,7 +79,10 @@ class HybridSync {
   /// older app showing one profile would leave them out), and money between
   /// the user's own accounts is stored, tagged "Entre contas" (an older app
   /// would count both sides as income and expense).
-  static const dataCompat = 4;
+  /// 5 (2026-11-05): an upcoming occurrence edited by hand leaves its
+  /// recurrence ("pular:" in payment_codes) and becomes an item of its own;
+  /// an older app would show both.
+  static const dataCompat = 5;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

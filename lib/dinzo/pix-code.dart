@@ -136,6 +136,36 @@ class PixCode {
     return null;
   }
 
+  /// Whether [digits] is a whole boleto barcode: 44 digits whose check digit
+  /// matches (a bank boleto's in position 5, a utility's in position 4). A
+  /// misread or a partial read of the bars fails it.
+  static bool isBoletoBarcode(String digits) {
+    if (!RegExp(r'^\d{44}$').hasMatch(digits)) return false;
+    if (digits.startsWith('8')) {
+      final rest = digits.substring(0, 3) + digits.substring(4);
+      final type = digits[2];
+      final String dv;
+      if (type == '6' || type == '7') {
+        dv = _mod10(rest);
+      } else if (type == '8' || type == '9') {
+        dv = _mod11(rest);
+      } else {
+        return false;
+      }
+      return digits[3] == dv;
+    }
+    final rest = digits.substring(0, 4) + digits.substring(5);
+    var sum = 0;
+    var weight = 2;
+    for (var i = rest.length - 1; i >= 0; i--) {
+      sum += int.parse(rest[i]) * weight;
+      weight = weight == 9 ? 2 : weight + 1;
+    }
+    final r = sum % 11;
+    final dv = r == 0 || r == 1 ? 1 : 11 - r;
+    return digits[4] == '$dv';
+  }
+
   /// The 44-digit boleto barcode (what the camera reads) as the digitable
   /// line bank apps show; anything else is returned as it came.
   static String boletoLine(String scanned) {

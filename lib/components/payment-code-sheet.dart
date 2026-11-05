@@ -1,5 +1,6 @@
 import 'package:aupp/components/code-scanner-page.dart';
 import 'package:aupp/components/known-tags.dart';
+import 'package:aupp/components/payment-code-file.dart';
 import 'package:aupp/desktop/desktop-layout.dart';
 import 'package:aupp/dinzo/pix-charge.dart';
 import 'package:aupp/dinzo/pix-code.dart';
@@ -54,9 +55,21 @@ class _PaymentCodeSheetState extends State<PaymentCodeSheet> {
     super.dispose();
   }
 
+  bool _reading = false;
+  String? _problem;
+
   Future<void> _scan() async {
     final code = await CodeScannerPage.scan(context);
     if (code != null) setState(() => _controller.text = code);
+  }
+
+  Future<void> _file() async {
+    final code = await PaymentCodeFile.pickAndRead(
+      context,
+      onReading: (v) => mounted ? setState(() => _reading = v) : null,
+      onProblem: (v) => mounted ? setState(() => _problem = v) : null,
+    );
+    if (code != null && mounted) setState(() => _controller.text = code);
   }
 
   Future<void> _paste() async {
@@ -78,7 +91,13 @@ class _PaymentCodeSheetState extends State<PaymentCodeSheet> {
       title: 'Pix ou boleto',
       subtitle: widget.subtitle,
       children: [
-        CodeSourceButtons(onScan: _scan, onPaste: _paste),
+        CodeSourceButtons(
+          onScan: _scan,
+          onFile: _file,
+          onPaste: _paste,
+          reading: _reading,
+          problem: _problem,
+        ),
         const SizedBox(height: 16),
         TextField(
           controller: _controller,
@@ -289,9 +308,22 @@ class _DefaultPixSheetState extends State<DefaultPixSheet> {
     super.dispose();
   }
 
+  bool _reading = false;
+  String? _problem;
+
   Future<void> _scan() async {
     final code = await CodeScannerPage.scan(context);
     if (code != null) setState(() => _key.text = code);
+  }
+
+  Future<void> _file() async {
+    final code = await PaymentCodeFile.pickAndRead(
+      context,
+      pixOnly: true,
+      onReading: (v) => mounted ? setState(() => _reading = v) : null,
+      onProblem: (v) => mounted ? setState(() => _problem = v) : null,
+    );
+    if (code != null && mounted) setState(() => _key.text = code);
   }
 
   Future<void> _paste() async {
@@ -311,7 +343,13 @@ class _DefaultPixSheetState extends State<DefaultPixSheet> {
       title: 'Pix padrão',
       subtitle: 'O mesmo Pix todo mês, já com o valor de cada conta',
       children: [
-        CodeSourceButtons(onScan: _scan, onPaste: _paste),
+        CodeSourceButtons(
+          onScan: _scan,
+          onFile: _file,
+          onPaste: _paste,
+          reading: _reading,
+          problem: _problem,
+        ),
         const SizedBox(height: 16),
         TextField(
           controller: _key,
@@ -485,44 +523,84 @@ class SheetBody extends StatelessWidget {
   }
 }
 
-/// "Escanear" (phone only) and "Colar", side by side.
+/// "Escanear" (phone only), "Arquivo" (a PDF or picture) and "Colar", side
+/// by side; [reading] shows the file is being read, [problem] what went
+/// wrong with it.
 class CodeSourceButtons extends StatelessWidget {
   final VoidCallback onScan;
+  final VoidCallback onFile;
   final VoidCallback onPaste;
+  final bool reading;
+  final String? problem;
 
   const CodeSourceButtons({
     super.key,
     required this.onScan,
+    required this.onFile,
     required this.onPaste,
+    this.reading = false,
+    this.problem,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final style = FilledButton.styleFrom(
-      minimumSize: const Size.fromHeight(52),
+      minimumSize: const Size.fromHeight(64),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );
-    return Row(
-      children: [
-        if (!isComputer) ...[
-          Expanded(
-            child: FilledButton.tonalIcon(
-              style: style,
-              onPressed: onScan,
-              icon: const Icon(Icons.photo_camera_outlined),
-              label: const Text('Escanear'),
+    Widget button(IconData icon, String label, VoidCallback? onPressed,
+            {bool busy = false}) =>
+        Expanded(
+          child: FilledButton.tonal(
+            style: style,
+            onPressed: reading ? null : onPressed,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                busy
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(icon),
+                const SizedBox(height: 4),
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-        ],
-        Expanded(
-          child: FilledButton.tonalIcon(
-            style: style,
-            onPressed: onPaste,
-            icon: const Icon(Icons.content_paste),
-            label: const Text('Colar'),
-          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            if (!isComputer) ...[
+              button(Icons.photo_camera_outlined, 'Escanear', onScan),
+              const SizedBox(width: 12),
+            ],
+            button(
+              Icons.upload_file,
+              reading ? 'Lendo…' : 'Arquivo',
+              onFile,
+              busy: reading,
+            ),
+            const SizedBox(width: 12),
+            button(Icons.content_paste, 'Colar', onPaste),
+          ],
         ),
+        if (problem != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              problem!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
       ],
     );
   }

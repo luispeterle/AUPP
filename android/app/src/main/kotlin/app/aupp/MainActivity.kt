@@ -23,6 +23,8 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingKeepUris: List<String> = emptyList()
     private var widgetChannel: MethodChannel? = null
     private var pendingWidgetAction: String? = null
+    private var sharedFileChannel: MethodChannel? = null
+    private var pendingSharedFile: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -51,6 +53,19 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
         handleWidgetIntent(intent)
+        // Fork: a PDF / picture shared with the app (ShareReceiverActivity),
+        // to read its Pix / boleto.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SHARED_FILE_CHANNEL)
+            .also { sharedFileChannel = it }
+            .setMethodCallHandler { call, result ->
+                if (call.method == "getInitialFile") {
+                    result.success(pendingSharedFile)
+                    pendingSharedFile = null
+                } else {
+                    result.notImplemented()
+                }
+            }
+        handleSharedFileIntent(intent)
         // Fork: real restart (new process), used after "Importar minha config"
         // so the import runs at startup before any screen or sync.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_CHANNEL)
@@ -188,6 +203,31 @@ class MainActivity : FlutterFragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleWidgetIntent(intent)
+        handleSharedFileIntent(intent)
+    }
+
+    /** Same as [handleWidgetIntent], for a file from ShareReceiverActivity. */
+    private fun handleSharedFileIntent(intent: Intent?) {
+        if (intent?.action != ACTION_SHARED_FILE) return
+        val path = intent.getStringExtra(EXTRA_PATH) ?: return
+        // Handled once: a later recreation does not open it again.
+        intent.action = null
+        // Kept until Flutter takes it: pushed now if the app is past the
+        // lock, otherwise read with getInitialFile once it is.
+        pendingSharedFile = path
+        sharedFileChannel?.invokeMethod(
+            "openSharedFile",
+            path,
+            object : MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (pendingSharedFile == path) pendingSharedFile = null
+                }
+
+                override fun error(code: String, message: String?, details: Any?) {}
+
+                override fun notImplemented() {}
+            },
+        )
     }
 
     /**
@@ -508,6 +548,9 @@ class MainActivity : FlutterFragmentActivity() {
         private const val CHANNEL = "aupp/backup_directory"
         private const val WIDGET_CHANNEL = "aupp/widget_action"
         private const val APP_CHANNEL = "aupp/app"
+        private const val SHARED_FILE_CHANNEL = "aupp/shared_file"
+        const val ACTION_SHARED_FILE = "app.aupp.SHARED_FILE"
+        const val EXTRA_PATH = "path"
         private const val REQUEST_PICK_BACKUP_DIRECTORY = 7941
         private const val PROBE_FILE_NAME = ".aupp_probe"
     }
