@@ -82,7 +82,10 @@ class HybridSync {
   /// 5 (2026-11-05): an upcoming occurrence edited by hand leaves its
   /// recurrence ("pular:" in payment_codes) and becomes an item of its own;
   /// an older app would show both.
-  static const dataCompat = 5;
+  /// 6 (2026-11-05): C6 Pix without "Pix" in the description and money in
+  /// on a bank account are no longer tagged "Débito"; an older app would tag
+  /// them back on its next Dinzo pull.
+  static const dataCompat = 6;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

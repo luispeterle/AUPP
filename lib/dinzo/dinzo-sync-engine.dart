@@ -305,7 +305,8 @@ class DinzoSyncEngine {
 
   /// A card bill paid from a bank account (both sides).
   bool isBillPayment(DinzoTransaction tx) =>
-      _billPaymentPairs.contains(tx.id) || _billPayment.hasMatch(tx.description);
+      _billPaymentPairs.contains(tx.id) ||
+      _billPayment.hasMatch(tx.description);
 
   /// Money between the user's own accounts (PJ to PF...): the counterparty
   /// is one of [DinzoConfig.selfIdentifiers].
@@ -502,9 +503,18 @@ class DinzoSyncEngine {
   );
   static final _transfer = RegExp(r'transfer[eê]ncia|\bted\b|\bdoc\b');
 
+  /// A card purchase as the card network writes it: merchant and city padded
+  /// to fixed width, then the country ("LOJA EXEMPL*LOJA EXE  CAMPINAS   BRA").
+  static final _cardDescriptor = RegExp(r'\s{2,}[a-z]{3}$');
+
+  /// C6 Tag (tolls, parking), debited from the account: "C6TAG PEDAGIO" or
+  /// the car's plate first ("ABC1D23-VIA SUL BR101...").
+  static final _c6Tag = RegExp(r'^(c6tag\b|[a-z]{3}\d[a-z\d]\d{2}-)');
+  static final _c6Investment = RegExp(r'\bcdb\b');
+
   /// How the money moved: card purchases are "Crédito"; on a bank account the
-  /// description tells Pix, boleto or transfer apart, and a plain merchant
-  /// name means a debit card purchase.
+  /// description tells Pix, boleto or transfer apart, and an expense with a
+  /// plain merchant name means a debit card purchase.
   String? methodTag(DinzoTransaction tx) {
     final account = accounts[tx.accountId];
     if (account == null) return null;
@@ -514,8 +524,24 @@ class DinzoSyncEngine {
     if (text.contains('pix')) return 'Pix';
     if (_boleto.hasMatch(text)) return 'Boleto';
     if (_transfer.hasMatch(text)) return 'Transferência';
-    if (account.connectorName == null) return null; // manual account
-    return 'Débito';
+    final connector = account.connectorName;
+    if (connector == null) return null; // manual account
+    if (KnownTag.bankIn(connector)?.name == 'C6') return _c6Method(tx);
+    return tx.isDebit ? 'Débito' : null;
+  }
+
+  /// C6 often sends a Pix as the other side's name alone ("CLINICA
+  /// EXEMPLO", "12.345.678 MARIA SOUZA"), with no "Pix" in it. Its debit
+  /// card purchases carry the card descriptor instead.
+  String? _c6Method(DinzoTransaction tx) {
+    final bank = (tx.originalDescription ?? tx.description)
+        .trim()
+        .toLowerCase();
+    if (_c6Investment.hasMatch(bank)) return null;
+    if (_cardDescriptor.hasMatch(bank) || _c6Tag.hasMatch(bank)) {
+      return tx.isDebit ? 'Débito' : null;
+    }
+    return 'Pix';
   }
 
   List<String> syncedTagsFor(DinzoTransaction tx) => [
@@ -538,8 +564,7 @@ class DinzoSyncEngine {
   /// The record as Dinzo alone would have it.
   DinzoSnapshot sourceFor(DinzoTransaction tx) {
     final multiplier = tx.isInstallment ? tx.installmentTotal! : 1;
-    final amount =
-        _installmentTotals[tx.id] ?? _round2(tx.amount * multiplier);
+    final amount = _installmentTotals[tx.id] ?? _round2(tx.amount * multiplier);
     return DinzoSnapshot(
       title: cleanTitle(tx.description),
       value: tx.isDebit ? -amount : amount,

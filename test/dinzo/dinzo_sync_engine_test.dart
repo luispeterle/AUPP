@@ -172,10 +172,22 @@ void main() {
       final p = plan([
         tx('a', amount: 57.16, current: 1, total: 6),
         // Another store, another card, another plan, far off in value.
-        tx('x', description: 'OUTRA', amount: 57.12, current: 2, total: 6,
-            date: '2026-11-05'),
-        tx('y', account: 'pf', amount: 57.12, current: 2, total: 6,
-            date: '2026-11-05'),
+        tx(
+          'x',
+          description: 'OUTRA',
+          amount: 57.12,
+          current: 2,
+          total: 6,
+          date: '2026-11-05',
+        ),
+        tx(
+          'y',
+          account: 'pf',
+          amount: 57.12,
+          current: 2,
+          total: 6,
+          date: '2026-11-05',
+        ),
         tx('z', amount: 57.12, current: 2, total: 3, date: '2026-11-05'),
         tx('w', amount: 50, current: 2, total: 6, date: '2026-11-05'),
       ]);
@@ -185,8 +197,12 @@ void main() {
 
     test('interest charged on a card is an expense, not an investment', () {
       final p = plan([
-        tx('j', category: 'juros', amount: 7.44,
-            description: 'Juros de dívida encerrada'),
+        tx(
+          'j',
+          category: 'juros',
+          amount: 7.44,
+          description: 'Juros de dívida encerrada',
+        ),
       ]);
       expect(p.items.single.kind, DinzoPlanKind.create);
       expect(p.items.single.desired!.value, -7.44);
@@ -212,29 +228,35 @@ void main() {
       expect(p.items.single.skipReason, DinzoSkipReason.hidden);
     });
 
-    test('transfers to and from the user come in marked, a bill is left out',
-        () {
-      final p = plan([
-        tx(
-          'f',
-          account: 'pj',
-          description: 'Transferência enviada pelo Pix|Fulano de Tal',
-        ),
-        tx(
-          'g',
-          account: 'pf',
-          type: 'CREDIT',
-          description: 'Transferência Recebida|12.345.678 FULANO',
-        ),
-        tx('h', account: 'pf', description: 'Pagamento efetuado|BANCO C6 S.A.'),
-      ]);
-      final byId = {for (final i in p.items) i.transaction!.id: i};
-      for (final id in ['f', 'g']) {
-        expect(byId[id]!.kind, DinzoPlanKind.create);
-        expect(byId[id]!.source!.tags, contains(MoneyAccounts.transferTag));
-      }
-      expect(byId['h']!.skipReason, DinzoSkipReason.internalTransfer);
-    });
+    test(
+      'transfers to and from the user come in marked, a bill is left out',
+      () {
+        final p = plan([
+          tx(
+            'f',
+            account: 'pj',
+            description: 'Transferência enviada pelo Pix|Fulano de Tal',
+          ),
+          tx(
+            'g',
+            account: 'pf',
+            type: 'CREDIT',
+            description: 'Transferência Recebida|12.345.678 FULANO',
+          ),
+          tx(
+            'h',
+            account: 'pf',
+            description: 'Pagamento efetuado|BANCO C6 S.A.',
+          ),
+        ]);
+        final byId = {for (final i in p.items) i.transaction!.id: i};
+        for (final id in ['f', 'g']) {
+          expect(byId[id]!.kind, DinzoPlanKind.create);
+          expect(byId[id]!.source!.tags, contains(MoneyAccounts.transferTag));
+        }
+        expect(byId['h']!.skipReason, DinzoSkipReason.internalTransfer);
+      },
+    );
 
     test('a card bill paid from a bank account is internal on both sides', () {
       final p = plan([
@@ -464,7 +486,30 @@ void main() {
         'Nubank PJ',
         'Transferência',
       ]);
-      expect(tagsOf('c6', 'CLINICA DR. SALVARO'), ['C6', 'Débito']);
+      // C6 sends a Pix as the other side's name alone; a debit card
+      // purchase has the card descriptor, ending in the country.
+      expect(tagsOf('c6', 'CLINICA DR. SALVARO'), ['C6', 'Pix']);
+      expect(tagsOf('c6', 'LOJA EXEMPLO*LOJA EXE CAMPINAS      BRA'), [
+        'C6',
+        'Débito',
+      ]);
+      expect(tagsOf('c6', 'ABC1D23-VIA SUL  BR101 357 NORTE TRES CA'), [
+        'C6',
+        'Débito',
+      ]);
+      expect(tagsOf('c6', 'C6TAG PEDAGIO'), ['C6', 'Débito']);
+      expect(tagsOf('c6', 'CDB C6 LIM. GARANT.'), ['C6']);
+      expect(tagsOf('mp', 'Pagamento Mercado Livre'), [
+        'Débito',
+        'Mercado Pago',
+      ]);
+      // Money in is never a debit card purchase.
+      List<String> creditTagsOf(String account, String description) =>
+          e.syncedTagsFor(
+            tx('y', account: account, description: description, type: 'CREDIT'),
+          );
+      expect(creditTagsOf('nupj', 'Resgate de Cashback'), ['Nubank PJ']);
+      expect(creditTagsOf('c6', 'MARIA EXEMPLO'), ['C6', 'Pix']);
     });
 
     test('a bank/method change in Dinzo updates the tags', () {
