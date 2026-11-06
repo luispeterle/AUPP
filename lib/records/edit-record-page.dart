@@ -56,21 +56,25 @@ class EditRecordPage extends StatefulWidget {
   /// Null means today.
   final DateTime? initialDate;
 
-  EditRecordPage(
-      {Key? key,
-      this.passedRecord,
-      this.passedCategory,
-      this.passedRecurrentRecordPattern,
-      this.readOnly = false,
-      this.initialWallet,
-      this.initialDestinationWallet,
-      this.isTransferFlow = false,
-      this.initialDate})
-      : super(key: key);
+  EditRecordPage({
+    Key? key,
+    this.passedRecord,
+    this.passedCategory,
+    this.passedRecurrentRecordPattern,
+    this.readOnly = false,
+    this.initialWallet,
+    this.initialDestinationWallet,
+    this.isTransferFlow = false,
+    this.initialDate,
+  }) : super(key: key);
 
   @override
-  EditRecordPageState createState() => EditRecordPageState(this.passedRecord,
-      this.passedCategory, this.passedRecurrentRecordPattern, this.readOnly);
+  EditRecordPageState createState() => EditRecordPageState(
+    this.passedRecord,
+    this.passedCategory,
+    this.passedRecurrentRecordPattern,
+    this.readOnly,
+  );
 }
 
 class EditRecordPageState extends State<EditRecordPage> {
@@ -110,6 +114,11 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   /// Forecast entry (see [DinzoSyncService.estimateTag]); never a transfer.
   bool _isEstimateChecked = false;
+
+  /// Fork: a new record made with "+" gets [DinzoSyncService.cashTag] by
+  /// itself, following estimate, transfer and Pix / boleto, until the user
+  /// adds or removes the tag.
+  bool _autoCash = false;
 
   /// Fork: an occurrence of an estimate (read-only view of a recurrence).
   bool get _isEstimateOccurrence =>
@@ -218,22 +227,30 @@ class EditRecordPageState extends State<EditRecordPage> {
   double? _originalValue;
   double? _originalTransferValue;
 
-  EditRecordPageState(this.passedRecord, this.passedCategory,
-      this.passedRecurrentRecordPattern, this.readOnly);
+  EditRecordPageState(
+    this.passedRecord,
+    this.passedCategory,
+    this.passedRecurrentRecordPattern,
+    this.readOnly,
+  );
 
   static final recurrentIntervalDropdownList = [
     DropdownMenuItem<int>(
-        value: RecurrentPeriod.EveryDay.index,
-        child: Text('Todo dia', style: TextStyle(fontSize: 18.0))),
+      value: RecurrentPeriod.EveryDay.index,
+      child: Text('Todo dia', style: TextStyle(fontSize: 18.0)),
+    ),
     DropdownMenuItem<int>(
-        value: RecurrentPeriod.EveryWeek.index,
-        child: Text('Toda semana', style: TextStyle(fontSize: 18.0))),
+      value: RecurrentPeriod.EveryWeek.index,
+      child: Text('Toda semana', style: TextStyle(fontSize: 18.0)),
+    ),
     DropdownMenuItem<int>(
-        value: RecurrentPeriod.EveryTwoWeeks.index,
-        child: Text('A cada duas semanas', style: TextStyle(fontSize: 18.0))),
+      value: RecurrentPeriod.EveryTwoWeeks.index,
+      child: Text('A cada duas semanas', style: TextStyle(fontSize: 18.0)),
+    ),
     DropdownMenuItem<int>(
-        value: RecurrentPeriod.EveryFourWeeks.index,
-        child: Text('A cada quatro semanas', style: TextStyle(fontSize: 18.0))),
+      value: RecurrentPeriod.EveryFourWeeks.index,
+      child: Text('A cada quatro semanas', style: TextStyle(fontSize: 18.0)),
+    ),
     DropdownMenuItem<int>(
       value: RecurrentPeriod.EveryMonth.index,
       child: Text('Todo mês', style: TextStyle(fontSize: 18.0)),
@@ -259,7 +276,8 @@ class EditRecordPageState extends State<EditRecordPage> {
   @override
   void initState() {
     super.initState();
-    isTransferFlow = widget.isTransferFlow ||
+    isTransferFlow =
+        widget.isTransferFlow ||
         passedRecord?.isTransfer == true ||
         passedRecurrentRecordPattern?.transferWalletId != null;
 
@@ -271,9 +289,9 @@ class EditRecordPageState extends State<EditRecordPage> {
       if (_isEditableOccurrence) {
         // Fork: an upcoming occurrence opens editable (see _saveOccurrence).
         readOnly = false;
-        _occurrenceBefore =
-            passedRecord!.copyWith(tags: Set.of(passedRecord!.tags))
-              ..occurrenceUtc = passedRecord!.occurrenceUtc;
+        _occurrenceBefore = passedRecord!.copyWith(
+          tags: Set.of(passedRecord!.tags),
+        )..occurrenceUtc = passedRecord!.occurrenceUtc;
       }
       // Capture original values to detect changes for pattern-linked records
       _originalUtcDateTime = passedRecord!.utcDateTime;
@@ -292,9 +310,9 @@ class EditRecordPageState extends State<EditRecordPage> {
           ? v.toInt().toString()
           : v.toString().replaceAll('.', getDecimalSeparator());
       if (record!.recurrencePatternId != null) {
-        database
-            .getRecurrentRecordPattern(record!.recurrencePatternId)
-            .then((value) {
+        database.getRecurrentRecordPattern(record!.recurrencePatternId).then((
+          value,
+        ) {
           if (value != null) {
             final start = value.localDateTime;
             final end = value.localEndDate;
@@ -303,8 +321,11 @@ class EditRecordPageState extends State<EditRecordPage> {
                   record!.isFutureRecord && !value.happensOnce;
               if (record!.isFutureRecord &&
                   end != null &&
-                  !DateTime(end.year, end.month, end.day)
-                      .isAfter(DateTime(start.year, start.month, start.day))) {
+                  !DateTime(
+                    end.year,
+                    end.month,
+                    end.day,
+                  ).isAfter(DateTime(start.year, start.month, start.day))) {
                 _singleOccurrencePattern = value;
               }
               recurrentPeriod = value.recurrentPeriod;
@@ -319,8 +340,7 @@ class EditRecordPageState extends State<EditRecordPage> {
       _paymentCode = passedRecord!.paymentCode;
       // Initialize selected tags for existing record
       _selectedTags = Set.from(record!.tags);
-      _isEstimateChecked =
-          _selectedTags.contains(DinzoSyncService.estimateTag);
+      _isEstimateChecked = _selectedTags.contains(DinzoSyncService.estimateTag);
       _originalTitle = record!.title;
       _originalCategoryName = record!.category?.name;
     } else if (passedRecurrentRecordPattern != null) {
@@ -367,8 +387,7 @@ class EditRecordPageState extends State<EditRecordPage> {
           .paymentCodes[RecurrentRecordPattern.pixNameKey];
       // Initialize selected tags for existing recurrent pattern
       _selectedTags = Set.from(passedRecurrentRecordPattern!.tags);
-      _isEstimateChecked =
-          _selectedTags.contains(DinzoSyncService.estimateTag);
+      _isEstimateChecked = _selectedTags.contains(DinzoSyncService.estimateTag);
     } else {
       // I am adding a new record
       // Create a new record with a UTC timestamp and the current local timezone
@@ -377,7 +396,12 @@ class EditRecordPageState extends State<EditRecordPage> {
       final recordDateTime = preset == null
           ? now
           : DateTime(
-              preset.year, preset.month, preset.day, now.hour, now.minute);
+              preset.year,
+              preset.month,
+              preset.day,
+              now.hour,
+              now.minute,
+            );
       record = Record(
         null,
         null,
@@ -392,8 +416,10 @@ class EditRecordPageState extends State<EditRecordPage> {
       _selectedTags = {
         record!.transferWalletId != null
             ? DinzoSyncService.virtualTag
-            : DinzoSyncService.manualTag
+            : DinzoSyncService.manualTag,
       };
+      _autoCash = true;
+      _applyAutoCash(isTransfer: record!.transferWalletId != null);
       if (record!.value == null) {
         final zeroText = buildZeroAmountText();
         if (zeroText != '0') {
@@ -432,8 +458,8 @@ class EditRecordPageState extends State<EditRecordPage> {
 
     categorySign =
         isTransferFlow || record?.category?.categoryType == CategoryType.expense
-            ? "-"
-            : "+";
+        ? "-"
+        : "+";
 
     String initialValue = record?.title ?? "";
     _typeAheadController.text = initialValue;
@@ -451,8 +477,12 @@ class EditRecordPageState extends State<EditRecordPage> {
       return Container();
     }
     return Padding(
-      padding:
-          const EdgeInsets.only(bottom: 40.0, top: 10, right: 16, left: 16),
+      padding: const EdgeInsets.only(
+        bottom: 40.0,
+        top: 10,
+        right: 16,
+        left: 16,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -473,24 +503,27 @@ class EditRecordPageState extends State<EditRecordPage> {
             child: Semantics(
               identifier: 'note-field',
               child: TextFormField(
-                  onChanged: (text) {
-                    setState(() {
-                      record!.description = text;
-                    });
-                  },
-                  enabled: !readOnly,
-                  style: TextStyle(
-                      fontSize: 18.0,
-                      color: Theme.of(context).colorScheme.onSurface),
-                  initialValue: record!.description,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                      hintText: 'Adicione uma nota',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.fromLTRB(20, 10, 10, 10),
-                      label: Text("Note"))),
+                onChanged: (text) {
+                  setState(() {
+                    record!.description = text;
+                  });
+                },
+                enabled: !readOnly,
+                style: TextStyle(
+                  fontSize: 18.0,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                initialValue: record!.description,
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                decoration: InputDecoration(
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText: 'Adicione uma nota',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.fromLTRB(20, 10, 10, 10),
+                  label: Text("Note"),
+                ),
+              ),
             ),
           ),
         ],
@@ -522,45 +555,47 @@ class EditRecordPageState extends State<EditRecordPage> {
                 return Semantics(
                   identifier: 'record-name-field',
                   child: TextFormField(
-                      enabled: !readOnly,
-                      controller: controller,
-                      focusNode: focusNode,
-                      onChanged: (text) {
-                        setState(() {
-                          record!.title = text;
-                        });
-                      },
-                      style: TextStyle(
-                          fontSize: 18,
-                          color: Theme.of(context).colorScheme.onSurface),
-                      maxLines: 1,
-                      keyboardType: TextInputType.text,
-                      decoration: InputDecoration(
-                          floatingLabelBehavior: FloatingLabelBehavior.always,
-                          contentPadding: EdgeInsets.fromLTRB(20, 10, 10, 10),
-                          border: InputBorder.none,
-                          hintText: record!.category?.name ?? 'Nome do Item',
-                          labelText: 'Nome do Item')),
+                    enabled: !readOnly,
+                    controller: controller,
+                    focusNode: focusNode,
+                    onChanged: (text) {
+                      setState(() {
+                        record!.title = text;
+                      });
+                    },
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    maxLines: 1,
+                    keyboardType: TextInputType.text,
+                    decoration: InputDecoration(
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      contentPadding: EdgeInsets.fromLTRB(20, 10, 10, 10),
+                      border: InputBorder.none,
+                      hintText: record!.category?.name ?? 'Nome do Item',
+                      labelText: 'Nome do Item',
+                    ),
+                  ),
                 );
               },
               suggestionsCallback: (search) {
-                if (search.isNotEmpty &&
-                    record!.category != null) {
+                if (search.isNotEmpty && record!.category != null) {
                   return database.suggestedRecordTitles(
-                      search, record!.category!.name!);
+                    search,
+                    record!.category!.name!,
+                  );
                 }
                 return null;
               },
               itemBuilder: (context, record) {
-                return ListTile(
-                  title: Text(record),
-                );
+                return ListTile(title: Text(record));
               },
               onSelected: (selectedTitle) => {
                 _typeAheadController.text = selectedTitle,
                 setState(() {
                   record!.title = selectedTitle;
-                })
+                }),
               },
               hideOnEmpty: true,
             ),
@@ -582,10 +617,15 @@ class EditRecordPageState extends State<EditRecordPage> {
         if (selectedCategory == null || !mounted) return;
         if (_fromDinzo) {
           if (selectedCategory.categoryType != category?.categoryType) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(category?.categoryType == CategoryType.expense
-                    ? 'Lançamento da Dinzo: escolha uma categoria de despesa.'
-                    : 'Lançamento da Dinzo: escolha uma categoria de receita.')));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  category?.categoryType == CategoryType.expense
+                      ? 'Lançamento da Dinzo: escolha uma categoria de despesa.'
+                      : 'Lançamento da Dinzo: escolha uma categoria de receita.',
+                ),
+              ),
+            );
             return;
           }
           // The amount comes from the bank: only the category changes.
@@ -607,16 +647,15 @@ class EditRecordPageState extends State<EditRecordPage> {
                   ? CategoryIconCircle(
                       iconEmoji: category.iconEmoji,
                       iconDataFromDefaultIconSet: category.icon,
-                      backgroundColor: category.color)
+                      backgroundColor: category.color,
+                    )
                   : SizedBox(
                       width: 40,
                       child: Center(
                         child: Icon(
                           Icons.category_outlined,
                           size: 28,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -630,10 +669,8 @@ class EditRecordPageState extends State<EditRecordPage> {
                     style: TextStyle(
                       fontSize: 18,
                       color: category == null
-                          ? Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant
-                              .withValues(alpha: 0.5)
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.5)
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -641,11 +678,15 @@ class EditRecordPageState extends State<EditRecordPage> {
               ),
               // Fork: which budget group the category counts in.
               if (category?.categoryType == CategoryType.expense)
-                BudgetGroupLabel(_selectedTags.contains(outOfBudgetTag)
-                    ? outOfBudget
-                    : BudgetPlan.decode(ServiceConfig.sharedPreferences
-                            ?.getString(PreferencesKeys.budgetPlan))
-                        ?.groupOfCategory(category!.name)),
+                BudgetGroupLabel(
+                  _selectedTags.contains(outOfBudgetTag)
+                      ? outOfBudget
+                      : BudgetPlan.decode(
+                          ServiceConfig.sharedPreferences?.getString(
+                            PreferencesKeys.budgetPlan,
+                          ),
+                        )?.groupOfCategory(category!.name),
+                ),
             ],
           ),
         ),
@@ -659,7 +700,8 @@ class EditRecordPageState extends State<EditRecordPage> {
     return WalletTransferRow(
       selectedWallet: _selectedWallet,
       selectedDestinationWallet: _selectedDestinationWallet,
-      showTransferSide: !_fromDinzo &&
+      showTransferSide:
+          !_fromDinzo &&
           (isTransferFlow || (isExpense && _totalWalletCount > 1)),
       requireDestination: isTransferFlow,
       readOnly: _locked && !_dinzoWalletEditable,
@@ -687,15 +729,16 @@ class EditRecordPageState extends State<EditRecordPage> {
     final bool isRecordFromPattern = record!.recurrencePatternId != null;
 
     final bool showRepeatRow = record!.id == null || recurrentPeriod != null;
-    final bool showEndDateRow = recurrentPeriod != null &&
+    final bool showEndDateRow =
+        recurrentPeriod != null &&
         (!isRecordFromPattern || localDisplayEndDate != null);
 
-    final bool canChangeRepeat = !_locked &&
-        record!.id == null &&
-        record!.recurrencePatternId == null;
+    final bool canChangeRepeat =
+        !_locked && record!.id == null && record!.recurrencePatternId == null;
     final bool canChangeEndDate = !_locked && !isRecordFromPattern;
 
-    final bool showClearRepeat = record!.id == null &&
+    final bool showClearRepeat =
+        record!.id == null &&
         record!.recurrencePatternId == null &&
         recurrentPeriod != null;
     final bool showClearEndDate =
@@ -737,17 +780,20 @@ class EditRecordPageState extends State<EditRecordPage> {
                       // An upcoming occurrence can be months ahead.
                       final lastDate = DateTime.now().add(Duration(days: 365));
                       DateTime? result = await showDatePicker(
-                          context: context,
-                          initialDate: initialDate,
-                          firstDate: DateTime(1970),
-                          lastDate: initialDate.isAfter(lastDate)
-                              ? DateTime(initialDate.year + 1, 12, 31)
-                              : lastDate,
-                          builder: (BuildContext context, Widget? child) {
-                            return DatePickerUtils
-                                .buildDatePickerWithFirstDayOfWeek(
-                                    context, child, firstDayOfWeek);
-                          });
+                        context: context,
+                        initialDate: initialDate,
+                        firstDate: DateTime(1970),
+                        lastDate: initialDate.isAfter(lastDate)
+                            ? DateTime(initialDate.year + 1, 12, 31)
+                            : lastDate,
+                        builder: (BuildContext context, Widget? child) {
+                          return DatePickerUtils.buildDatePickerWithFirstDayOfWeek(
+                            context,
+                            child,
+                            firstDayOfWeek,
+                          );
+                        },
+                      );
                       if (result != null) {
                         setState(() {
                           // Something that happens once (a one-off estimate
@@ -760,9 +806,11 @@ class EditRecordPageState extends State<EditRecordPage> {
                           localDisplayDate = result;
                           _hasTime = false;
                           _selectedTime = null;
-                          record!.utcDateTime =
-                              DateTime(result.year, result.month, result.day)
-                                  .toUtc();
+                          record!.utcDateTime = DateTime(
+                            result.year,
+                            result.month,
+                            result.day,
+                          ).toUtc();
                           record!.timeZoneName = ServiceConfig.localTimezone;
                         });
                       }
@@ -790,10 +838,11 @@ class EditRecordPageState extends State<EditRecordPage> {
                               minFontSize: 10,
                               group: _dateTimeSizeGroup,
                               style: TextStyle(
-                                  fontSize: 18,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant),
+                                fontSize: 18,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ),
@@ -817,8 +866,13 @@ class EditRecordPageState extends State<EditRecordPage> {
                       _hasTime = true;
                       _selectedTime = result;
                       DateTime date = localDisplayDate ?? DateTime.now();
-                      DateTime localDateTime = DateTime(date.year, date.month,
-                          date.day, result.hour, result.minute);
+                      DateTime localDateTime = DateTime(
+                        date.year,
+                        date.month,
+                        date.day,
+                        result.hour,
+                        result.minute,
+                      );
                       record!.utcDateTime = localDateTime.toUtc();
                       record!.timeZoneName = ServiceConfig.localTimezone;
                     });
@@ -831,8 +885,11 @@ class EditRecordPageState extends State<EditRecordPage> {
                           _hasTime = false;
                           _selectedTime = null;
                           DateTime date = localDisplayDate ?? DateTime.now();
-                          record!.utcDateTime =
-                              DateTime(date.year, date.month, date.day).toUtc();
+                          record!.utcDateTime = DateTime(
+                            date.year,
+                            date.month,
+                            date.day,
+                          ).toUtc();
                           record!.timeZoneName = ServiceConfig.localTimezone;
                         });
                       },
@@ -860,8 +917,13 @@ class EditRecordPageState extends State<EditRecordPage> {
                           _hasTime = true;
                           _selectedTime = result;
                           DateTime date = localDisplayDate ?? DateTime.now();
-                          DateTime localDateTime = DateTime(date.year,
-                              date.month, date.day, result.hour, result.minute);
+                          DateTime localDateTime = DateTime(
+                            date.year,
+                            date.month,
+                            date.day,
+                            result.hour,
+                            result.minute,
+                          );
                           record!.utcDateTime = localDateTime.toUtc();
                           record!.timeZoneName = ServiceConfig.localTimezone;
                         });
@@ -875,9 +937,11 @@ class EditRecordPageState extends State<EditRecordPage> {
                               _selectedTime = null;
                               DateTime date =
                                   localDisplayDate ?? DateTime.now();
-                              record!.utcDateTime =
-                                  DateTime(date.year, date.month, date.day)
-                                      .toUtc();
+                              record!.utcDateTime = DateTime(
+                                date.year,
+                                date.month,
+                                date.day,
+                              ).toUtc();
                               record!.timeZoneName =
                                   ServiceConfig.localTimezone;
                             });
@@ -895,10 +959,8 @@ class EditRecordPageState extends State<EditRecordPage> {
                           fontSize: 18,
                           color: _hasTime && _selectedTime != null
                               ? Theme.of(context).colorScheme.onSurfaceVariant
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant
-                                  .withValues(alpha: 0.4),
+                              : Theme.of(context).colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.4),
                         ),
                       ),
                     ),
@@ -912,282 +974,300 @@ class EditRecordPageState extends State<EditRecordPage> {
           visible: showRepeatRow,
           child: Column(
             children: [
-              Divider(
-                indent: 75,
-                thickness: 1,
-              ),
+              Divider(indent: 75, thickness: 1),
               Semantics(
                 identifier: 'repeat-field',
                 child: InkWell(
-                    child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                            16, 0, 16, showEndDateRow ? 0 : 12),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 40,
-                              child: Center(
-                                child: Icon(Icons.repeat,
-                                    size: 28,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant),
-                              ),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      0,
+                      16,
+                      showEndDateRow ? 0 : 12,
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 40,
+                          child: Center(
+                            child: Icon(
+                              Icons.repeat,
+                              size: 28,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
-                            Expanded(
-                              child: Container(
-                                margin: EdgeInsets.only(left: 20, right: 10),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                        child: DropdownButton<int>(
-                                      iconSize: 0.0,
-                                      items: recurrentIntervalDropdownList,
-                                      selectedItemBuilder: (context) =>
-                                          recurrentIntervalDropdownList
-                                              .map((item) {
-                                        final period =
-                                            RecurrentPeriod.values[item.value!];
-                                        return Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            recurrentPeriodDisplayString(period,
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            margin: EdgeInsets.only(left: 20, right: 10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: DropdownButton<int>(
+                                    iconSize: 0.0,
+                                    items: recurrentIntervalDropdownList,
+                                    selectedItemBuilder: (context) =>
+                                        recurrentIntervalDropdownList.map((
+                                          item,
+                                        ) {
+                                          final period = RecurrentPeriod
+                                              .values[item.value!];
+                                          return Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              recurrentPeriodDisplayString(
+                                                period,
                                                 customIntervalValue:
                                                     _customIntervalValue,
                                                 customIntervalUnit:
-                                                    _customIntervalUnit),
-                                            style: TextStyle(
+                                                    _customIntervalUnit,
+                                              ),
+                                              style: TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.normal,
                                                 color: Theme.of(context)
                                                     .colorScheme
-                                                    .onSurfaceVariant),
-                                          ),
-                                        );
-                                      }).toList(),
-                                      onChanged: canChangeRepeat
-                                          ? (value) async {
-                                              if (value == null) return;
-                                              if (value ==
-                                                  RecurrentPeriod
-                                                      .Custom.index) {
-                                                // Open a dialog rather than
-                                                // committing to Custom
-                                                // immediately: this keeps
-                                                // recurrentPeriod/Index
-                                                // untouched (so the dropdown
-                                                // stays on its previous
-                                                // selection) unless the user
-                                                // explicitly confirms a valid
-                                                // interval. Dismissing via
-                                                // the barrier, back button, or
-                                                // Cancel all resolve to null.
-                                                final result = await showDialog<
-                                                    CustomIntervalSelection>(
-                                                  context: context,
-                                                  builder: (context) =>
-                                                      CustomIntervalDialog(
-                                                    initialValue:
-                                                        _customIntervalValue,
-                                                    initialUnit:
-                                                        _customIntervalUnit,
-                                                  ),
-                                                );
-                                                if (result == null) return;
-                                                setState(() {
-                                                  recurrentPeriodIndex = value;
-                                                  recurrentPeriod =
-                                                      RecurrentPeriod.Custom;
-                                                  _customIntervalValue =
-                                                      result.value;
-                                                  _customIntervalUnit =
-                                                      result.unit;
-                                                });
-                                              } else {
-                                                setState(() {
-                                                  recurrentPeriodIndex = value;
-                                                  recurrentPeriod =
-                                                      RecurrentPeriod
-                                                          .values[value];
-                                                });
-                                              }
+                                                    .onSurfaceVariant,
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                    onChanged: canChangeRepeat
+                                        ? (value) async {
+                                            if (value == null) return;
+                                            if (value ==
+                                                RecurrentPeriod.Custom.index) {
+                                              // Open a dialog rather than
+                                              // committing to Custom
+                                              // immediately: this keeps
+                                              // recurrentPeriod/Index
+                                              // untouched (so the dropdown
+                                              // stays on its previous
+                                              // selection) unless the user
+                                              // explicitly confirms a valid
+                                              // interval. Dismissing via
+                                              // the barrier, back button, or
+                                              // Cancel all resolve to null.
+                                              final result =
+                                                  await showDialog<
+                                                    CustomIntervalSelection
+                                                  >(
+                                                    context: context,
+                                                    builder: (context) =>
+                                                        CustomIntervalDialog(
+                                                          initialValue:
+                                                              _customIntervalValue,
+                                                          initialUnit:
+                                                              _customIntervalUnit,
+                                                        ),
+                                                  );
+                                              if (result == null) return;
+                                              setState(() {
+                                                recurrentPeriodIndex = value;
+                                                recurrentPeriod =
+                                                    RecurrentPeriod.Custom;
+                                                _customIntervalValue =
+                                                    result.value;
+                                                _customIntervalUnit =
+                                                    result.unit;
+                                              });
+                                            } else {
+                                              setState(() {
+                                                recurrentPeriodIndex = value;
+                                                recurrentPeriod =
+                                                    RecurrentPeriod
+                                                        .values[value];
+                                              });
                                             }
-                                          : null,
-                                      onTap: () {
-                                        FocusScope.of(context).unfocus();
-                                      },
-                                      value: recurrentPeriodIndex,
-                                      underline: SizedBox(),
-                                      isExpanded: true,
-                                      hint: Text(
-                                        'Não repetir',
-                                        style: TextStyle(
-                                            fontSize: 18,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant),
-                                      ),
-                                    )),
-                                    Visibility(
-                                      child: IconButton(
-                                        icon: Icon(Icons.close,
-                                            size: 28,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface),
-                                        onPressed: () {
-                                          setState(() {
-                                            recurrentPeriod = null;
-                                            recurrentPeriodIndex = null;
-                                            _customIntervalValue = null;
-                                            _customIntervalUnit = null;
-                                          });
-                                        },
-                                      ),
-                                      visible: showClearRepeat,
-                                    )
-                                  ],
-                                ),
-                              ),
-                            )
-                          ],
-                        ))),
-              ),
-              // End Date Picker - visible when recurrent period is selected and end date is set
-              Visibility(
-                visible: showEndDateRow,
-                child: Column(
-                  children: [
-                    Divider(
-                      indent: 75,
-                      thickness: 1,
-                    ),
-                    Semantics(
-                      identifier: 'end-date-field',
-                      child: InkWell(
-                          onTap: canChangeEndDate
-                              ? () async {
-                                  FocusScope.of(context).unfocus();
-                                  // Default to 30 days from now (not 1 year, which is confusing)
-                                  DateTime initialDate = localDisplayEndDate ??
-                                      DateTime.now().add(Duration(days: 30));
-                                  int firstDayOfWeek = getFirstDayOfWeekIndex();
-                                  DateTime? result = await showDatePicker(
-                                      context: context,
-                                      initialDate: initialDate,
-                                      firstDate:
-                                          localDisplayDate ?? DateTime(1970),
-                                      lastDate: DateTime.now()
-                                          .add(Duration(days: 365 * 10)),
-                                      builder: (BuildContext context,
-                                          Widget? child) {
-                                        return DatePickerUtils
-                                            .buildDatePickerWithFirstDayOfWeek(
-                                                context, child, firstDayOfWeek);
-                                      });
-                                  if (result != null) {
-                                    setState(() {
-                                      localDisplayEndDate = result;
-                                    });
-                                  }
-                                }
-                              : null,
-                          child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 40,
-                                    child: Center(
-                                      child: Icon(
-                                        Icons.event_busy,
-                                        size: 28,
+                                          }
+                                        : null,
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                    },
+                                    value: recurrentPeriodIndex,
+                                    underline: SizedBox(),
+                                    isExpanded: true,
+                                    hint: Text(
+                                      'Não repetir',
+                                      style: TextStyle(
+                                        fontSize: 18,
                                         color: Theme.of(context)
                                             .colorScheme
                                             .onSurfaceVariant,
                                       ),
                                     ),
                                   ),
-                                  Expanded(
-                                    child: Container(
-                                      margin:
-                                          EdgeInsets.only(left: 20, right: 10),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Data de término (opcional)',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant
-                                                        .withValues(alpha: 0.7),
-                                                  ),
-                                                ),
-                                                SizedBox(height: 4),
-                                                Text(
-                                                  localDisplayEndDate != null
-                                                      ? getDateStr(
-                                                          localDisplayEndDate!)
-                                                      : 'Não definido',
-                                                  style: TextStyle(
-                                                    fontSize: 18,
-                                                    color: localDisplayEndDate !=
-                                                            null
-                                                        ? Theme.of(context)
-                                                            .colorScheme
-                                                            .onSurface
-                                                        : Theme.of(context)
-                                                            .colorScheme
-                                                            .onSurfaceVariant,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Visibility(
-                                            child: IconButton(
-                                              icon: Icon(Icons.close,
-                                                  size: 28,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface),
-                                              onPressed: () {
-                                                setState(() {
-                                                  localDisplayEndDate = null;
-                                                });
-                                              },
-                                            ),
-                                            visible: showClearEndDate,
-                                          ),
-                                        ],
-                                      ),
+                                ),
+                                Visibility(
+                                  child: IconButton(
+                                    icon: Icon(
+                                      Icons.close,
+                                      size: 28,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
                                     ),
+                                    onPressed: () {
+                                      setState(() {
+                                        recurrentPeriod = null;
+                                        recurrentPeriodIndex = null;
+                                        _customIntervalValue = null;
+                                        _customIntervalUnit = null;
+                                      });
+                                    },
                                   ),
-                                ],
-                              ))),
+                                  visible: showClearRepeat,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // End Date Picker - visible when recurrent period is selected and end date is set
+              Visibility(
+                visible: showEndDateRow,
+                child: Column(
+                  children: [
+                    Divider(indent: 75, thickness: 1),
+                    Semantics(
+                      identifier: 'end-date-field',
+                      child: InkWell(
+                        onTap: canChangeEndDate
+                            ? () async {
+                                FocusScope.of(context).unfocus();
+                                // Default to 30 days from now (not 1 year, which is confusing)
+                                DateTime initialDate =
+                                    localDisplayEndDate ??
+                                    DateTime.now().add(Duration(days: 30));
+                                int firstDayOfWeek = getFirstDayOfWeekIndex();
+                                DateTime? result = await showDatePicker(
+                                  context: context,
+                                  initialDate: initialDate,
+                                  firstDate: localDisplayDate ?? DateTime(1970),
+                                  lastDate: DateTime.now().add(
+                                    Duration(days: 365 * 10),
+                                  ),
+                                  builder: (BuildContext context, Widget? child) {
+                                    return DatePickerUtils.buildDatePickerWithFirstDayOfWeek(
+                                      context,
+                                      child,
+                                      firstDayOfWeek,
+                                    );
+                                  },
+                                );
+                                if (result != null) {
+                                  setState(() {
+                                    localDisplayEndDate = result;
+                                  });
+                                }
+                              }
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 40,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.event_busy,
+                                    size: 28,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Container(
+                                  margin: EdgeInsets.only(left: 20, right: 10),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Data de término (opcional)',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                                    .withValues(alpha: 0.7),
+                                              ),
+                                            ),
+                                            SizedBox(height: 4),
+                                            Text(
+                                              localDisplayEndDate != null
+                                                  ? getDateStr(
+                                                      localDisplayEndDate!,
+                                                    )
+                                                  : 'Não definido',
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                color:
+                                                    localDisplayEndDate != null
+                                                    ? Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurface
+                                                    : Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Visibility(
+                                        child: IconButton(
+                                          icon: Icon(
+                                            Icons.close,
+                                            size: 28,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              localDisplayEndDate = null;
+                                            });
+                                          },
+                                        ),
+                                        visible: showClearEndDate,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
 
   Widget _createAmountCard() {
-    final shouldAutofocus = !_locked &&
+    final shouldAutofocus =
+        !_locked &&
         passedRecord == null &&
         passedRecurrentRecordPattern == null;
 
@@ -1239,7 +1319,8 @@ class EditRecordPageState extends State<EditRecordPage> {
                     allowNegative: false,
                     autofocus: shouldAutofocus,
                     onChanged: changeRecordValue,
-                    validator: isTransferFlow || _selectedDestinationWallet != null
+                    validator:
+                        isTransferFlow || _selectedDestinationWallet != null
                         ? _validatePositiveTransferAmount
                         : null,
                   ),
@@ -1297,7 +1378,8 @@ class EditRecordPageState extends State<EditRecordPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: MarkupText(
-              'Selecione as carteiras de <b>origem</b> e <b>destino</b>'),
+            'Selecione as carteiras de <b>origem</b> e <b>destino</b>',
+          ),
         ),
       );
       return;
@@ -1316,14 +1398,15 @@ class EditRecordPageState extends State<EditRecordPage> {
     record!.tags = _selectedTags; // Assign selected tags to the record
     _logger.debug('Saving record with ${_selectedTags.length} tags');
     if (record!.recurrencePatternId != null) {
-      final dateChanged = _originalUtcDateTime != null &&
+      final dateChanged =
+          _originalUtcDateTime != null &&
           record!.utcDateTime.millisecondsSinceEpoch !=
               _originalUtcDateTime!.millisecondsSinceEpoch;
       final amountChanged =
           _originalValue != null && record!.value != _originalValue;
       final receivedAmountChanged =
           (record!.transferValue ?? record!.value?.abs()) !=
-              (_originalTransferValue ?? _originalValue?.abs());
+          (_originalTransferValue ?? _originalValue?.abs());
       if (dateChanged || amountChanged || receivedAmountChanged) {
         record!.recurrencePatternId = null;
       }
@@ -1356,11 +1439,29 @@ class EditRecordPageState extends State<EditRecordPage> {
       ..remove(DinzoSyncService.manualTag)
       ..remove(DinzoSyncService.virtualTag)
       ..remove(DinzoSyncService.estimateTag)
-      ..add(estimate
-          ? DinzoSyncService.estimateTag
-          : isTransfer
-              ? DinzoSyncService.virtualTag
-              : DinzoSyncService.manualTag);
+      ..add(
+        estimate
+            ? DinzoSyncService.estimateTag
+            : isTransfer
+            ? DinzoSyncService.virtualTag
+            : DinzoSyncService.manualTag,
+      );
+    _applyAutoCash(isTransfer: isTransfer);
+  }
+
+  /// Puts or takes off the automatic "Dinheiro" tag ([_autoCash]): an
+  /// estimate, a transfer or a Pix / boleto is not paid in cash.
+  void _applyAutoCash({required bool isTransfer}) {
+    if (!_autoCash) return;
+    final cash =
+        !_isEstimate &&
+        !isTransfer &&
+        Record.billingKindOf(_selectedTags) == null;
+    if (cash) {
+      _selectedTags.add(DinzoSyncService.cashTag);
+    } else {
+      _selectedTags.remove(DinzoSyncService.cashTag);
+    }
   }
 
   /// Estimates become a recurrent pattern tagged [estimateTag]; without a
@@ -1372,11 +1473,18 @@ class EditRecordPageState extends State<EditRecordPage> {
     _isEstimateChecked = true;
     final date = localDisplayDate ?? DateTime.now();
     final today = DateTime.now();
-    if (!DateTime(date.year, date.month, date.day)
-        .isAfter(DateTime(today.year, today.month, today.day))) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    if (!DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).isAfter(DateTime(today.year, today.month, today.day))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
           content: Text(
-              'A estimativa precisa de uma data futura: ela some quando o dia chega.')));
+            'A estimativa precisa de uma data futura: ela some quando o dia chega.',
+          ),
+        ),
+      );
       return false;
     }
     if (recurrentPeriod == null) {
@@ -1392,20 +1500,25 @@ class EditRecordPageState extends State<EditRecordPage> {
       value: _isEstimateChecked || forced,
       onChanged: forced || readOnly
           ? null
-          : (v) => setState(() => _isEstimateChecked = v ?? false),
+          : (v) => setState(() {
+              _isEstimateChecked = v ?? false;
+              _applyAutoCash(isTransfer: _selectedDestinationWallet != null);
+            }),
       secondary: const Icon(Icons.query_stats, color: Color(0xFFF9A825)),
       title: const Text('Estimativa'),
-      subtitle: Text(forced
-          ? 'Os lançamentos reais vêm da Dinzo, então um lançamento avulso '
-              'vira estimativa (data futura). Para um recorrente de verdade, '
-              'como o vale-alimentação, escolha uma repetição. Dá pra liberar '
-              'lançamentos manuais em Configurações → Integrações com API.'
-          : _isEditableOccurrence
-          ? 'Desmarque e salve para virar um lançamento real nesta data, com '
-              'estes dados. As outras ocorrências continuam estimativa.'
-          : 'Para prever os próximos meses. Fica no Extrato até ser vinculada '
-              'ao lançamento real: segure a estimativa e toque no lançamento. '
-              'Use a repetição para salário e gastos médios.'),
+      subtitle: Text(
+        forced
+            ? 'Os lançamentos reais vêm da Dinzo, então um lançamento avulso '
+                  'vira estimativa (data futura). Para um recorrente de verdade, '
+                  'como o vale-alimentação, escolha uma repetição. Dá pra liberar '
+                  'lançamentos manuais em Configurações → Integrações com API.'
+            : _isEditableOccurrence
+            ? 'Desmarque e salve para virar um lançamento real nesta data, com '
+                  'estes dados. As outras ocorrências continuam estimativa.'
+            : 'Para prever os próximos meses. Fica no Extrato até ser vinculada '
+                  'ao lançamento real: segure a estimativa e toque no lançamento. '
+                  'Use a repetição para salário e gastos médios.',
+      ),
     );
   }
 
@@ -1420,17 +1533,21 @@ class EditRecordPageState extends State<EditRecordPage> {
         children: [
           SizedBox(
             width: 40,
-            child: Icon(Icons.qr_code_2,
-                size: 28,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            child: Icon(
+              Icons.qr_code_2,
+              size: 28,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Pago com boleto ou Pix',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Pago com boleto ou Pix',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 2),
                 Text(
                   'Cada ocorrência pede o código dela. Sem ele, o ícone '
@@ -1449,6 +1566,9 @@ class EditRecordPageState extends State<EditRecordPage> {
                   onSelectionChanged: (v) => setState(() {
                     _selectedTags.removeAll(Record.billingTags);
                     if (v.first.isNotEmpty) _selectedTags.add(v.first);
+                    _applyAutoCash(
+                      isTransfer: _selectedDestinationWallet != null,
+                    );
                   }),
                 ),
                 if (kind == 'Pix') _createDefaultPixTile(),
@@ -1471,11 +1591,11 @@ class EditRecordPageState extends State<EditRecordPage> {
       subtitle: Text(
         pix == null
             ? 'Toque para definir a chave da pessoa: cada mês já sai com o '
-                'valor'
+                  'valor'
             : PixCode.isPayload(pix)
-                ? 'Copia-e-cola fixo'
-                : 'Chave ${PixCode.normalizeKey(pix)}'
-                    '${_pixName == null ? '' : ' · $_pixName'} · com o valor',
+            ? 'Copia-e-cola fixo'
+            : 'Chave ${PixCode.normalizeKey(pix)}'
+                  '${_pixName == null ? '' : ' · $_pixName'} · com o valor',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1555,22 +1675,25 @@ class EditRecordPageState extends State<EditRecordPage> {
       ..remove(DinzoSyncService.estimateTag)
       ..remove(DinzoSyncService.virtualTag)
       ..add(DinzoSyncService.manualTag);
-    final id = await database.addRecord(Record(
-      occurrence.value,
-      occurrence.title,
-      occurrence.category,
-      occurrence.utcDateTime,
-      timeZoneName: occurrence.timeZoneName,
-      description: occurrence.description,
-      walletId: occurrence.walletId,
-      tags: tags,
-    ));
+    final id = await database.addRecord(
+      Record(
+        occurrence.value,
+        occurrence.title,
+        occurrence.category,
+        occurrence.utcDateTime,
+        timeZoneName: occurrence.timeZoneName,
+        description: occurrence.description,
+        walletId: occurrence.walletId,
+        tags: tags,
+      ),
+    );
     await EstimateLink.link(occurrence, id);
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
     messenger.showSnackBar(
-        const SnackBar(content: Text('Agora é um lançamento real')));
+      const SnackBar(content: Text('Agora é um lançamento real')),
+    );
   }
 
   /// Says that changing this occurrence takes it out of its recurrence.
@@ -1579,9 +1702,10 @@ class EditRecordPageState extends State<EditRecordPage> {
       leading: const Icon(Icons.link_off),
       title: const Text('Só esta ocorrência'),
       subtitle: const Text(
-          'Mudar valor, data ou outro dado aqui solta esta ocorrência do '
-          'recorrente: ela fica como você deixar, mesmo que o recorrente '
-          'mude depois, e não aparece outra no lugar.'),
+        'Mudar valor, data ou outro dado aqui solta esta ocorrência do '
+        'recorrente: ela fica como você deixar, mesmo que o recorrente '
+        'mude depois, e não aparece outra no lugar.',
+      ),
     );
   }
 
@@ -1606,7 +1730,8 @@ class EditRecordPageState extends State<EditRecordPage> {
     }
     _applyOriginTag(isTransfer: false);
     edited.tags = Set.of(_selectedTags);
-    final changed = edited.value != before.value ||
+    final changed =
+        edited.value != before.value ||
         (edited.title ?? '') != (before.title ?? '') ||
         (edited.description ?? '') != (before.description ?? '') ||
         edited.category?.name != before.category?.name ||
@@ -1614,15 +1739,20 @@ class EditRecordPageState extends State<EditRecordPage> {
         edited.utcDateTime.millisecondsSinceEpoch !=
             before.utcDateTime.millisecondsSinceEpoch ||
         !const SetEquality<String>().equals(
-            _withoutOrigin(edited.tags), _withoutOrigin(before.tags));
+          _withoutOrigin(edited.tags),
+          _withoutOrigin(before.tags),
+        );
     final messenger = ScaffoldMessenger.of(context);
     if (!changed) {
       if (before.dueDateUnknown) {
-        final pattern = await database
-            .getRecurrentRecordPattern(before.recurrencePatternId);
+        final pattern = await database.getRecurrentRecordPattern(
+          before.recurrencePatternId,
+        );
         if (pattern != null) {
           pattern.setDueDate(
-              pattern.occurrenceDayOf(before), before.localDateTime);
+            pattern.occurrenceDayOf(before),
+            before.localDateTime,
+          );
           await database.updateRecordPatternById(pattern.id, pattern);
         }
       }
@@ -1634,11 +1764,15 @@ class EditRecordPageState extends State<EditRecordPage> {
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
     if (saved != null && leaves) {
-      messenger.showSnackBar(const SnackBar(
-        duration: Duration(seconds: 5),
-        content: Text('Só esta ocorrência mudou. O recorrente continua '
-            'igual nas outras datas.'),
-      ));
+      messenger.showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 5),
+          content: Text(
+            'Só esta ocorrência mudou. O recorrente continua '
+            'igual nas outras datas.',
+          ),
+        ),
+      );
     }
   }
 
@@ -1653,8 +1787,9 @@ class EditRecordPageState extends State<EditRecordPage> {
       secondary: const Icon(Icons.check_circle_outline, color: Colors.green),
       title: const Text('Já paguei'),
       subtitle: const Text(
-          'Para de avisar enquanto o lançamento não chega da Dinzo. Quando '
-          'chegar, vincule como sempre.'),
+        'Para de avisar enquanto o lançamento não chega da Dinzo. Quando '
+        'chegar, vincule como sempre.',
+      ),
     );
   }
 
@@ -1687,8 +1822,13 @@ class EditRecordPageState extends State<EditRecordPage> {
       record!.paymentCode = _paymentCode;
       record!.dueDateUnknown = pattern.dueDateMissing(day);
       if (moved) {
-        localDisplayDate = DateTime(shown.year, shown.month, shown.day,
-            local.hour, local.minute);
+        localDisplayDate = DateTime(
+          shown.year,
+          shown.month,
+          shown.day,
+          local.hour,
+          local.minute,
+        );
       }
       if (after != null) {
         record!.value = after;
@@ -1704,10 +1844,12 @@ class EditRecordPageState extends State<EditRecordPage> {
     // Saved: back to the list, where the message shows.
     final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
-    messenger.showSnackBar(SnackBar(
-      duration: Duration(seconds: valueChanged || moved ? 6 : 3),
-      content: Text(message),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        duration: Duration(seconds: valueChanged || moved ? 6 : 3),
+        content: Text(message),
+      ),
+    );
   }
 
   /// Which estimate this real record was linked to (see EstimateLink).
@@ -1739,8 +1881,9 @@ class EditRecordPageState extends State<EditRecordPage> {
       secondary: const Icon(Icons.money_off, color: Color(0xFF78909C)),
       title: const Text('Não considerar no orçamento'),
       subtitle: const Text(
-          'Não conta como gasto nem entra nos 100% da receita. Ex.: comprou '
-          'algo para alguém e a pessoa te devolveu por Pix: marque os dois.'),
+        'Não conta como gasto nem entra nos 100% da receita. Ex.: comprou '
+        'algo para alguém e a pessoa te devolveu por Pix: marque os dois.',
+      ),
     );
   }
 
@@ -1748,14 +1891,19 @@ class EditRecordPageState extends State<EditRecordPage> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await DinzoSyncService.pushCategory(record!);
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Categoria atualizada também na Dinzo')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Categoria atualizada também na Dinzo')),
+      );
     } catch (e, st) {
       _logger.handle(e, st, 'Failed to change category in Dinzo');
-      messenger.showSnackBar(SnackBar(
+      messenger.showSnackBar(
+        SnackBar(
           content: Text(
-              'Salvo aqui, mas não foi possível mudar a categoria na Dinzo: '
-              '${e is DinzoApiException ? e.message : e}')));
+            'Salvo aqui, mas não foi possível mudar a categoria na Dinzo: '
+            '${e is DinzoApiException ? e.message : e}',
+          ),
+        ),
+      );
     }
   }
 
@@ -1764,11 +1912,17 @@ class EditRecordPageState extends State<EditRecordPage> {
     try {
       await DinzoSyncService.pushTitle(record!);
       messenger.showSnackBar(
-          const SnackBar(content: Text('Nome atualizado também na Dinzo')));
+        const SnackBar(content: Text('Nome atualizado também na Dinzo')),
+      );
     } catch (e, st) {
       _logger.handle(e, st, 'Failed to rename transaction in Dinzo');
-      messenger.showSnackBar(SnackBar(
-          content: Text('Salvo aqui, mas não foi possível renomear na Dinzo: $e')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Salvo aqui, mas não foi possível renomear na Dinzo: $e',
+          ),
+        ),
+      );
     }
   }
 
@@ -1787,7 +1941,8 @@ class EditRecordPageState extends State<EditRecordPage> {
       walletToSelect = await database.getDefaultWallet();
     } else if (record?.walletId != null) {
       // Fall back to the Predefined Wallet if the assigned wallet no longer exists
-      walletToSelect = await database.getWalletById(record!.walletId!) ??
+      walletToSelect =
+          await database.getWalletById(record!.walletId!) ??
           await database.getPredefinedWallet() ??
           await database.getDefaultWallet();
     } else {
@@ -1808,8 +1963,9 @@ class EditRecordPageState extends State<EditRecordPage> {
 
     // Load destination wallet if editing an existing transfer
     if (record?.transferWalletId != null) {
-      final destWallet =
-          await database.getWalletById(record!.transferWalletId!);
+      final destWallet = await database.getWalletById(
+        record!.transferWalletId!,
+      );
       if (destWallet != null && mounted) {
         setState(() {
           _selectedDestinationWallet = destWallet;
@@ -1822,8 +1978,9 @@ class EditRecordPageState extends State<EditRecordPage> {
     if (record?.category != null) {
       Set<String> suggestedTags = Set();
       final mostUsedForCategory = (await database.getMostUsedTagsForCategory(
-              record!.category!.name!, record!.category!.categoryType!))
-          .take(4);
+        record!.category!.name!,
+        record!.category!.categoryType!,
+      )).take(4);
       final mostRecentTags = (await database.getRecentlyUsedTags()).take(4);
       suggestedTags.addAll(mostUsedForCategory);
       suggestedTags.addAll(mostRecentTags);
@@ -1835,18 +1992,20 @@ class EditRecordPageState extends State<EditRecordPage> {
   }
 
   recurrentPeriodHasBeenUpdated(RecurrentRecordPattern toSet) {
-    bool recurrentPeriodHasChanged = toSet.recurrentPeriod!.index !=
+    bool recurrentPeriodHasChanged =
+        toSet.recurrentPeriod!.index !=
         passedRecurrentRecordPattern!.recurrentPeriod!.index;
     // A custom interval can change (e.g. "every 3 months" -> "every 6 months")
     // without the RecurrentPeriod enum value itself changing.
     bool customIntervalHasChanged =
         toSet.recurrentPeriod == RecurrentPeriod.Custom &&
-            (toSet.customIntervalValue !=
-                    passedRecurrentRecordPattern!.customIntervalValue ||
-                toSet.customIntervalUnit !=
-                    passedRecurrentRecordPattern!.customIntervalUnit);
+        (toSet.customIntervalValue !=
+                passedRecurrentRecordPattern!.customIntervalValue ||
+            toSet.customIntervalUnit !=
+                passedRecurrentRecordPattern!.customIntervalUnit);
     // Compare the UTC timestamps
-    bool startingDateHasChanged = toSet.utcDateTime.millisecondsSinceEpoch !=
+    bool startingDateHasChanged =
+        toSet.utcDateTime.millisecondsSinceEpoch !=
         passedRecurrentRecordPattern!.utcDateTime.millisecondsSinceEpoch;
     return recurrentPeriodHasChanged ||
         customIntervalHasChanged ||
@@ -1925,16 +2084,20 @@ class EditRecordPageState extends State<EditRecordPage> {
       context,
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (context) => TagSelectionDialog(
-          initialSelectedTags: _selectedTags,
-        ),
+        builder: (context) =>
+            TagSelectionDialog(initialSelectedTags: _selectedTags),
       ),
     );
 
     if (selectedTags != null) {
       _logger.debug(
-          'Tag selection applied: ${selectedTags.length} tags selected');
+        'Tag selection applied: ${selectedTags.length} tags selected',
+      );
       setState(() {
+        if (selectedTags.contains(DinzoSyncService.cashTag) !=
+            _selectedTags.contains(DinzoSyncService.cashTag)) {
+          _autoCash = false;
+        }
         _selectedTags = selectedTags;
         _applyOriginTag(isTransfer: _selectedDestinationWallet != null);
       });
@@ -1945,76 +2108,84 @@ class EditRecordPageState extends State<EditRecordPage> {
     final bgColor = Theme.of(context).colorScheme.secondaryContainer;
     final fgColor = Theme.of(context).colorScheme.onSecondaryContainer;
     return AppBar(
-        backgroundColor: bgColor,
-        foregroundColor: fgColor,
-        leading: BackButton(onPressed: () => Navigator.pop(context)),
-        title: Text(
-          readOnly ? 'View record' : 'Editar Item',
+      backgroundColor: bgColor,
+      foregroundColor: fgColor,
+      leading: BackButton(onPressed: () => Navigator.pop(context)),
+      title: Text(readOnly ? 'View record' : 'Editar Item'),
+      actions: <Widget>[
+        Visibility(
+          visible:
+              ((widget.passedRecord != null ||
+                      widget.passedRecurrentRecordPattern != null) &&
+                  !readOnly) ||
+              _singleOccurrencePattern != null,
+          child: IconButton(
+            icon: Semantics(
+              identifier: "delete-button",
+              child: const Icon(Icons.delete),
+            ),
+            tooltip: 'Excluir',
+            onPressed: () async {
+              AlertDialogBuilder deleteDialog = AlertDialogBuilder(
+                'Ação crítica',
+              ).addTrueButtonName('Sim').addFalseButtonName('Não');
+              if (_singleOccurrencePattern != null) {
+                deleteDialog = deleteDialog.addSubtitle(
+                  'Quer mesmo excluir este Item?',
+                );
+              } else if (_isEditableOccurrence) {
+                deleteDialog = deleteDialog.addSubtitle(
+                  'Excluir só esta ocorrência? O recorrente continua '
+                  'nas outras datas.',
+                );
+              } else if (widget.passedRecord != null) {
+                deleteDialog = deleteDialog.addSubtitle(
+                  'Você realmente deseja excluir este Item?',
+                );
+              } else {
+                deleteDialog = deleteDialog.addSubtitle(
+                  'Quer mesmo excluir este Item?',
+                );
+              }
+              var continueDelete = await showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return deleteDialog.build(context);
+                },
+              );
+              if (continueDelete) {
+                if (_singleOccurrencePattern != null) {
+                  final patternId = _singleOccurrencePattern!.id!;
+                  await database.deleteFutureRecordsByPatternId(
+                    patternId,
+                    DateTime.now().toUtc(),
+                  );
+                  await database.deleteRecurrentRecordPatternById(patternId);
+                } else if (_isEditableOccurrence) {
+                  await RecurrentRecordService.deleteOccurrence(
+                    _occurrenceBefore!,
+                  );
+                } else if (widget.passedRecord != null) {
+                  if (record!.dinzoId != null) {
+                    await DinzoSyncService.ignoreDeleted([record!.dinzoId!]);
+                  }
+                  await database.deleteRecordById(record!.id);
+                } else {
+                  String patternId = widget.passedRecurrentRecordPattern!.id!;
+                  // Use the current UTC time when deleting future records
+                  await database.deleteFutureRecordsByPatternId(
+                    patternId,
+                    DateTime.now().toUtc(),
+                  );
+                  await database.deleteRecurrentRecordPatternById(patternId);
+                }
+                Navigator.pop(context);
+              }
+            },
+          ),
         ),
-        actions: <Widget>[
-          Visibility(
-              visible: ((widget.passedRecord != null ||
-                          widget.passedRecurrentRecordPattern != null) &&
-                      !readOnly) ||
-                  _singleOccurrencePattern != null,
-              child: IconButton(
-                  icon: Semantics(
-                      identifier: "delete-button",
-                      child: const Icon(Icons.delete)),
-                  tooltip: 'Excluir',
-                  onPressed: () async {
-                    AlertDialogBuilder deleteDialog =
-                        AlertDialogBuilder('Ação crítica')
-                            .addTrueButtonName('Sim')
-                            .addFalseButtonName('Não');
-                    if (_singleOccurrencePattern != null) {
-                      deleteDialog = deleteDialog.addSubtitle(
-                          'Quer mesmo excluir este Item?');
-                    } else if (_isEditableOccurrence) {
-                      deleteDialog = deleteDialog.addSubtitle(
-                          'Excluir só esta ocorrência? O recorrente continua '
-                          'nas outras datas.');
-                    } else if (widget.passedRecord != null) {
-                      deleteDialog = deleteDialog.addSubtitle(
-                          'Você realmente deseja excluir este Item?');
-                    } else {
-                      deleteDialog = deleteDialog.addSubtitle(
-                          'Quer mesmo excluir este Item?');
-                    }
-                    var continueDelete = await showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return deleteDialog.build(context);
-                        });
-                    if (continueDelete) {
-                      if (_singleOccurrencePattern != null) {
-                        final patternId = _singleOccurrencePattern!.id!;
-                        await database.deleteFutureRecordsByPatternId(
-                            patternId, DateTime.now().toUtc());
-                        await database
-                            .deleteRecurrentRecordPatternById(patternId);
-                      } else if (_isEditableOccurrence) {
-                        await RecurrentRecordService.deleteOccurrence(
-                            _occurrenceBefore!);
-                      } else if (widget.passedRecord != null) {
-                        if (record!.dinzoId != null) {
-                          await DinzoSyncService.ignoreDeleted(
-                              [record!.dinzoId!]);
-                        }
-                        await database.deleteRecordById(record!.id);
-                      } else {
-                        String patternId =
-                            widget.passedRecurrentRecordPattern!.id!;
-                        // Use the current UTC time when deleting future records
-                        await database.deleteFutureRecordsByPatternId(
-                            patternId, DateTime.now().toUtc());
-                        await database
-                            .deleteRecurrentRecordPatternById(patternId);
-                      }
-                      Navigator.pop(context);
-                    }
-                  })),
-        ]);
+      ],
+    );
   }
 
   Widget _getForm() {
@@ -2022,58 +2193,57 @@ class EditRecordPageState extends State<EditRecordPage> {
       margin: EdgeInsets.only(bottom: 80),
       child: Form(
         key: _formKey,
-        child: Column(children: [
-          _createAmountCard(),
-          Divider(height: 1),
-          _createTitleCard(),
-          Divider(height: 1),
-          _createCategoryCard(),
-          Divider(height: 1),
-          if (ServiceConfig.walletsEnabled) ...[
-            _createWalletCard(),
-            // Fork: part of a Dinzo purchase paid with a caixinha.
-            if (!readOnly && SplitPayment.supports(record))
-              SplitPaymentTile(purchase: record!),
+        child: Column(
+          children: [
+            _createAmountCard(),
             Divider(height: 1),
-          ],
-          _createDateAndRepeatCard(),
-          Divider(height: 1),
-          if (EstimateLink.decode(record?.estimateLink) case final link?) ...[
-            _createEstimateLinkTile(link),
+            _createTitleCard(),
             Divider(height: 1),
-          ],
-          if (_isEditableOccurrence && _occurrenceLeavesRecurrence) ...[
-            _createOccurrenceNote(),
+            _createCategoryCard(),
             Divider(height: 1),
-          ],
-          if ((_sourceLocked ||
-                  passedRecurrentRecordPattern != null ||
-                  (_isEditableOccurrence && _isEstimateOccurrence)) &&
-              !_fromDinzo &&
-              _selectedDestinationWallet == null) ...[
-            _createEstimateCard(),
-            Divider(height: 1),
-          ],
-          if (_showsBillingCard) ...[
-            _createBillingCard(),
-            Divider(height: 1),
-          ],
-          if (_isEstimateOccurrence || _isBillingOccurrence) ...[
-            _createPaymentCodeTile(),
-            Divider(height: 1),
-            if (_canMarkPaid) ...[
-              _createMarkedPaidTile(),
+            if (ServiceConfig.walletsEnabled) ...[
+              _createWalletCard(),
+              // Fork: part of a Dinzo purchase paid with a caixinha.
+              if (!readOnly && SplitPayment.supports(record))
+                SplitPaymentTile(purchase: record!),
               Divider(height: 1),
             ],
-          ],
-          if (!readOnly) ...[
-            _createOutOfBudgetCard(),
+            _createDateAndRepeatCard(),
             Divider(height: 1),
+            if (EstimateLink.decode(record?.estimateLink) case final link?) ...[
+              _createEstimateLinkTile(link),
+              Divider(height: 1),
+            ],
+            if (_isEditableOccurrence && _occurrenceLeavesRecurrence) ...[
+              _createOccurrenceNote(),
+              Divider(height: 1),
+            ],
+            if ((_sourceLocked ||
+                    passedRecurrentRecordPattern != null ||
+                    (_isEditableOccurrence && _isEstimateOccurrence)) &&
+                !_fromDinzo &&
+                _selectedDestinationWallet == null) ...[
+              _createEstimateCard(),
+              Divider(height: 1),
+            ],
+            if (_showsBillingCard) ...[
+              _createBillingCard(),
+              Divider(height: 1),
+            ],
+            if (_isEstimateOccurrence || _isBillingOccurrence) ...[
+              _createPaymentCodeTile(),
+              Divider(height: 1),
+              if (_canMarkPaid) ...[
+                _createMarkedPaidTile(),
+                Divider(height: 1),
+              ],
+            ],
+            if (!readOnly) ...[_createOutOfBudgetCard(), Divider(height: 1)],
+            _createTagsSection(),
+            Divider(height: 1),
+            _createAddNoteCard(),
           ],
-          _createTagsSection(),
-          Divider(height: 1),
-          _createAddNoteCard(),
-        ]),
+        ),
       ),
     );
   }
@@ -2105,9 +2275,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                       'Nenhuma tag aplicada.',
                       style: TextStyle(
                         fontSize: 18,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant
+                        color: Theme.of(context).colorScheme.onSurfaceVariant
                             .withValues(alpha: 0.4),
                       ),
                     ),
@@ -2142,7 +2310,8 @@ class EditRecordPageState extends State<EditRecordPage> {
                           return TagChip(
                             labelText: tag,
                             isSelected: true,
-                            onSelected: _locked ||
+                            onSelected:
+                                _locked ||
                                     tag == DinzoSyncService.manualTag ||
                                     tag == DinzoSyncService.virtualTag ||
                                     tag == DinzoSyncService.estimateTag ||
@@ -2150,6 +2319,9 @@ class EditRecordPageState extends State<EditRecordPage> {
                                 ? null
                                 : (selected) {
                                     setState(() {
+                                      if (tag == DinzoSyncService.cashTag) {
+                                        _autoCash = false;
+                                      }
                                       _selectedTags.remove(tag);
                                       _suggestedTags.add(tag);
                                     });
@@ -2185,8 +2357,10 @@ class EditRecordPageState extends State<EditRecordPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Tags sugeridas',
-            style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+        Text(
+          'Tags sugeridas',
+          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+        ),
         SizedBox(height: 5),
         Wrap(
           spacing: 8.0,
@@ -2200,6 +2374,9 @@ class EditRecordPageState extends State<EditRecordPage> {
                     ? null
                     : (selected) {
                         setState(() {
+                          if (tag == DinzoSyncService.cashTag) {
+                            _autoCash = false;
+                          }
                           if (selected) {
                             _selectedTags.add(tag);
                             _suggestedTags.remove(tag);
@@ -2209,7 +2386,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                         });
                       },
               );
-            }).toList()
+            }).toList(),
           ],
         ),
       ],
@@ -2229,37 +2406,37 @@ class EditRecordPageState extends State<EditRecordPage> {
       floatingActionButton: readOnly
           ? null
           : FloatingActionButton(
-                heroTag: null,
-                onPressed: () async {
-                  _resolvePendingAmountExpression();
-                  if (_formKey.currentState!.validate()) {
-                    if (_isEditableOccurrence) {
-                      await _saveOccurrence();
-                      return;
-                    }
-                    // A new estimate needs a future date; an existing one
-                    // (its pattern) keeps its dates.
-                    if (_isEstimate && _sourceLocked && !_prepareEstimate()) {
-                      return;
-                    }
-                    if (isARecurrentPattern()) {
-                      String? recurrentPatternId;
-                      if (passedRecurrentRecordPattern != null) {
-                        recurrentPatternId =
-                            this.passedRecurrentRecordPattern!.id;
-                      }
-                      await addOrUpdateRecurrentPattern(
-                        id: recurrentPatternId,
-                      );
-                    } else {
-                      await addOrUpdateRecord();
-                    }
+              heroTag: null,
+              onPressed: () async {
+                _resolvePendingAmountExpression();
+                if (_formKey.currentState!.validate()) {
+                  if (_isEditableOccurrence) {
+                    await _saveOccurrence();
+                    return;
                   }
-                },
-                tooltip: 'Salvar',
-                child: Semantics(
-                    identifier: 'save-button', child: const Icon(Icons.save)),
+                  // A new estimate needs a future date; an existing one
+                  // (its pattern) keeps its dates.
+                  if (_isEstimate && _sourceLocked && !_prepareEstimate()) {
+                    return;
+                  }
+                  if (isARecurrentPattern()) {
+                    String? recurrentPatternId;
+                    if (passedRecurrentRecordPattern != null) {
+                      recurrentPatternId =
+                          this.passedRecurrentRecordPattern!.id;
+                    }
+                    await addOrUpdateRecurrentPattern(id: recurrentPatternId);
+                  } else {
+                    await addOrUpdateRecord();
+                  }
+                }
+              },
+              tooltip: 'Salvar',
+              child: Semantics(
+                identifier: 'save-button',
+                child: const Icon(Icons.save),
               ),
+            ),
     );
   }
 }

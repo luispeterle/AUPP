@@ -322,57 +322,87 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
 
   /// Fork: banks and payment methods that are not tags yet, ready to add
   /// with their logo/icon (tags only exist once used, so nothing is created
-  /// up front).
+  /// up front; once used they join the tags above). The banks never used
+  /// stay collapsed, unless a search looks for one.
   Widget _buildKnownTagSuggestions(
-      TextTheme textTheme, ColorScheme colorScheme) {
+    TextTheme textTheme,
+    ColorScheme colorScheme,
+  ) {
     final existing = {
       ..._allTags.map((t) => t.toLowerCase()),
       ..._selectedTags.map((t) => t.toLowerCase()),
     };
     final query = _searchController.text.trim().toLowerCase();
-    final suggestions = [
-      ...KnownTag.banks,
-      ...KnownTag.others.where((t) => t.kind == KnownTagKind.method),
-    ]
+    List<KnownTag> unused(Iterable<KnownTag> tags) => tags
         .where((t) => !existing.contains(t.name.toLowerCase()))
         .where((t) => query.isEmpty || t.name.toLowerCase().contains(query))
         .toList();
-    if (suggestions.isEmpty) return const SizedBox.shrink();
+    final methods = unused(
+      KnownTag.others.where((t) => t.kind == KnownTagKind.method),
+    );
+    final banks = unused(KnownTag.banks);
+    if (methods.isEmpty && banks.isEmpty) return const SizedBox.shrink();
+
+    Widget chips(List<KnownTag> tags) => Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final t in tags)
+          ActionChip(
+            avatar: t.kind == KnownTagKind.bank
+                ? BankMark(t, size: 20)
+                : Icon(t.icon, size: 18, color: t.color),
+            label: Text(t.name),
+            onPressed: () => _toggleTagSelection(t.name),
+          ),
+      ],
+    );
+    final titleStyle = textTheme.titleMedium?.copyWith(
+      fontWeight: FontWeight.w500,
+      color: colorScheme.onSurface.withValues(alpha: 0.8),
+    );
+    final iconColor = colorScheme.onSurface.withValues(alpha: 0.7);
+
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 24, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.account_balance_outlined,
+          if (methods.isNotEmpty) ...[
+            Row(
+              children: [
+                Icon(Icons.payments_outlined, size: 20, color: iconColor),
+                const SizedBox(width: 8),
+                Text('Formas de pagamento', style: titleStyle),
+              ],
+            ),
+            const SizedBox(height: 12),
+            chips(methods),
+          ],
+          if (banks.isNotEmpty)
+            Theme(
+              // No divider lines around the tile, as the sections above.
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                // A search opens it; a new key lets initiallyExpanded apply.
+                key: ValueKey(query.isNotEmpty),
+                initiallyExpanded: query.isNotEmpty,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                expandedAlignment: Alignment.centerLeft,
+                leading: Icon(
+                  Icons.account_balance_outlined,
                   size: 20,
-                  color: colorScheme.onSurface.withValues(alpha: 0.7)),
-              const SizedBox(width: 8),
-              Text(
-                'Bancos e formas de pagamento',
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurface.withValues(alpha: 0.8),
+                  color: iconColor,
                 ),
+                title: Text(
+                  'Outros bancos (${banks.length})',
+                  style: titleStyle,
+                ),
+                children: [chips(banks)],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final t in suggestions)
-                ActionChip(
-                  avatar: t.kind == KnownTagKind.bank
-                      ? BankMark(t, size: 20)
-                      : Icon(t.icon, size: 18, color: t.color),
-                  label: Text(t.name),
-                  onPressed: () => _toggleTagSelection(t.name),
-                ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -431,7 +461,8 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
 
     if (tag.isEmpty || !isValid) {
       _logger.warning(
-          'Rejected tag "$tag": tags must be a single word without commas');
+        'Rejected tag "$tag": tags must be a single word without commas',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('As tags devem ser uma única palavra, sem vírgulas.'),

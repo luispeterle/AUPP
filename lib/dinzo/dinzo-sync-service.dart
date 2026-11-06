@@ -100,6 +100,10 @@ class DinzoSyncService {
   /// become real records; each occurrence vanishes when its day arrives.
   static const String estimateTag = 'Estimativa';
 
+  /// Tag of money paid in cash (paper money). A new hand-entered record
+  /// starts with it, unless it is an estimate, a transfer or a Pix / boleto.
+  static const String cashTag = 'Dinheiro';
+
   /// Icons for the Dinzo top-level categories, used when the sync creates
   /// them in AUPP.
   static final Map<String, IconData> categoryIcons = {
@@ -645,7 +649,8 @@ class DinzoSyncService {
     final parts = <String>[
       if (before.value != after.value)
         'valor ${_amount(before.value)}→${_amount(after.value)}',
-      if (before.title != after.title) 'nome "${before.title}"→"${after.title}"',
+      if (before.title != after.title)
+        'nome "${before.title}"→"${after.title}"',
       if (before.categoryName != after.categoryName)
         'categoria ${before.categoryName}→${after.categoryName}',
       if (before.date != after.date) 'data ${before.date}→${after.date}',
