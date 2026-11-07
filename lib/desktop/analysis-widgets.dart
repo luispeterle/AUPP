@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -70,16 +71,13 @@ String formatIndicator(
 const tabular = [FontFeature.tabularFigures()];
 
 TextStyle denseStyle(BuildContext context, {double size = 12.5}) =>
-    Theme.of(context).textTheme.bodyMedium!.copyWith(
-      fontSize: size,
-      height: 1.2,
-      fontFeatures: tabular,
-    );
+    Theme.of(context).textTheme.bodyMedium!
+        .copyWith(fontSize: size, height: 1.2, fontFeatures: tabular);
 
-TextStyle mutedStyle(BuildContext context, {double size = 11.5}) =>
-    denseStyle(context, size: size).copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
+TextStyle mutedStyle(BuildContext context, {double size = 11.5}) => denseStyle(
+  context,
+  size: size,
+).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
 
 /// A section title with a thin rule, instead of a card.
 class SectionTitle extends StatelessWidget {
@@ -141,7 +139,9 @@ class Panel extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.35),
+        ),
       ),
       child: child,
     );
@@ -185,9 +185,9 @@ class _HoverRowState extends State<HoverRow> {
 }
 
 /// A label, quieter than its value.
-TextStyle labelStyle(BuildContext context) => denseStyle(
-  context,
-).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
+TextStyle labelStyle(BuildContext context) =>
+    denseStyle(context)
+        .copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
 
 /// A value, firmer than its label.
 TextStyle valueStyle(BuildContext context) =>
@@ -319,7 +319,11 @@ class _SparkPainter extends CustomPainter {
         ..strokeWidth = 1.5
         ..strokeJoin = StrokeJoin.round,
     );
-    canvas.drawCircle(Offset(x(values.length - 1), y(values.last)), 2, Paint()..color = color);
+    canvas.drawCircle(
+      Offset(x(values.length - 1), y(values.last)),
+      2,
+      Paint()..color = color,
+    );
   }
 
   @override
@@ -344,12 +348,16 @@ class YearChart extends StatefulWidget {
     required this.format,
     this.bars = true,
     this.height = 150,
+    this.barValues = false,
   });
 
   final List<YearSeries> series;
   final String Function(double value) format;
   final bool bars;
   final double height;
+
+  /// Each bar's value written along it, inside when it fits.
+  final bool barValues;
 
   @override
   State<YearChart> createState() => _YearChartState();
@@ -396,6 +404,7 @@ class _YearChartState extends State<YearChart> {
               colors: colors,
               layout: layout,
               bars: widget.bars,
+              barValues: widget.barValues,
               format: widget.format,
               selected: _year,
               surface: scheme.surface,
@@ -447,6 +456,29 @@ class _YearChartState extends State<YearChart> {
   }
 }
 
+/// Round values from below [low] to above [high], about six of them,
+/// 1, 2, 2.5 or 5 times a power of ten apart; zero among them when the range
+/// crosses it.
+List<double> niceTicks(double low, double high, {int count = 6}) {
+  if (high <= low) high = low + 1;
+  final rough = (high - low) / (count - 1);
+  final magnitude = math
+      .pow(10, (math.log(rough) / math.ln10).floor())
+      .toDouble();
+  final step =
+      magnitude *
+      switch (rough / magnitude) {
+        <= 1 => 1.0,
+        <= 2 => 2.0,
+        <= 2.5 => 2.5,
+        <= 5 => 5.0,
+        _ => 10.0,
+      };
+  final first = (low / step).floor();
+  final last = (high / step).ceil();
+  return [for (var i = first; i <= last; i++) i * step];
+}
+
 class _ChartLayout {
   _ChartLayout(this.years, this.width);
 
@@ -470,6 +502,7 @@ class _YearChartPainter extends CustomPainter {
     required this.colors,
     required this.layout,
     required this.bars,
+    required this.barValues,
     required this.format,
     required this.selected,
     required this.surface,
@@ -483,6 +516,7 @@ class _YearChartPainter extends CustomPainter {
   final List<Color> colors;
   final _ChartLayout layout;
   final bool bars;
+  final bool barValues;
   final String Function(double) format;
   final int? selected;
   final Color surface;
@@ -497,9 +531,12 @@ class _YearChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final all = [for (final s in series) ...s.values.values];
     if (all.isEmpty) return;
-    var low = math.min(all.reduce(math.min), 0.0);
-    var high = math.max(all.reduce(math.max), 0.0);
-    if (high == low) high = low + 1;
+    final ticks = niceTicks(
+      math.min(all.reduce(math.min), 0.0),
+      math.max(all.reduce(math.max), 0.0),
+    );
+    final low = ticks.first;
+    final high = ticks.last;
     final plotHeight = size.height - _bottom - 4;
     double y(double v) => 4 + (high - v) / (high - low) * plotHeight;
 
@@ -508,15 +545,13 @@ class _YearChartPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
 
-    // Recessive grid: zero, top and bottom, labeled on the right.
-    final gridPaint = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    for (final v in {high, 0.0, low}) {
+    // Recessive grid at round values, labeled on the right; zero firmer.
+    final gridPaint = Paint()..strokeWidth = 1;
+    for (final v in ticks) {
       canvas.drawLine(
         Offset(0, y(v)),
         Offset(layout.plotWidth, y(v)),
-        gridPaint..color = v == 0 ? grid : grid.withValues(alpha: 0.45),
+        gridPaint..color = v == 0 ? grid : grid.withValues(alpha: 0.35),
       );
       final painter = label(format(v), text);
       painter.paint(
@@ -526,6 +561,14 @@ class _YearChartPainter extends CustomPainter {
     }
 
     final years = layout.years;
+    // A faint line between years, to find one along the axis.
+    final yearLine = Paint()
+      ..color = grid.withValues(alpha: 0.18)
+      ..strokeWidth = 1;
+    for (var i = 1; i < years.length; i++) {
+      final x = i * layout.slot;
+      canvas.drawLine(Offset(x, 4), Offset(x, 4 + plotHeight), yearLine);
+    }
     final step = math.max(1, (years.length / (layout.plotWidth / 36)).ceil());
     for (final (i, year) in years.indexed) {
       if (i % step != 0 && i != years.length - 1) continue;
@@ -549,7 +592,10 @@ class _YearChartPainter extends CustomPainter {
 
     if (bars) {
       final group = layout.slot * 0.72;
-      final width = math.max(2.0, (group - (series.length - 1) * 2) / series.length);
+      final width = math.max(
+        2.0,
+        (group - (series.length - 1) * 2) / series.length,
+      );
       for (final (si, s) in series.indexed) {
         final paint = Paint()..color = colors[si];
         for (final (i, year) in years.indexed) {
@@ -570,6 +616,9 @@ class _YearChartPainter extends CustomPainter {
             ),
             paint,
           );
+          if (barValues) {
+            _barValue(canvas, v, left + width / 2, top, bottom, colors[si]);
+          }
         }
       }
     } else {
@@ -588,7 +637,9 @@ class _YearChartPainter extends CustomPainter {
             continue;
           }
           final point = Offset(layout.center(i), y(v));
-          path == null ? path = (Path()..moveTo(point.dx, point.dy)) : path.lineTo(point.dx, point.dy);
+          path == null
+              ? path = (Path()..moveTo(point.dx, point.dy))
+              : path.lineTo(point.dx, point.dy);
         }
         if (path != null) canvas.drawPath(path, paint);
         if (selected != null) {
@@ -648,10 +699,277 @@ class _YearChartPainter extends CustomPainter {
     tip.paint(canvas, Offset(math.max(0.0, left) + padding, top + padding));
   }
 
+  /// [value] written upwards along its bar: inside it in white when it fits,
+  /// otherwise just past its end.
+  void _barValue(
+    Canvas canvas,
+    double value,
+    double center,
+    double top,
+    double bottom,
+    Color bar,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: format(value),
+        style: text.copyWith(fontSize: 9.5, fontWeight: FontWeight.w600),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final length = painter.width;
+    final inside = bottom - top >= length + 6;
+    final white = text.copyWith(
+      fontSize: 9.5,
+      fontWeight: FontWeight.w600,
+      color: bar.computeLuminance() > 0.5 ? Colors.black87 : Colors.white,
+    );
+    final drawn = inside
+        ? (TextPainter(
+            text: TextSpan(text: format(value), style: white),
+            textDirection: TextDirection.ltr,
+          )..layout())
+        : painter;
+    // Where the text starts, reading upwards: near the data end inside, past
+    // it outside.
+    final double start;
+    if (inside) {
+      start = value >= 0 ? top + 3 + length : bottom - 3;
+    } else {
+      start = value >= 0 ? top - 3 : bottom + 3 + length;
+    }
+    canvas.save();
+    canvas.translate(center - drawn.height / 2, start);
+    canvas.rotate(-math.pi / 2);
+    drawn.paint(canvas, Offset.zero);
+    canvas.restore();
+  }
+
   @override
   bool shouldRepaint(_YearChartPainter old) =>
       old.series != series ||
       old.selected != selected ||
       old.bars != bars ||
+      old.barValues != barValues ||
       old.colors.first != colors.first;
+}
+
+/// Shows [popup] by [child] while the mouse rests on it, or on a tap (a
+/// phone has no mouse); a tap on it or elsewhere closes it. Below the child,
+/// or above when the screen ends first, and always inside the screen.
+class HoverPopup extends StatefulWidget {
+  const HoverPopup({
+    super.key,
+    required this.child,
+    required this.popup,
+    this.width = 380,
+  });
+
+  final Widget child;
+  final WidgetBuilder popup;
+  final double width;
+
+  @override
+  State<HoverPopup> createState() => _HoverPopupState();
+}
+
+class _HoverPopupState extends State<HoverPopup> {
+  final _portal = OverlayPortalController();
+  final _link = LayerLink();
+  Timer? _wait;
+  bool _above = false;
+  double _dx = 0;
+  double _width = 0;
+
+  void _show() {
+    _wait?.cancel();
+    if (!mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+    final screen = MediaQuery.sizeOf(context);
+    final topLeft = box.localToGlobal(Offset.zero);
+    _width = math.min(widget.width, screen.width - 16);
+    _above =
+        topLeft.dy + box.size.height + 320 > screen.height && topLeft.dy > 320;
+    // From the child's left edge, pushed back inside the screen.
+    _dx =
+        topLeft.dx.clamp(8.0, math.max(8.0, screen.width - _width - 8)) -
+        topLeft.dx;
+    setState(() {});
+    _portal.show();
+  }
+
+  void _hide() {
+    _wait?.cancel();
+    if (_portal.isShowing) _portal.hide();
+  }
+
+  @override
+  void dispose() {
+    _wait?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CompositedTransformTarget(
+      link: _link,
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: (context) => Align(
+          alignment: Alignment.topLeft,
+          child: CompositedTransformFollower(
+            link: _link,
+            targetAnchor: _above ? Alignment.topLeft : Alignment.bottomLeft,
+            followerAnchor: _above ? Alignment.bottomLeft : Alignment.topLeft,
+            offset: Offset(_dx, _above ? -4 : 4),
+            // The pointer stays on the child: the popup never takes it.
+            child: IgnorePointer(
+              child: Material(
+                elevation: 6,
+                color: scheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: _width,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  child: widget.popup(context),
+                ),
+              ),
+            ),
+          ),
+        ),
+        child: TapRegion(
+          onTapOutside: (_) => _hide(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _portal.isShowing ? _hide() : _show(),
+            child: MouseRegion(
+              onEnter: (_) {
+                _wait?.cancel();
+                _wait = Timer(const Duration(milliseconds: 300), _show);
+              },
+              onExit: (_) => _hide(),
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An indicator's history for [HoverPopup]: what it is, a chart and the
+/// numbers by year, of one company or several ([currencies] goes with
+/// [series], one per company).
+class IndicatorHistory extends StatelessWidget {
+  const IndicatorHistory({
+    super.key,
+    required this.indicator,
+    required this.series,
+    required this.currencies,
+  });
+
+  final Indicator indicator;
+  final List<YearSeries> series;
+  final List<String> currencies;
+
+  /// Years in the table of several companies; one company shows them all.
+  static const tableYears = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final years = <int>{for (final s in series) ...s.values.keys}.toList()
+      ..sort();
+    String format(double v, int i) =>
+        formatIndicator(indicator, v, currency: currencies[i]);
+    final value = denseStyle(context, size: 11.5);
+    final muted = mutedStyle(context, size: 11);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          indicator.label,
+          style: denseStyle(
+            context,
+            size: 13,
+          ).copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(indicator.formula, style: muted),
+        if (years.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Sem histórico por ano.', style: muted),
+          )
+        else ...[
+          const SizedBox(height: 10),
+          // One company: its values in the bars. Several: lines, and the
+          // numbers in a table below.
+          YearChart(
+            series: series,
+            bars: series.length == 1,
+            barValues: series.length == 1,
+            height: series.length == 1 ? 150 : 120,
+            format: (v) => format(v, 0),
+          ),
+          if (series.length > 1) ...[
+            const SizedBox(height: 8),
+            Table(
+              defaultColumnWidth: const IntrinsicColumnWidth(),
+              children: [
+                TableRow(
+                  children: [
+                    const SizedBox.shrink(),
+                    for (final y in years.skip(
+                      math.max(0, years.length - tableYears),
+                    ))
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Text(
+                          '$y',
+                          style: muted,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                  ],
+                ),
+                for (final (i, s) in series.indexed)
+                  TableRow(
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: seriesColor(context, i),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(s.label, style: value),
+                        ],
+                      ),
+                      for (final y in years.skip(
+                        math.max(0, years.length - tableYears),
+                      ))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 10),
+                          child: Text(
+                            s.values[y] == null ? '—' : format(s.values[y]!, i),
+                            style: value,
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ],
+    );
+  }
 }

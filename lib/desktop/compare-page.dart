@@ -121,8 +121,10 @@ class _ComparePageState extends State<ComparePage> {
   /// Sector and subsector: brapi's for the B3 (written in two ways, so made
   /// plain), the SEC's industry abroad.
   (String?, String?) _sectorOf(String ticker) {
-    String? plain(String? text) =>
-        text?.toLowerCase().replaceAll('.', ',').replaceAll(RegExp(r'\s+'), ' ');
+    String? plain(String? text) => text
+        ?.toLowerCase()
+        .replaceAll('.', ',')
+        .replaceAll(RegExp(r'\s+'), ' ');
     if (isB3Ticker(ticker)) {
       final row = _market[ticker];
       return (row?.sector, plain(row?.subsector));
@@ -299,7 +301,10 @@ class _ComparePageState extends State<ComparePage> {
                     .take(8);
                 final abroad = secReady
                     ? [
-                        for (final l in SecCatalog.instance.search(query, limit: 8))
+                        for (final l in SecCatalog.instance.search(
+                          query,
+                          limit: 8,
+                        ))
                           if (!tickers.contains(l.ticker)) (l.ticker, l.name),
                       ]
                     : const <(String, String)>[];
@@ -460,50 +465,84 @@ class _ComparePageState extends State<ComparePage> {
       for (final indicator in Indicator.all.where((i) => i.group == group)) {
         final values = [for (final f in companies) f.value(indicator)];
         final marks = bestAndWorst(indicator, values);
+        YearSeries seriesOf(Fundamentals f) =>
+            YearSeries(f.ticker, f.history(indicator));
         rows.add(
           SizedBox(
             width: labelWidth + companies.length * columnWidth + 12,
             child: HoverRow(
               child: Row(
                 children: [
+                  // The name shows every company; a value, only its own.
                   SizedBox(
                     width: labelWidth,
-                    child: Tooltip(
-                      message: indicator.formula,
-                      waitDuration: const Duration(milliseconds: 400),
-                      child: Text(
-                        indicator.label,
-                        style: labelStyle(context).copyWith(fontSize: 12),
+                    child: HoverPopup(
+                      width: 440,
+                      popup: (_) => IndicatorHistory(
+                        indicator: indicator,
+                        series: [for (final f in companies) seriesOf(f)],
+                        currencies: [
+                          for (final f in companies) f.company.currency,
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              indicator.label,
+                              style: labelStyle(context).copyWith(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // Has a history to chart: hover or tap shows it.
+                          if (companies.any(
+                            (f) => f.history(indicator).isNotEmpty,
+                          )) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.show_chart,
+                              size: 13,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
                   for (final (i, v) in values.indexed)
                     SizedBox(
                       width: columnWidth,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: marks == null || v == null
-                                ? null
-                                : v == marks.$1
-                                ? good
-                                : v == marks.$2
-                                ? bad
-                                : null,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            formatIndicator(
-                              indicator,
-                              v,
-                              currency: companies[i].company.currency,
+                      child: HoverPopup(
+                        popup: (_) => IndicatorHistory(
+                          indicator: indicator,
+                          series: [seriesOf(companies[i])],
+                          currencies: [companies[i].company.currency],
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
                             ),
-                            style: valueStyle(context).copyWith(fontSize: 12),
+                            decoration: BoxDecoration(
+                              color: marks == null || v == null
+                                  ? null
+                                  : v == marks.$1
+                                  ? good
+                                  : v == marks.$2
+                                  ? bad
+                                  : null,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              formatIndicator(
+                                indicator,
+                                v,
+                                currency: companies[i].company.currency,
+                              ),
+                              style: valueStyle(context).copyWith(fontSize: 12),
+                            ),
                           ),
                         ),
                       ),

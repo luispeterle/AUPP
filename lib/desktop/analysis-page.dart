@@ -546,18 +546,12 @@ class _IndicatorRow extends StatelessWidget {
     final history = fundamentals.history(indicator);
     final value = fundamentals.value(indicator);
     final years = history.keys.toList()..sort();
-    return Tooltip(
-      message: [
-        indicator.formula,
-        if (years.isNotEmpty)
-          years
-              .map(
-                (y) =>
-                    '$y: ${formatIndicator(indicator, history[y], currency: fundamentals.company.currency)}',
-              )
-              .join('   '),
-      ].join('\n'),
-      waitDuration: const Duration(milliseconds: 400),
+    return HoverPopup(
+      popup: (_) => IndicatorHistory(
+        indicator: indicator,
+        series: [YearSeries(fundamentals.ticker, history)],
+        currencies: [fundamentals.company.currency],
+      ),
       child: HoverRow(
         child: Row(
           children: [
