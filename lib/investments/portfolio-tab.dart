@@ -14,7 +14,7 @@ import 'benchmark.dart';
 import 'crypto-analytics.dart';
 import 'crypto-history.dart';
 import 'crypto-view.dart';
-import 'diagram-page.dart' show divisionOf;
+import 'diagram-page.dart' show FreedomCard, divisionOf;
 import 'diagram.dart';
 import 'investments-cache.dart';
 import 'investments-page.dart' show InstitutionLogo;
@@ -40,6 +40,10 @@ class PortfolioContext {
   final Map<String, double> stockResults;
   final double? dollar;
 
+  /// Caixinhas, investments and what stays out of the method, as the tree
+  /// counts it.
+  final double wealth;
+
   /// A price abroad, in reais, on a day.
   final PriceOn abroadPriceOn;
 
@@ -56,6 +60,7 @@ class PortfolioContext {
     required this.quotes,
     required this.stockResults,
     required this.dollar,
+    required this.wealth,
     required this.abroadPriceOn,
     required this.pill,
     required this.onAddAbroad,
@@ -144,12 +149,9 @@ class _PortfolioTabState extends State<PortfolioTab> {
               ],
             );
           }),
-      CryptoHistory.load(AssetLots.coins.keys.toList()).then(
-        (history) {
-          if (mounted) setState(() => _cryptoHistory = history);
-        },
-        onError: (_) {},
-      ),
+      CryptoHistory.load(AssetLots.coins.keys.toList()).then((history) {
+        if (mounted) setState(() => _cryptoHistory = history);
+      }, onError: (_) {}),
       _ratesSince(days.isEmpty ? null : days.first).then((rates) {
         if (mounted && rates != null) setState(() => _rates = rates);
       }),
@@ -251,9 +253,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
           PortfolioClass.crypto:
         final crypto = cls == PortfolioClass.crypto;
         return AssetLots.history(
-          lots: {
-            for (final a in _assetsOf(cls)) a.key: AssetLots.of(a.key),
-          },
+          lots: {for (final a in _assetsOf(cls)) a.key: AssetLots.of(a.key)},
           priceOn: crypto ? _coinPriceOn : _ctx.abroadPriceOn,
           rates: rates,
           today: today,
@@ -278,7 +278,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
   static String _pct(double v) => '${NumberFormat('0.0', 'pt_BR').format(v)}%';
 
-  static String _units(double v) => NumberFormat('#,##0.####', 'pt_BR').format(v);
+  static String _units(double v) =>
+      NumberFormat('#,##0.####', 'pt_BR').format(v);
 
   // ----------------------------------------------------------------- build
 
@@ -349,6 +350,11 @@ class _PortfolioTabState extends State<PortfolioTab> {
           _positionsSection(context, shown, colors),
           if (shown.any((c) => c.isBrazil)) ...widget.brazilExtras(_shown),
           if (shown.any((c) => c.isAbroad)) ?_watching(context),
+          if (_ctx.loaded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: FreedomCard(wealth: _ctx.wealth),
+            ),
           if (_shown.contains(PortfolioClass.crypto))
             CryptoView(
               key: _cryptoKey,
@@ -441,7 +447,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
               ),
               child: Text(
                 'US\$ 1 = ${getCurrencyValueString(_ctx.dollar!)}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
         ],
@@ -461,19 +470,24 @@ class _PortfolioTabState extends State<PortfolioTab> {
       switch (c) {
         case PortfolioClass.nationalStock || PortfolioClass.fii:
           final module = _ctx.assets
-              .where((a) => const {
-                    DiagramClass.nationalStock,
-                    DiagramClass.fii,
-                    DiagramClass.fixedIncome,
-                  }.contains(a.cls))
+              .where(
+                (a) => const {
+                  DiagramClass.nationalStock,
+                  DiagramClass.fii,
+                  DiagramClass.fixedIncome,
+                }.contains(a.cls),
+              )
               .fold(0.0, (sum, a) => sum + a.value);
           for (final a in _assetsOf(c)) {
             cards.add((a.value, _stockCard(context, a, module, colors)));
           }
         case PortfolioClass.intlStock || PortfolioClass.reit:
           final module = _ctx.assets
-              .where((a) => a.cls == DiagramClass.intlStock ||
-                  a.cls == DiagramClass.reit)
+              .where(
+                (a) =>
+                    a.cls == DiagramClass.intlStock ||
+                    a.cls == DiagramClass.reit,
+              )
               .fold(0.0, (sum, a) => sum + a.value);
           for (final a in _assetsOf(c)) {
             cards.add((a.value, _abroadCard(context, a, module, colors)));
@@ -493,9 +507,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
       cards: [for (final (_, card) in cards) card],
       action: PopupMenuButton<String>(
         tooltip: 'Adicionar',
-        onSelected: (what) => what == 'crypto'
-            ? _addCoin()
-            : _ctx.onAddAbroad(),
+        onSelected: (what) =>
+            what == 'crypto' ? _addCoin() : _ctx.onAddAbroad(),
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'abroad', child: Text('Ativo lá fora')),
           PopupMenuItem(value: 'crypto', child: Text('Compra de cripto')),
@@ -560,7 +573,9 @@ class _PortfolioTabState extends State<PortfolioTab> {
         ),
         (
           'No Brasil',
-          PositionCard.bold(module <= 0 ? '—' : _pct(asset.value / module * 100)),
+          PositionCard.bold(
+            module <= 0 ? '—' : _pct(asset.value / module * 100),
+          ),
         ),
       ],
     );
@@ -626,7 +641,9 @@ class _PortfolioTabState extends State<PortfolioTab> {
         ('Resultado', PositionCard.result(context, result)),
         (
           'Lá fora',
-          PositionCard.bold(module <= 0 ? '—' : _pct(asset.value / module * 100)),
+          PositionCard.bold(
+            module <= 0 ? '—' : _pct(asset.value / module * 100),
+          ),
         ),
       ],
       action: asset.isManual
@@ -679,9 +696,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
               children: [
                 Flexible(
                   child: PositionCard.bold(
-                    NumberFormat('#,##0.########', 'pt_BR').format(
-                      asset.quantity,
-                    ),
+                    NumberFormat(
+                      '#,##0.########',
+                      'pt_BR',
+                    ).format(asset.quantity),
                   ),
                 ),
                 const SizedBox(width: 3),
@@ -701,7 +719,9 @@ class _PortfolioTabState extends State<PortfolioTab> {
         ),
         (
           'Em cripto',
-          PositionCard.bold(module <= 0 ? '—' : _pct(asset.value / module * 100)),
+          PositionCard.bold(
+            module <= 0 ? '—' : _pct(asset.value / module * 100),
+          ),
         ),
       ],
     );

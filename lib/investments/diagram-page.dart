@@ -1,4 +1,5 @@
 import 'package:aupp/accounts/money-accounts.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show mapEquals;
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:aupp/components/info-tip.dart';
+import 'package:aupp/desktop/desktop-layout.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/services/crypto-quote-service.dart';
 import 'package:aupp/services/service-config.dart';
@@ -29,6 +31,7 @@ import 'investments-page.dart';
 import 'stock-catalog.dart';
 import 'ticker-search.dart';
 import 'us-catalog.dart';
+
 import 'package:aupp/dinzo/daily-money.dart';
 
 const _classColors = {
@@ -185,7 +188,9 @@ class _DiagramPageState extends State<DiagramPage> {
     // A coin without a quote yet (first start, the demo) is worth nothing
     // until CoinGecko answers: then the page loads again, once.
     if (!_coinQuotesAsked &&
-        AssetLots.coins.keys.any((c) => CryptoQuoteService.priceInMain(c) == null)) {
+        AssetLots.coins.keys.any(
+          (c) => CryptoQuoteService.priceInMain(c) == null,
+        )) {
       _coinQuotesAsked = true;
       CryptoQuoteService.refresh().then((fetched) {
         if (fetched && mounted) _load();
@@ -461,7 +466,7 @@ class _DiagramPageState extends State<DiagramPage> {
     final hub = widget.portfolio != null;
     final assets = this.assets;
     return DefaultTabController(
-      length: hub ? 5 : 4,
+      length: hub ? 4 : 3,
       initialIndex: hub ? 0 : 1,
       child: Scaffold(
         appBar: AppBar(
@@ -471,10 +476,9 @@ class _DiagramPageState extends State<DiagramPage> {
           bottom: _GroupedTabBar([
             if (hub) const [_TabItem(Icons.pie_chart_outline, 'Carteira')],
             [
-              const _TabItem(Icons.park_outlined, 'Árvore'),
+              const _TabItem(Icons.search, 'Aportar e buscar'),
               const _TabItem(Icons.pie_chart_outline, 'Meus ativos'),
               const _TabItem(Icons.track_changes, 'Metas'),
-              const _TabItem(Icons.add_card, 'Aportar e buscar'),
             ],
           ]),
         ),
@@ -492,6 +496,7 @@ class _DiagramPageState extends State<DiagramPage> {
                     quotes: _quotes,
                     stockResults: _results,
                     dollar: _dollar,
+                    wealth: _wealth,
                     abroadPriceOn: _abroadPriceOn,
                     pill: (cls) => _Pill(cls),
                     onAddAbroad: () => _addAsset(abroadOnly: true),
@@ -501,14 +506,19 @@ class _DiagramPageState extends State<DiagramPage> {
                 ),
               ),
             ],
-            _loading(
-              () => _TreeTab(
-                assets: assets,
-                wealth: _wealth,
-                state: _state,
-                reserve: _reserve,
-                fixedIncomeHeld: _fixedIncomeHeld,
-                onChanged: _changed,
+            _KeepAlive(
+              AssetSearchPage(
+                embedded: true,
+                idle: _loading(
+                  () => _ContributionTab(
+                    assets: assets,
+                    state: _state,
+                    available: _available,
+                    reserve: _reserve,
+                    opportunity: _opportunity,
+                    onChanged: _changed,
+                  ),
+                ),
               ),
             ),
             _loading(
@@ -532,20 +542,11 @@ class _DiagramPageState extends State<DiagramPage> {
                 opportunityShare: _wealth <= 0
                     ? 0
                     : _opportunity / _wealth * 100,
-              ),
-            ),
-            _KeepAlive(
-              AssetSearchPage(
-                embedded: true,
-                idle: _loading(
-                  () => _ContributionTab(
-                    assets: assets,
-                    state: _state,
-                    available: _available,
-                    reserve: _reserve,
-                    opportunity: _opportunity,
-                    onChanged: _changed,
-                  ),
+                reserve: _reserve,
+                tree: _TreeSection(
+                  assets: assets,
+                  reserve: _reserve,
+                  fixedIncomeHeld: _fixedIncomeHeld,
                 ),
               ),
             ),
@@ -556,9 +557,8 @@ class _DiagramPageState extends State<DiagramPage> {
   }
 
   /// A tab of the portfolio: waits for the data and follows the privacy mode.
-  Widget _loading(Widget Function() tab) => !_loaded
-      ? const Center(child: CircularProgressIndicator())
-      : tab();
+  Widget _loading(Widget Function() tab) =>
+      !_loaded ? const Center(child: CircularProgressIndicator()) : tab();
 }
 
 class _TabItem {
@@ -568,8 +568,8 @@ class _TabItem {
   const _TabItem(this.icon, this.label);
 }
 
-/// Tabs as pills in two groups, one at each end of the bar. It scrolls sideways
-/// when the screen is too narrow for both.
+/// Tabs as pills in two groups, one at each end of the bar on a computer and
+/// side by side on a phone. It scrolls sideways when the screen is too narrow.
 class _GroupedTabBar extends StatelessWidget implements PreferredSizeWidget {
   const _GroupedTabBar(this.groups);
 
@@ -582,6 +582,7 @@ class _GroupedTabBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final controller = DefaultTabController.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final wide = isWideLayout(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -647,11 +648,15 @@ class _GroupedTabBar extends StatelessWidget implements PreferredSizeWidget {
                     horizontal: 10,
                     vertical: 6,
                   ),
+                  // One group at each end on a computer; one after the
+                  // other on a phone.
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: wide
+                        ? MainAxisAlignment.spaceBetween
+                        : MainAxisAlignment.start,
                     children: [
                       for (final (i, row) in rows.indexed) ...[
-                        if (i > 0) const SizedBox(width: 24),
+                        if (i > 0) SizedBox(width: wide ? 24 : 0),
                         row,
                       ],
                     ],
@@ -1947,6 +1952,8 @@ class _TargetsTab extends StatefulWidget {
     required this.state,
     required this.onChanged,
     required this.opportunityShare,
+    required this.reserve,
+    required this.tree,
   });
 
   final List<DiagramAsset> assets;
@@ -1955,6 +1962,12 @@ class _TargetsTab extends StatefulWidget {
 
   /// The opportunity reserve, in % of wealth: it is not a class.
   final double opportunityShare;
+
+  /// In the everyday banks; filled before the portfolio gets anything.
+  final double reserve;
+
+  /// The Cerrado tree, above the targets.
+  final Widget tree;
 
   @override
   State<_TargetsTab> createState() => _TargetsTabState();
@@ -2012,6 +2025,105 @@ class _TargetsTabState extends State<_TargetsTab> {
               'meta ${_money(goal)} · $gap';
         }(),
     ].join('\n');
+  }
+
+  /// The emergency reserve in the same columns as the classes: how full it
+  /// is instead of a slider, and its target in reais.
+  Widget _reserveRow(BuildContext context) {
+    final theme = Theme.of(context);
+    final reserve = widget.reserve;
+    final target = widget.state.emergencyTarget;
+    final done = target <= 0 ? 1.0 : (reserve / target).clamp(0.0, 1.0);
+    // On its own background, as it comes before the classes. The label is
+    // narrower by the padding, so the bar lines up with the sliders.
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 134,
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.shield_outlined,
+                  size: 18,
+                  color: _reserveColor,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Reserva de emergência',
+                    style: _rowStyle.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              // Lined up with the sliders' tracks.
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: done,
+                      minHeight: 4,
+                      color: _reserveColor,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          reserve >= target
+                              ? '${_money(reserve)}: completa'
+                              : '${_money(reserve)} de ${_money(target)}',
+                          style: theme.textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const InfoTip(
+                        'O próximo aporte completa a reserva antes de ir para '
+                        'a carteira. Ela fica nos bancos do dia a dia: não '
+                        'conta na renda fixa da carteira nem nos 100% das '
+                        'metas.',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 42,
+            child: IconButton(
+              tooltip: 'Mudar a meta da reserva',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: () => _editReserveTarget(context, widget.state, () {
+                widget.onChanged();
+                setState(() {});
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// A class: its target on a slider marked where it is today.
@@ -2145,6 +2257,8 @@ class _TargetsTabState extends State<_TargetsTab> {
     );
     final sliders = Column(
       children: [
+        _reserveRow(context),
+        const Divider(height: 12),
         for (final cls in DiagramClass.values) _classRow(context, cls),
         const SizedBox(height: 8),
         Row(
@@ -2169,6 +2283,8 @@ class _TargetsTabState extends State<_TargetsTab> {
       builder: (context, constraints) => ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          widget.tree,
+          const SizedBox(height: 24),
           if (constraints.maxWidth >= 620)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2204,120 +2320,230 @@ class _TargetsTabState extends State<_TargetsTab> {
     double mine(PiarGroup group) => group == PiarGroup.opportunity
         ? widget.opportunityShare
         : group.classes.fold(0.0, (sum, cls) => sum + (_draft[cls] ?? 0));
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    'Referência do seu perfil (PIAR)',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const InfoTip(
-                  'Escolha um perfil para ver as faixas dele e, se quiser, usar as '
-                  'metas que ele sugere. As faixas já vêm sem a reserva de '
-                  'oportunidade, que fica fora das metas. Exterior soma ações, ETFs '
-                  'e renda fixa fora do Brasil.',
-                ),
-              ],
-            ),
-            DropdownButton<PiarProfile>(
-              value: profile,
-              isExpanded: true,
-              hint: const Text('Escolher o perfil'),
-              underline: const SizedBox.shrink(),
-              items: [
-                for (final p in PiarProfile.values)
-                  DropdownMenuItem(value: p, child: Text(p.label)),
-              ],
-              onChanged: (value) {
-                widget.state.piarProfile = value;
-                widget.onChanged();
-                setState(() {});
-              },
-            ),
-            if (profile != null) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
-                  onPressed: applied
-                      ? null
-                      : () {
-                          setState(() => _draft = {...suggested!});
-                          _save();
-                        },
-                  icon: Icon(applied ? Icons.check : Icons.auto_fix_high),
-                  label: Text(
-                    applied
-                        ? 'Suas metas são as do perfil'
-                        : 'Usar como minhas metas',
-                  ),
+    final rows = profile == null
+        ? const <(PiarGroup, double, double, double)>[]
+        : [
+            for (final e in profile.ranges.entries)
+              () {
+                final (low, high) = e.key == PiarGroup.opportunity
+                    ? e.value
+                    : profile.portfolioRange(e.key);
+                return (e.key, low, high, mine(e.key));
+              }(),
+          ];
+    // One scale for every bar, so they can be compared at a glance.
+    var scale = 50.0;
+    for (final (_, _, high, value) in rows) {
+      if (high > scale) scale = high;
+      if (value > scale) scale = value;
+    }
+    scale = (scale / 10).ceil() * 10;
+
+    Widget row((PiarGroup, double, double, double) r) {
+      final (group, low, high, value) = r;
+      final inside = value >= low - 0.01 && value <= high + 0.01;
+      final color = inside ? const Color(0xFF43A047) : Colors.amber.shade800;
+      return Tooltip(
+        message:
+            '${group.label}: o perfil pede de ${low.round()} a '
+            '${high.round()}%. ${group == PiarGroup.opportunity ? 'Você tem' : 'Sua meta'}: '
+            '${_pct(value)}, ${inside
+                ? 'dentro da faixa'
+                : value < low
+                ? 'abaixo da faixa'
+                : 'acima da faixa'}.',
+        waitDuration: const Duration(milliseconds: 300),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 132,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group == PiarGroup.abroad ? 'Exterior' : group.label,
+                      style: _rowStyle.copyWith(fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'perfil: ${low.round()}–${high.round()}%',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final e in profile.ranges.entries)
-                Builder(
-                  builder: (context) {
-                    final (low, high) = e.key == PiarGroup.opportunity
-                        ? e.value
-                        : profile.portfolioRange(e.key);
-                    final value = mine(e.key);
-                    final inside = value >= low - 0.01 && value <= high + 0.01;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Row(
+              Expanded(
+                child: SizedBox(
+                  height: 16,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final w = constraints.maxWidth;
+                      double x(double v) => w * (v / scale).clamp(0.0, 1.0);
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.centerLeft,
                         children: [
-                          Tooltip(
-                            message: inside
-                                ? 'Dentro da faixa do perfil: '
-                                      '${low.round()}–${high.round()}%'
-                                : value < low
-                                ? 'Abaixo da faixa do perfil: o perfil pede '
-                                      'pelo menos ${low.round()}%'
-                                : 'Acima da faixa do perfil: o perfil pede '
-                                      'no máximo ${high.round()}%',
-                            waitDuration: const Duration(milliseconds: 200),
-                            triggerMode: TooltipTriggerMode.tap,
-                            child: Icon(
-                              inside
-                                  ? Icons.check_circle
-                                  : value < low
-                                  ? Icons.arrow_circle_up
-                                  : Icons.arrow_circle_down,
-                              size: 18,
-                              color: inside
-                                  ? const Color(0xFF43A047)
-                                  : Colors.amber.shade700,
+                          Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(3),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(e.key.label, style: _rowStyle)),
-                          Text(
-                            '${low.round()}–${high.round()}%',
-                            style: theme.textTheme.bodySmall,
+                          Positioned(
+                            left: x(low),
+                            width: (x(high) - x(low)).clamp(2.0, w),
+                            child: Container(
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF43A047)
+                                    .withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
                           ),
-                          SizedBox(
-                            width: 64,
-                            child: Text(
-                              _pct(value),
-                              textAlign: TextAlign.right,
-                              style: _rowStyle.copyWith(
-                                fontWeight: FontWeight.w700,
+                          Positioned(
+                            left: (x(value) - 1.5).clamp(0.0, w - 3),
+                            child: Container(
+                              width: 3,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(1.5),
                               ),
                             ),
                           ),
                         ],
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
+              ),
+              SizedBox(
+                width: 48,
+                child: Text(
+                  _pct(value),
+                  textAlign: TextAlign.right,
+                  style: _rowStyle.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // The button goes to the right, or below when it does not fit.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('PIAR', style: theme.textTheme.titleSmall),
+                    const SizedBox(width: 6),
+                    const InfoTip(
+                      'Cada perfil de investidor tem uma faixa para cada tipo. '
+                      'Na barra, a parte verde é a faixa do perfil e o traço é '
+                      'a sua meta: verde dentro da faixa, amarelo fora. Se '
+                      'quiser, use as metas que o perfil sugere. A reserva de '
+                      'oportunidade fica fora das metas, então mostra o que '
+                      'você tem. Exterior soma ações, ETFs e renda fixa fora '
+                      'do Brasil.',
+                    ),
+                    const SizedBox(width: 12),
+                    DropdownButton<PiarProfile>(
+                      value: profile,
+                      isDense: true,
+                      hint: const Text('Escolher perfil'),
+                      items: [
+                        for (final p in PiarProfile.values)
+                          DropdownMenuItem(value: p, child: Text(p.label)),
+                      ],
+                      onChanged: (value) {
+                        widget.state.piarProfile = value;
+                        widget.onChanged();
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+                if (profile != null)
+                  applied
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.check,
+                                size: 16,
+                                color: Color(0xFF43A047),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Suas metas são as do perfil',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        )
+                      : TextButton.icon(
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: () {
+                            setState(() => _draft = {...suggested!});
+                            _save();
+                          },
+                          icon: const Icon(Icons.auto_fix_high, size: 18),
+                          label: const Text('Usar as metas deste perfil'),
+                        ),
+              ],
+            ),
+            if (profile != null) ...[
+              const SizedBox(height: 8),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 620) {
+                    return Column(children: [for (final r in rows) row(r)]);
+                  }
+                  final half = (rows.length / 2).ceil();
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [for (final r in rows.take(half)) row(r)],
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        child: Column(
+                          children: [for (final r in rows.skip(half)) row(r)],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
           ],
         ),
@@ -2531,139 +2757,69 @@ const _rootColors = {
 };
 const _reserveColor = Color(0xFFE0A526);
 
+/// Asks for the emergency reserve's target, in reais.
+Future<void> _editReserveTarget(
+  BuildContext context,
+  DiagramState state,
+  VoidCallback onChanged,
+) async {
+  final controller = TextEditingController(
+    text: state.emergencyTarget.toStringAsFixed(0),
+  );
+  final value = await showDialog<double>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Meta da reserva de emergência'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: const InputDecoration(
+          prefixText: 'R\$ ',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, double.tryParse(controller.text)),
+          child: const Text('Salvar'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (value == null || value < 0) return;
+  state.emergencyTarget = value;
+  onChanged();
+}
+
 Color _rootColor(CerradoRoot root) =>
     root == CerradoRoot.emergency ? _reserveColor : _rootColors[root.home]!;
 
 /// Where you are: the Cerrado tree painted with what you have, and the
-/// emergency reserve, which comes before everything else.
-class _TreeTab extends StatelessWidget {
-  const _TreeTab({
+/// emergency reserve, which comes before everything else. Part of Metas.
+class _TreeSection extends StatelessWidget {
+  const _TreeSection({
     required this.assets,
-    required this.wealth,
-    required this.state,
     required this.reserve,
     required this.fixedIncomeHeld,
-    required this.onChanged,
   });
 
   final List<DiagramAsset> assets;
-
-  /// Everything the portfolio holds, for the passive income.
-  final double wealth;
-  final DiagramState state;
   final double reserve;
   final double fixedIncomeHeld;
-  final VoidCallback onChanged;
 
   Map<CerradoRoot, bool> get _auto => cerradoRoots(
     assets: assets,
     emergencyReserve: reserve,
     fixedIncomeHeld: fixedIncomeHeld,
   );
-
-  Future<void> _editTarget(BuildContext context) async {
-    final controller = TextEditingController(
-      text: state.emergencyTarget.toStringAsFixed(0),
-    );
-    final value = await showDialog<double>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Meta da reserva de emergência'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            prefixText: 'R\$ ',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(context, double.tryParse(controller.text)),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (value == null || value < 0) return;
-    state.emergencyTarget = value;
-    onChanged();
-  }
-
-  Widget _reserveCard(BuildContext context) {
-    final theme = Theme.of(context);
-    final target = state.emergencyTarget;
-    final done = target <= 0 ? 1.0 : (reserve / target).clamp(0.0, 1.0);
-    final complete = reserve >= target;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.shield_outlined, color: _reserveColor),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Reserva de emergência',
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      InfoTip(
-                        'O próximo aporte completa a reserva antes de ir para a '
-                        'carteira. Ela fica nos bancos do dia a dia: não conta '
-                        'na renda fixa da carteira.',
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Mudar a meta da reserva',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  onPressed: () => _editTarget(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: done,
-                minHeight: 10,
-                color: _reserveColor,
-                backgroundColor: theme.colorScheme.surfaceContainerHigh,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              complete
-                  ? '${_money(reserve)}: completa.'
-                  : '${_money(reserve)} de ${_money(target)}. Faltam '
-                        '${_money(target - reserve)}.',
-              style: _rowStyle,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _rootList(BuildContext context, Map<CerradoRoot, bool> auto) {
     final theme = Theme.of(context);
@@ -2777,16 +2933,10 @@ class _TreeTab extends StatelessWidget {
         );
         final right = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _reserveCard(context),
-            const SizedBox(height: 12),
-            _rootList(context, auto),
-            const SizedBox(height: 12),
-            _FreedomCard(wealth: wealth),
-          ],
+          children: [_rootList(context, auto)],
         );
-        return ListView(
-          padding: const EdgeInsets.all(12),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (wide)
               Row(
@@ -2810,17 +2960,17 @@ class _TreeTab extends StatelessWidget {
 }
 
 /// When the portfolio's income pays the monthly spending: the top of the
-/// tree. Spending is the average of the last closed months.
-class _FreedomCard extends StatefulWidget {
-  const _FreedomCard({required this.wealth});
+/// tree, shown in Carteira. Spending is the average of the last closed months.
+class FreedomCard extends StatefulWidget {
+  const FreedomCard({super.key, required this.wealth});
 
   final double wealth;
 
   @override
-  State<_FreedomCard> createState() => _FreedomCardState();
+  State<FreedomCard> createState() => _FreedomCardState();
 }
 
-class _FreedomCardState extends State<_FreedomCard> {
+class _FreedomCardState extends State<FreedomCard> {
   double? _spending;
 
   @override
@@ -3761,7 +3911,9 @@ class _AddAssetDialogState extends State<_AddAssetDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.abroadOnly ? 'Adicionar ativo lá fora' : 'Adicionar ativo'),
+      title: Text(
+        widget.abroadOnly ? 'Adicionar ativo lá fora' : 'Adicionar ativo',
+      ),
       content: SizedBox(
         width: 360,
         child: Column(

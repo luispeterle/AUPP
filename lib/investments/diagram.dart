@@ -621,6 +621,7 @@ enum PiarProfile {
       PiarGroup.abroad: (25, 70),
       PiarGroup.realEstate: (10, 20),
       PiarGroup.valueReserve: (5, 13),
+      PiarGroup.opportunity: (0, 0),
     },
     ultraConservative => const {
       PiarGroup.fixedIncome: (20, 50),
@@ -628,6 +629,7 @@ enum PiarProfile {
       PiarGroup.abroad: (30, 80),
       PiarGroup.realEstate: (5, 25),
       PiarGroup.valueReserve: (0, 16),
+      PiarGroup.opportunity: (0, 0),
     },
   };
 
@@ -1115,9 +1117,7 @@ class DiagramState {
             if (PortfolioTier.values.any((t) => t.name == e.value))
               e.key as String: PortfolioTier.values.byName(e.value as String),
         },
-        sectors: Map<String, String>.from(
-          json['sectors'] as Map? ?? const {},
-        ),
+        sectors: Map<String, String>.from(json['sectors'] as Map? ?? const {}),
         abroad: {
           for (final e in (json['abroad'] as Map? ?? const {}).entries)
             e.key as String: (e.value as num).toDouble(),
