@@ -258,6 +258,63 @@ void main() {
       },
     );
 
+    test('a refund follows the debit it undoes', () {
+      const sent = 'Transferência enviada Fulano de Tal';
+      final p = plan([
+        tx(
+          'out',
+          account: 'pf',
+          amount: 31.36,
+          hidden: true,
+          description: sent,
+        ),
+        tx(
+          'back',
+          account: 'pf',
+          type: 'CREDIT',
+          amount: 31.36,
+          date: '2026-10-06',
+          description: 'Reembolso de $sent',
+        ),
+        tx(
+          'pix',
+          account: 'pf',
+          amount: 20,
+          description: 'Pix enviado Beltrano',
+        ),
+        tx(
+          'pixBack',
+          account: 'pf',
+          type: 'CREDIT',
+          amount: 20,
+          description: 'Estorno de Pix enviado Beltrano',
+        ),
+        tx(
+          'other',
+          account: 'pf',
+          type: 'CREDIT',
+          amount: 5,
+          description: 'Estorno de compra',
+        ),
+      ]);
+      final byId = {for (final i in p.items) i.transaction!.id: i};
+      expect(byId['back']!.skipReason, DinzoSkipReason.hidden);
+      expect(byId['pixBack']!.kind, DinzoPlanKind.create);
+      expect(byId['other']!.kind, DinzoPlanKind.create);
+    });
+
+    test('a refund of an own transfer comes in marked', () {
+      final p = plan([
+        tx(
+          'back',
+          account: 'pf',
+          type: 'CREDIT',
+          description: 'Reembolso de transferência enviada Fulano de Tal',
+        ),
+      ]);
+      expect(p.items.single.source!.tags, contains(MoneyAccounts.transferTag));
+    });
+
     test('a card bill paid from a bank account is internal on both sides', () {
       final p = plan([
         tx(

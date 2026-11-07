@@ -274,6 +274,16 @@ class DinzoSyncEngine {
   /// [plan].
   final Set<String> _billPaymentPairs = {};
 
+  /// A refund's credit by its id → the debit it undoes. Filled by [plan].
+  final Map<String, DinzoTransaction> _refunded = {};
+
+  /// "Reembolso de transferência enviada Fulano": the rest is the
+  /// description of the debit being undone.
+  static final RegExp _refund = RegExp(
+    r'^(reembolso|estorno|devolu[cç][aã]o) (de |do |da )?',
+    caseSensitive: false,
+  );
+
   /// Real total of installment purchases, by the id of their first
   /// installment, when a later installment is known. Banks put the leftover
   /// cents in the first one (12x of 323,92 = 27,03 + 11 × 26,99), so the
@@ -334,7 +344,7 @@ class DinzoSyncEngine {
 
   static final _document = RegExp(r'^[\d.\-/ ]+$');
   static final _transferWords = RegExp(
-    r'^(pix (enviado|recebido)( para| de)?|transfer[eê]ncia (enviada|recebida)( pelo pix)?|pagamento com (qr )?pix|ted (enviada|recebida)|doc (enviado|recebido))\s*',
+    r'^((reembolso|estorno|devolu[cç][aã]o) (de |do |da )?)?(pix (enviado|recebido)( para| de)?|transfer[eê]ncia (enviada|recebida)( pelo pix)?|pagamento com (qr )?pix|ted (enviada|recebida)|doc (enviado|recebido))\s*',
   );
   static final _leadingDocument = RegExp(r'^[\d.\-/ ]+');
 
@@ -356,6 +366,10 @@ class DinzoSyncEngine {
     if (tx.isInstallment && tx.installmentCurrent! > 1) {
       return DinzoSkipReason.laterInstallment;
     }
+    // Dinzo hides an own-account transfer but not its refund: alone, the
+    // refund would look like income. Only hiding is passed on: a refund of
+    // a later installment still offsets the purchase recorded in full.
+    if (_refunded[tx.id]?.hidden ?? false) return DinzoSkipReason.hidden;
     return null;
   }
 
@@ -462,6 +476,36 @@ class DinzoSyncEngine {
       }
     }
   }
+
+  /// Pairs each refund credit with a debit on the same account, of the same
+  /// amount and description, up to 7 days before it.
+  void _findRefunds(List<DinzoTransaction> transactions) {
+    _refunded.clear();
+    final paired = <String>{};
+    for (final credit in transactions) {
+      if (credit.isDebit || credit.projected) continue;
+      final prefix = _refund.firstMatch(credit.description);
+      if (prefix == null) continue;
+      final undone = _normalized(credit.description.substring(prefix.end));
+      final creditDay = DateTime.parse(credit.date);
+      for (final debit in transactions) {
+        if (!debit.isDebit || debit.projected || paired.contains(debit.id)) {
+          continue;
+        }
+        if (debit.accountId != credit.accountId) continue;
+        if ((debit.amount - credit.amount).abs() >= 0.005) continue;
+        final days = creditDay.difference(DateTime.parse(debit.date)).inDays;
+        if (days < 0 || days > 7) continue;
+        if (_normalized(debit.description) != undone) continue;
+        paired.add(debit.id);
+        _refunded[credit.id] = debit;
+        break;
+      }
+    }
+  }
+
+  static String _normalized(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
   CategoryType categoryTypeOf(DinzoTransaction tx) =>
       tx.isDebit ? CategoryType.expense : CategoryType.income;
@@ -609,6 +653,7 @@ class DinzoSyncEngine {
     final seen = <String>{};
     final items = <DinzoPlanItem>[];
     _findBillPaymentPairs(transactions);
+    _findRefunds(transactions);
     _findInstallmentTotals(transactions);
 
     for (final tx in transactions) {
