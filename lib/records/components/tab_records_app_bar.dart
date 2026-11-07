@@ -17,6 +17,9 @@ class TabRecordsAppBar extends StatelessWidget {
 
   /// Fork: sync state pill next to the person button (see RecordsPage).
   final Widget? syncPill;
+
+  /// Shows or hides the upcoming occurrences in the list (fork-only).
+  final VoidCallback? onUpcomingPressed;
   final VoidCallback onDatePickerPressed;
 
   /// Tapping the period text opens the month/year picker (fork-only).
@@ -54,6 +57,7 @@ class TabRecordsAppBar extends StatelessWidget {
     required this.onAccountsTapped,
     this.accountsFiltered = false,
     this.syncPill,
+    this.onUpcomingPressed,
     required this.onDatePickerPressed,
     this.onPeriodTapped,
     required this.onStatisticsPressed,
@@ -194,6 +198,18 @@ class TabRecordsAppBar extends StatelessWidget {
   List<Widget> _buildActions() {
     const double actionButtonScale = 1.0;
     return <Widget>[
+      if (onUpcomingPressed != null)
+        StyledActionButton(
+          icon: TabRecordsController.showUpcoming
+              ? Icons.event_repeat
+              : Icons.event_busy,
+          onPressed: onUpcomingPressed!,
+          tooltip: TabRecordsController.showUpcoming
+              ? 'Esconder recorrentes'
+              : 'Mostrar recorrentes',
+          semanticsId: 'toggle-upcoming',
+          scaleFactor: actionButtonScale,
+        ),
       StyledActionButton(
         icon: Icons.calendar_today,
         onPressed: onDatePickerPressed,

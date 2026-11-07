@@ -150,7 +150,7 @@ class TabRecordsState extends State<TabRecords> {
 
   void _selectAll() {
     setState(() {
-      _selectedRecordIds = _controller.filteredRecords
+      _selectedRecordIds = _controller.listedRecords
           .where((r) => r?.id != null)
           .map((r) => r!.id!)
           .toSet();
@@ -500,7 +500,7 @@ class TabRecordsState extends State<TabRecords> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  if (_controller.filteredRecords.isEmpty) _buildEmptyState(),
+                  if (_controller.listedRecords.isEmpty) _buildEmptyState(),
                   _buildRecordList(),
                   const SliverToBoxAdapter(child: SizedBox(height: 75)),
                 ],
@@ -608,7 +608,7 @@ class TabRecordsState extends State<TabRecords> {
     return <Widget>[
       if (!_controller.isSearchingEnabled) _buildMainSliverAppBar(),
       _buildSummarySection(),
-      if (_controller.filteredRecords.isEmpty) _buildEmptyState(),
+      if (_controller.listedRecords.isEmpty) _buildEmptyState(),
       _buildRecordList(),
       const SliverToBoxAdapter(
         child: SizedBox(height: 75),
@@ -617,7 +617,7 @@ class TabRecordsState extends State<TabRecords> {
   }
 
   Widget _buildRecordList() => RecordsDayList(
-    _controller.filteredRecords,
+    _controller.listedRecords,
     onListBackCallback: _onRecordListBack,
     isSelectMode: _isSelectMode,
     selectedRecordIds: _selectedRecordIds,
@@ -640,6 +640,7 @@ class TabRecordsState extends State<TabRecords> {
       onAccountsTapped: _showAccounts,
       accountsFiltered: MoneyAccounts.filtering,
       syncPill: _syncPill(),
+      onUpcomingPressed: () => _controller.toggleUpcoming(),
       onDatePickerPressed: () => _showDatePicker(),
       onPeriodTapped: () => TabRecordsDatePicker.pickSamePeriod(
           context, _controller, () => setState(() {})),

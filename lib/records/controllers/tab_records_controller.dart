@@ -35,6 +35,10 @@ class TabRecordsController {
   List<Record?> records = [];
   List<Record?>? overviewRecords;
   List<Record?> filteredRecords = [];
+
+  /// What the list shows: [filteredRecords], without the upcoming
+  /// occurrences unless [showUpcoming].
+  List<Record?> listedRecords = [];
   List<Category?> categories = [];
   List<String> tags = [];
 
@@ -61,6 +65,11 @@ class TabRecordsController {
   bool showHidden = ServiceConfig.sharedPreferences
           ?.getBool(PreferencesKeys.extratoShowHidden) ??
       false;
+
+  /// Fork: whether the list shows the occurrences not stored yet
+  /// (recurrences, estimates); those of today always show. Off at every
+  /// start of the app. Only the list: totals and statistics count them.
+  static bool showUpcoming = false;
 
   /// The list before hidden records are dropped: hiding only takes them off
   /// the list, the totals still count them.
@@ -201,8 +210,28 @@ class TabRecordsController {
 
     if (!const DeepCollectionEquality().equals(filteredRecords, tempRecords)) {
       filteredRecords = tempRecords;
+      _updateListed();
       onStateChanged();
     }
+  }
+
+  void toggleUpcoming() {
+    showUpcoming = !showUpcoming;
+    _updateListed();
+    onStateChanged();
+  }
+
+  void _updateListed() {
+    if (showUpcoming) {
+      listedRecords = filteredRecords;
+      return;
+    }
+    final now = DateTime.now();
+    listedRecords = filteredRecords.where((r) {
+      if (r == null || !r.isFutureRecord) return true;
+      final d = r.dateTime;
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).toList();
   }
 
   /// [records] without the hidden ones. A purchase's caixinha part
@@ -382,6 +411,7 @@ class TabRecordsController {
 
     records = allRecords;
     filteredRecords = allRecords;
+    _updateListed();
     _extractTags(allRecords);
     _extractCategories(allRecords);
     filterRecords();
