@@ -1,6 +1,6 @@
 # APIs usadas pelo app
 
-O app só busca dados por API. Sites de pesquisa, como Fundamentus e AUVP Analítica, são apenas links que a pessoa abre: o app não lê nada deles. O Fundamentus recusa clientes que não sejam navegador (HTTP 403), e o app não se disfarça de navegador.
+O app só busca dados por API. Sites de pesquisa, como a AUVP Analítica, são apenas links que a pessoa abre: o app não lê nada deles, nem se disfarça de navegador para isso.
 
 Serviço novo só entra no app depois de entrar nesta lista e em `scripts/check_apis.py`.
 

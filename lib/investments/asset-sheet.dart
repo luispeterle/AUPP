@@ -117,7 +117,8 @@ class AssetQuote {
       ticker: ticker,
       price: price,
       changePct: changePct,
-      at: DateTime.tryParse(data['regularMarketTime'] as String? ?? '')?.toLocal(),
+      at: DateTime.tryParse(data['regularMarketTime'] as String? ?? '')
+          ?.toLocal(),
       longName: data['longName'] as String?,
       shortName: data['shortName'] as String?,
       currency: (data['currency'] as String?) ?? 'BRL',
@@ -146,7 +147,10 @@ class AssetQuote {
   }
 
   /// CoinGecko's answer, for crypto.
-  static AssetQuote? fromCoinGeckoJson(String ticker, Map<String, dynamic> json) {
+  static AssetQuote? fromCoinGeckoJson(
+    String ticker,
+    Map<String, dynamic> json,
+  ) {
     final prices = json['prices'] as List?;
     if (prices == null || prices.isEmpty) return null;
     final history = <(DateTime, double)>[
@@ -157,7 +161,9 @@ class AssetQuote {
         ),
     ];
     final last = history.last;
-    final previous = history.length >= 2 ? history[history.length - 2].$2 : null;
+    final previous = history.length >= 2
+        ? history[history.length - 2].$2
+        : null;
     return AssetQuote(
       ticker: ticker,
       price: last.$2,
@@ -177,16 +183,13 @@ class AssetQuote {
     String ticker,
     http.Client client,
   ) async {
-    Future<({int status, Map<String, dynamic>? body})> ask() => BrapiApi.get(
-      client,
-      'stocks/historical',
-      {
-        'symbols': ticker,
-        'range': _historyRange,
-        'interval': '1d',
-        'sortOrder': 'asc',
-      },
-    );
+    Future<({int status, Map<String, dynamic>? body})> ask() =>
+        BrapiApi.get(client, 'stocks/historical', {
+          'symbols': ticker,
+          'range': _historyRange,
+          'interval': '1d',
+          'sortOrder': 'asc',
+        });
     var answer = await ask();
     final notInPlan =
         answer.status == 403 || answer.body?['code'] == 'INVALID_RANGE';
@@ -273,7 +276,10 @@ class AssetProfile {
     return profile.sector == null && profile.summary == null ? null : profile;
   }
 
-  static Future<AssetProfile?> fetch(String ticker, {http.Client? client}) async {
+  static Future<AssetProfile?> fetch(
+    String ticker, {
+    http.Client? client,
+  }) async {
     final http.Client http_ = client ?? http.Client();
     try {
       final answer = await BrapiApi.get(http_, 'stocks/profile', {
@@ -424,7 +430,6 @@ class AssetLink {
 /// and not fetched: it shows offline, and no site learns what is being studied.
 String? siteIcon(String label) => switch (label) {
   'AUVP Analítica' => 'assets/images/sites/auvp.png',
-  'Fundamentus' => 'assets/images/sites/fundamentus.png',
   'RI da empresa' || 'Gestora' => 'assets/images/sites/ri.png',
   'CVM' => 'assets/images/sites/cvm.png',
   'SEC' => 'assets/images/sites/sec.png',
@@ -471,7 +476,9 @@ List<AssetLink> assetLinks(
           // The new EDGAR page wants the company's number: given a ticker it
           // shows the last company seen. The classic one takes the ticker.
           switch (SecCatalog.instance[ticker]?.cik) {
-            final cik? => Uri.parse('https://www.sec.gov/edgar/browse/?CIK=$cik'),
+            final cik? => Uri.parse(
+              'https://www.sec.gov/edgar/browse/?CIK=$cik',
+            ),
             null => Uri.https('www.sec.gov', '/cgi-bin/browse-edgar', {
               'action': 'getcompany',
               'CIK': ticker,
@@ -495,10 +502,6 @@ List<AssetLink> assetLinks(
         AssetLink(
           'AUVP Analítica',
           Uri.parse('https://analitica.auvp.com.br/acoes/$ticker'),
-        ),
-        AssetLink(
-          'Fundamentus',
-          Uri.parse('https://www.fundamentus.com.br/detalhes.php?papel=$ticker'),
         ),
         AssetLink(
           'RI da empresa',
@@ -590,7 +593,8 @@ List<AssetSearchResult> searchAssets(String query, {int limit = 30}) {
   final results = <AssetSearchResult>[];
   final foldedQuery = _fold(query.trim());
   for (final entry in cryptoNames.entries) {
-    if (entry.key.startsWith(upper) || _fold(entry.value).contains(foldedQuery)) {
+    if (entry.key.startsWith(upper) ||
+        _fold(entry.value).contains(foldedQuery)) {
       results.add(AssetSearchResult(entry.key, entry.value, ticker: entry.key));
     }
   }

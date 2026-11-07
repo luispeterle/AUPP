@@ -814,7 +814,7 @@ class DiagramState {
   /// Where to find each answer, by the labels of [assetLinks].
   static const questionSources = <String, List<String>>{
     'O ROE é consistentemente acima de 5%? (empresa endividada: olhar o ROIC)':
-        ['Fundamentus', 'AUVP Analítica'],
+        ['AUVP Analítica'],
     'Receita ou lucro cresceram nos últimos 5 anos?': ['AUVP Analítica'],
     'Tem histórico de pagar dividendos?': ['AUVP Analítica'],
     'Investe em inovação, num setor que não está ficando obsoleto?': [
@@ -826,7 +826,7 @@ class DiagramState {
       'AUVP Analítica',
       'Notícias',
     ],
-    'É uma empresa grande (blue chip)?': ['Fundamentus'],
+    'É uma empresa grande (blue chip)?': ['AUVP Analítica'],
     'Tem boa governança, sem histórico de corrupção?': [
       'AUVP Analítica',
       'Notícias',
@@ -836,11 +836,11 @@ class DiagramState {
       'AUVP Analítica',
     ],
     'A dívida líquida é menor que o lucro dos últimos 12 meses?': [
-      'Fundamentus',
+      'AUVP Analítica',
     ],
-    'Teve lucro operacional (EBIT) no último ano?': ['Fundamentus'],
-    'O P/L está abaixo de 30?': ['Fundamentus'],
-    'O P/VP está abaixo de 5?': ['Fundamentus'],
+    'Teve lucro operacional (EBIT) no último ano?': ['AUVP Analítica'],
+    'O P/L está abaixo de 30?': ['AUVP Analítica'],
+    'O P/VP está abaixo de 5?': ['AUVP Analítica'],
     'Os imóveis ficam em regiões nobres?': ['Funds Explorer', 'Gestora'],
     'Os imóveis são novos, com pouca manutenção?': ['Gestora'],
     'O P/VP está abaixo de 1? (acima de 1,5, melhor evitar)': [
