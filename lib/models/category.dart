@@ -35,6 +35,17 @@ class Category extends Model {
     iconCodePoint: FontAwesomeIcons.chartLine.data.codePoint,
   );
 
+  /// Money back from an investment bank to the everyday ones: it returns to
+  /// the wallet to invest.
+  static const withdrawalName = 'Resgate';
+
+  static Category withdrawal() => Category(
+    withdrawalName,
+    categoryType: CategoryType.investment,
+    color: Colors.teal[200],
+    iconCodePoint: FontAwesomeIcons.rightFromBracket.data.codePoint,
+  );
+
   /// What the wallet to invest gained or lost without an entry saying why.
   static const adjustmentName = 'Ajuste';
 

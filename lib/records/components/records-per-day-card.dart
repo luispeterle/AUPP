@@ -367,6 +367,18 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 _buildRecordAmountWidget(movement),
               ],
             )
+          : movement.investShortfall != null
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const BlinkingAlertIcon(
+                  Icons.priority_high,
+                  message: 'O Investir não tinha todo o dinheiro do aporte',
+                ),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
           : movement.needsPaymentCode
           ? Row(
               mainAxisSize: MainAxisSize.min,

@@ -22,6 +22,7 @@ import '../../settings/constants/overview-time-interval.dart';
 import '../../settings/constants/preferences-keys.dart';
 import '../components/filter_modal_content.dart';
 import '../components/tab_records_date_picker.dart' show shownPeriodOf;
+import 'package:aupp/dinzo/aporte-shortfall.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
 
 class TabRecordsController {
@@ -403,6 +404,8 @@ class TabRecordsController {
 
     // The same money twice counts once, whatever the period shows.
     EstimateLink.markMatches([...newRecords, ...futureRecords]);
+    // Aportes the wallet to invest could not pay alone.
+    await AporteShortfall.mark(newRecords);
 
     // Merge future records with database records.
     // Fork: only the accounts switched on (person button).

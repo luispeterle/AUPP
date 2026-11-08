@@ -7,6 +7,7 @@ import 'package:aupp/investments/investments-cache.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
+import 'package:aupp/services/database/money-model-migration.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
@@ -374,6 +375,7 @@ class DinzoSyncService {
         accounts: accounts,
         categories: categories,
         defaultWalletId: defaultWallet?.id,
+        toInvestWalletId: await DailyMoney.toInvestWalletId(),
       );
       final linked = await linkedRecords();
       final plan = engine.plan(
@@ -440,6 +442,17 @@ class DinzoSyncService {
     final db = ServiceConfig.database;
     final result = DinzoApplyResult();
     await saveConfig(prepared.engine.config);
+    // Aportes and withdrawals use the app's own categories, not Dinzo's.
+    final sqlite = (await SqliteDatabase.instance.database)!;
+    for (final item in prepared.plan.items) {
+      if (item.categoryType != CategoryType.investment) continue;
+      await MoneyModelMigration.ensureCategory(
+        sqlite,
+        item.desired?.categoryName == Category.withdrawalName
+            ? Category.withdrawal()
+            : Category.investment(),
+      );
+    }
 
     final categories = <String, Category>{
       for (final c in await db.getAllCategories())

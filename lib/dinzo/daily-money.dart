@@ -102,6 +102,15 @@ class DailyMoney {
     return rows.isNotEmpty;
   }
 
+  /// The wallet to invest, once the first sync has made it.
+  static Future<int?> toInvestWalletId() async {
+    final wallets = await ServiceConfig.database.getAllWallets();
+    for (final w in wallets) {
+      if (w.isInvestmentReserve && !w.isArchived) return w.id;
+    }
+    return null;
+  }
+
   /// Leaves in the wallet to invest what [money] has beyond the other wallets.
   /// The difference goes in one entry per month, where a hole shows up. On the
   /// very first sync ([spendable]) there is nothing to explain: the default

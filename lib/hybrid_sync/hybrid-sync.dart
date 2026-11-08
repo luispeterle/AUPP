@@ -85,7 +85,12 @@ class HybridSync {
   /// 6 (2026-11-05): C6 Pix without "Pix" in the description and money in
   /// on a bank account are no longer tagged "Débito"; an older app would tag
   /// them back on its next Dinzo pull.
-  static const dataCompat = 6;
+  /// 7 (2026-11-08): money between an everyday bank and a broker is an
+  /// Aporte (or Resgate) of the wallet to invest; an older app would see it
+  /// as hidden in Dinzo and remove it on its next pull. Deleting an aporte
+  /// also deletes the transfer that covered it (`livre:cobre:`); an older
+  /// app would leave it behind.
+  static const dataCompat = 7;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

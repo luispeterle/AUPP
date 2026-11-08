@@ -4,7 +4,7 @@ import 'known-tags.dart';
 
 /// Red, blinking boleto / Pix icon: an upcoming occurrence of a recurrence
 /// paid that way still without its code ([Record.needsPaymentCode]).
-class MissingPaymentCodeIcon extends StatefulWidget {
+class MissingPaymentCodeIcon extends StatelessWidget {
   /// "Boleto" or "Pix" ([Record.billingKindOf]).
   final String kind;
   final double size;
@@ -12,10 +12,32 @@ class MissingPaymentCodeIcon extends StatefulWidget {
   const MissingPaymentCodeIcon(this.kind, {super.key, this.size = 34});
 
   @override
-  State<MissingPaymentCodeIcon> createState() => _MissingPaymentCodeIconState();
+  Widget build(BuildContext context) => BlinkingAlertIcon(
+    KnownTag.of(kind)?.icon ?? Icons.qr_code_2,
+    message: 'Falta o código do $kind',
+    size: size,
+  );
 }
 
-class _MissingPaymentCodeIconState extends State<MissingPaymentCodeIcon>
+/// Red, blinking round icon left of an amount: something on the record
+/// waits for the user.
+class BlinkingAlertIcon extends StatefulWidget {
+  final IconData icon;
+  final String message;
+  final double size;
+
+  const BlinkingAlertIcon(
+    this.icon, {
+    super.key,
+    required this.message,
+    this.size = 34,
+  });
+
+  @override
+  State<BlinkingAlertIcon> createState() => _BlinkingAlertIconState();
+}
+
+class _BlinkingAlertIconState extends State<BlinkingAlertIcon>
     with SingleTickerProviderStateMixin {
   late final AnimationController _blink = AnimationController(
     vsync: this,
@@ -33,7 +55,7 @@ class _MissingPaymentCodeIconState extends State<MissingPaymentCodeIcon>
   Widget build(BuildContext context) {
     final error = Theme.of(context).colorScheme.error;
     return Tooltip(
-      message: 'Falta o código do ${widget.kind}',
+      message: widget.message,
       child: FadeTransition(
         opacity: _blink,
         child: Container(
@@ -43,11 +65,7 @@ class _MissingPaymentCodeIconState extends State<MissingPaymentCodeIcon>
             shape: BoxShape.circle,
             border: Border.all(color: error, width: 1.5),
           ),
-          child: Icon(
-            KnownTag.of(widget.kind)?.icon ?? Icons.qr_code_2,
-            size: widget.size / 2,
-            color: error,
-          ),
+          child: Icon(widget.icon, size: widget.size / 2, color: error),
         ),
       ),
     );

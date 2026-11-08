@@ -4,8 +4,10 @@ import 'package:aupp/components/known-tags.dart';
 import 'dart:convert';
 
 import 'package:aupp/models/category-type.dart';
+import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 
+import 'daily-money.dart';
 import 'dinzo-config.dart';
 import 'dinzo-models.dart';
 
@@ -248,11 +250,21 @@ class DinzoSyncEngine {
   /// Wallet that receives imports with no merchant rule ("Livre").
   final int? defaultWalletId;
 
+  /// The wallet to invest: money sent to a bank outside the everyday ones
+  /// leaves it ([brokerOf]). Null before it exists: such transfers are
+  /// skipped like any other investment move.
+  final int? toInvestWalletId;
+
+  /// Whether an account is in an everyday bank ([DailyBanks]).
+  final bool Function(DinzoAccount account) isDailyAccount;
+
   DinzoSyncEngine({
     required this.config,
     required List<DinzoAccount> accounts,
     required List<DinzoCategory> categories,
     required this.defaultWalletId,
+    this.toInvestWalletId,
+    this.isDailyAccount = DailyBanks.holdsAccount,
   }) : accounts = {for (final a in accounts) a.id: a},
        categories = {for (final c in categories) c.id: c};
 
@@ -273,6 +285,10 @@ class DinzoSyncEngine {
   /// debit of the same amount on a bank account within 3 days. Filled by
   /// [plan].
   final Set<String> _billPaymentPairs = {};
+
+  /// Money between an everyday bank and another one (a broker), by the id
+  /// of the everyday side → the other bank's account. Filled by [plan].
+  final Map<String, DinzoAccount> _brokerTransfers = {};
 
   /// A refund's credit by its id → the debit it undoes. Filled by [plan].
   final Map<String, DinzoTransaction> _refunded = {};
@@ -360,6 +376,9 @@ class DinzoSyncEngine {
 
   DinzoSkipReason? skipReason(DinzoTransaction tx) {
     if (config.ignoredIds.contains(tx.id)) return DinzoSkipReason.ignoredByUser;
+    // Dinzo hides it as a transfer between own accounts, but the money left
+    // (or came back to) the everyday banks.
+    if (brokerOf(tx) != null) return null;
     if (tx.hidden) return DinzoSkipReason.hidden;
     if (isBillPayment(tx)) return DinzoSkipReason.internalTransfer;
     if (isInvestment(tx)) return DinzoSkipReason.investment;
@@ -387,6 +406,71 @@ class DinzoSyncEngine {
       id = category.parentId;
     }
     return false;
+  }
+
+  /// The account outside the everyday banks that [tx] sent money to or got
+  /// it from, when [tx] is one: then it is an aporte (or a withdrawal) of the
+  /// wallet to invest.
+  DinzoAccount? brokerOf(DinzoTransaction tx) => _brokerTransfers[tx.id];
+
+  bool _isBankAccount(DinzoAccount? account) =>
+      account != null && !account.isCreditCard;
+
+  /// Pairs each transfer between own accounts on an everyday bank with the
+  /// other side on a bank outside them: opposite direction, same amount, up
+  /// to 3 days apart (the closest), one to one. Only the everyday side
+  /// becomes a record; the other one stays hidden like everything that
+  /// happens inside a broker.
+  void _findBrokerTransfers(List<DinzoTransaction> transactions) {
+    _brokerTransfers.clear();
+    if (toInvestWalletId == null) return;
+    final real = transactions.where((t) => !t.projected).toList();
+    final elsewhere = [
+      for (final t in real)
+        if (_isBankAccount(accounts[t.accountId]) &&
+            !isDailyAccount(accounts[t.accountId]!))
+          t,
+    ];
+    if (elsewhere.isEmpty) return;
+    bool daily(DinzoTransaction t) =>
+        _isBankAccount(accounts[t.accountId]) &&
+        isDailyAccount(accounts[t.accountId]!);
+    bool sameMoney(DinzoTransaction a, DinzoTransaction b) =>
+        a.isDebit != b.isDebit &&
+        (a.amount - b.amount).abs() < 0.005 &&
+        DateTime.parse(a.date)
+                .difference(DateTime.parse(b.date))
+                .inDays
+                .abs() <=
+            3;
+    final used = <String>{};
+    for (final tx in real) {
+      if (!daily(tx)) continue;
+      if (!tx.hidden && !isOwnTransfer(tx)) continue;
+      if (isBillPayment(tx) || isInvestment(tx)) continue;
+      // Its other side is in another everyday bank: the money stayed.
+      if (real.any(
+        (t) => t.accountId != tx.accountId && daily(t) && sameMoney(t, tx),
+      )) {
+        continue;
+      }
+      DinzoTransaction? best;
+      var bestGap = 4;
+      for (final other in elsewhere) {
+        if (used.contains(other.id) || other.isDebit == tx.isDebit) continue;
+        if ((other.amount - tx.amount).abs() >= 0.005) continue;
+        final gap = DateTime.parse(other.date)
+            .difference(DateTime.parse(tx.date))
+            .inDays
+            .abs();
+        if (gap >= bestGap) continue;
+        best = other;
+        bestGap = gap;
+      }
+      if (best == null) continue;
+      used.add(best.id);
+      _brokerTransfers[tx.id] = accounts[best.accountId]!;
+    }
   }
 
   void _findInstallmentTotals(List<DinzoTransaction> transactions) {
@@ -507,8 +591,11 @@ class DinzoSyncEngine {
   static String _normalized(String s) =>
       s.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
-  CategoryType categoryTypeOf(DinzoTransaction tx) =>
-      tx.isDebit ? CategoryType.expense : CategoryType.income;
+  CategoryType categoryTypeOf(DinzoTransaction tx) => brokerOf(tx) != null
+      ? CategoryType.investment
+      : tx.isDebit
+      ? CategoryType.expense
+      : CategoryType.income;
 
   /// Category of transactions Dinzo has not categorised yet. Categorising
   /// them in Dinzo updates the record on the next sync.
@@ -518,6 +605,9 @@ class DinzoSyncEngine {
   /// (a subcategory such as "Luz"; AUPP knows its parent). A merchant rule or a category mapping, when present, is an
   /// explicit override.
   String resolveCategory(DinzoTransaction tx) {
+    if (brokerOf(tx) != null) {
+      return tx.isDebit ? Category.investmentName : Category.withdrawalName;
+    }
     final rule = config.merchantRules[merchantKey(tx.description)];
     if (rule?.categoryName != null) return rule!.categoryName!;
     final type = categoryTypeOf(tx);
@@ -535,6 +625,10 @@ class DinzoSyncEngine {
   String? bankTag(DinzoTransaction tx) {
     final account = accounts[tx.accountId];
     if (account == null) return null;
+    return _bankName(account);
+  }
+
+  static String _bankName(DinzoAccount account) {
     final connector = account.connectorName;
     if (connector == null) return account.title;
     // The bank catalogue knows the connectors' spellings ("C6 Bank" → "C6",
@@ -591,7 +685,8 @@ class DinzoSyncEngine {
   List<String> syncedTagsFor(DinzoTransaction tx) => [
     bankTag(tx),
     methodTag(tx),
-    if (isOwnTransfer(tx)) MoneyAccounts.transferTag,
+    // An aporte has one side only: nothing to cancel it out.
+    if (isOwnTransfer(tx) && brokerOf(tx) == null) MoneyAccounts.transferTag,
   ].whereType<String>().toList()..sort();
 
   /// Dinzo subcategory title → its top-level category title.
@@ -601,16 +696,26 @@ class DinzoSyncEngine {
         c.title: categories[c.parentId]!.title,
   };
 
-  int? resolveWallet(DinzoTransaction tx) =>
-      config.merchantRules[merchantKey(tx.description)]?.walletId ??
-      defaultWalletId;
+  int? resolveWallet(DinzoTransaction tx) => brokerOf(tx) != null
+      ? toInvestWalletId
+      : config.merchantRules[merchantKey(tx.description)]?.walletId ??
+            defaultWalletId;
+
+  /// "Aporte no BTG", "Resgate do BTG": the bank says more than "Pix to
+  /// myself".
+  String titleFor(DinzoTransaction tx) {
+    final broker = brokerOf(tx);
+    if (broker == null) return cleanTitle(tx.description);
+    final bank = _bankName(broker);
+    return tx.isDebit ? 'Aporte no $bank' : 'Resgate do $bank';
+  }
 
   /// The record as Dinzo alone would have it.
   DinzoSnapshot sourceFor(DinzoTransaction tx) {
     final multiplier = tx.isInstallment ? tx.installmentTotal! : 1;
     final amount = _installmentTotals[tx.id] ?? _round2(tx.amount * multiplier);
     return DinzoSnapshot(
-      title: cleanTitle(tx.description),
+      title: titleFor(tx),
       value: tx.isDebit ? -amount : amount,
       date: tx.date,
       categoryName: resolveCategory(tx),
@@ -655,6 +760,7 @@ class DinzoSyncEngine {
     _findBillPaymentPairs(transactions);
     _findRefunds(transactions);
     _findInstallmentTotals(transactions);
+    _findBrokerTransfers(transactions);
 
     for (final tx in transactions) {
       if (tx.projected || tx.date.compareTo(startDay) < 0) continue;
