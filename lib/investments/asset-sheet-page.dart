@@ -7,6 +7,7 @@ import 'package:aupp/components/time-chart.dart';
 import 'package:aupp/desktop/analysis-page.dart';
 import 'package:aupp/desktop/analysis-widgets.dart';
 import 'package:aupp/desktop/compare-page.dart';
+import 'package:aupp/desktop/fii-compare-page.dart';
 import 'package:aupp/desktop/desktop-layout.dart';
 import 'package:aupp/desktop/asset-workspaces.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
@@ -19,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'asset-sheet.dart';
 import 'diagram-page.dart';
 import 'diagram.dart';
+import 'fii-view.dart';
 import 'investments-analytics.dart';
 import 'investments-cache.dart';
 import 'investments-page.dart';
@@ -735,14 +737,35 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
     final links = widget.embedded && AssetWorkspaces.instance.supported
         ? null
         : _buildLinks();
+    final fii = _kind == AssetKind.fii;
     return Scaffold(
       appBar: widget.embedded
           ? null
-          : AppBar(title: const Text('Ficha do ativo')),
+          : AppBar(
+              title: const Text('Ficha do ativo'),
+              // On the computer Comparar is a tab of the workspace.
+              actions: [
+                if (fii)
+                  IconButton(
+                    tooltip: 'Comparar',
+                    icon: const Icon(Icons.table_chart_outlined),
+                    onPressed: () => _push(
+                      'Comparar · ${widget.ticker}',
+                      FiiComparePage(ticker: widget.ticker),
+                    ),
+                  ),
+              ],
+            ),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           _buildHeader(),
+          if (fii && !_quoteLoading)
+            FiiPanel(
+              ticker: widget.ticker,
+              price: _quote?.price,
+              history: _quote?.history ?? const [],
+            ),
           AdaptiveColumns(
             left: [_buildSituation(), ?_buildCompany(), _buildThesis(), ?links],
             right: [_buildGrade()],

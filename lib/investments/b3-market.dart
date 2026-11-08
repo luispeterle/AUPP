@@ -88,17 +88,26 @@ String? sectorLabel(String? sector) => switch (sector) {
 /// Kept on disk for when there is no network.
 class B3Market extends ChangeNotifier {
   static final instance = B3Market();
+
+  /// The real estate funds (brapi's "fund" list, subtype "fii").
+  static final funds = B3Market(type: 'fund', subType: 'fii');
   static final _logger = Logger.withClass(B3Market);
   static const freshFor = Duration(minutes: 20);
 
+  B3Market({this.type = 'stock', this.subType}) {
+    final name = type == 'stock' ? 'b3-market.json' : 'b3-$type.json';
+    file = () async =>
+        File(p.join((await getApplicationSupportDirectory()).path, name));
+  }
+
+  final String type;
+  final String? subType;
   Map<String, MarketRow> _rows = {};
   DateTime? fetchedAt;
   Future<void>? _running;
 
   @visibleForTesting
-  Future<File> Function() file = () async => File(
-    p.join((await getApplicationSupportDirectory()).path, 'b3-market.json'),
-  );
+  late Future<File> Function() file;
 
   @visibleForTesting
   http.Client Function() client = http.Client.new;
@@ -137,11 +146,15 @@ class B3Market extends ChangeNotifier {
     return [...same..sort(byVolume), ...near..sort(byVolume)];
   }
 
-  static Map<String, MarketRow> parse(Map<String, dynamic> json) => {
+  static Map<String, MarketRow> parse(
+    Map<String, dynamic> json, {
+    String? subType,
+  }) => {
     for (final item in json['stocks'] as List? ?? const [])
-      if (MarketRow.fromJson((item as Map).cast<String, dynamic>())
-          case final row?)
-        row.ticker: row,
+      if (subType == null || (item as Map)['subType'] == subType)
+        if (MarketRow.fromJson((item as Map).cast<String, dynamic>())
+            case final row?)
+          row.ticker: row,
   };
 
   Future<void> ensure() async {
@@ -156,7 +169,7 @@ class B3Market extends ChangeNotifier {
       final saved = await file();
       if (!await saved.exists()) return;
       final json = jsonDecode(await saved.readAsString()) as Map<String, dynamic>;
-      _rows = parse(json);
+      _rows = parse(json, subType: subType);
       // Old prices are shown, but asked again right away.
       fetchedAt = null;
       notifyListeners();
@@ -172,7 +185,7 @@ class B3Market extends ChangeNotifier {
       final response = await http_
           .get(
             Uri.https('brapi.dev', '/api/quote/list', {
-              'type': 'stock',
+              'type': type,
               'limit': '10000',
             }),
             headers: {if (token != null) 'Authorization': 'Bearer $token'},
@@ -183,7 +196,7 @@ class B3Market extends ChangeNotifier {
         return;
       }
       final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final rows = parse(json);
+      final rows = parse(json, subType: subType);
       if (rows.isEmpty) return;
       _rows = rows;
       fetchedAt = DateTime.now();

@@ -41,7 +41,8 @@ class AssetWorkspace {
   String? activeSite;
   bool standby = false;
 
-  /// Known once the sites are chosen; only stocks have Análise and Comparar.
+  /// Known once the sites are chosen; only stocks have Análise, and stocks
+  /// and FIIs have Comparar.
   AssetKind? kind;
 
   static const comparePage = '#comparar';
@@ -49,6 +50,7 @@ class AssetWorkspace {
   AssetWorkspace(this.ticker);
 
   bool get hasAnalysis => kind == AssetKind.stock;
+  bool get hasCompare => hasAnalysis || kind == AssetKind.fii;
 
   SiteTab? get active =>
       tabs.where((tab) => tab.id == activeSite).firstOrNull;

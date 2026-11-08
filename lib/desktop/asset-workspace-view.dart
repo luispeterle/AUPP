@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:aupp/desktop/asset-workspaces.dart';
 import 'package:aupp/desktop/compare-page.dart';
+import 'package:aupp/desktop/fii-compare-page.dart';
+import 'package:aupp/investments/asset-sheet.dart';
 import 'package:aupp/investments/asset-sheet-page.dart';
 import 'package:aupp/investments/investments-page.dart';
 import 'package:aupp/investments/stock-catalog.dart';
@@ -263,7 +265,7 @@ class _WorkspaceViewState extends State<_WorkspaceView> {
                 size: 20,
               ),
             ),
-            if (workspace.hasAnalysis)
+            if (workspace.hasCompare)
               SiteChip(
                 label: 'Comparar',
                 selected: workspace.activeSite == AssetWorkspace.comparePage,
@@ -330,7 +332,9 @@ class _WorkspaceViewState extends State<_WorkspaceView> {
                     if (_opened.contains(AssetWorkspace.comparePage))
                       Offstage(
                         offstage: page != AssetWorkspace.comparePage,
-                        child: ComparePage(ticker: workspace.ticker),
+                        child: workspace.kind == AssetKind.fii
+                            ? FiiComparePage(ticker: workspace.ticker)
+                            : ComparePage(ticker: workspace.ticker),
                       ),
                     SizedBox(key: _pageArea),
                   ],

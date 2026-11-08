@@ -58,6 +58,20 @@ CVM_COLUMNS = {
     },
 }
 
+# Columns read from the FII reports (lib/investments/fii-data.dart).
+CVM_FII_COLUMNS = {
+    "INF_MENSAL": {
+        "_geral_": ["CNPJ_Fundo_Classe", "Data_Referencia", "Versao", "Nome_Fundo_Classe", "Codigo_ISIN", "Segmento_Atuacao", "Nome_Administrador", "Tipo_Gestao", "Data_Funcionamento"],
+        "_complemento_": ["CNPJ_Fundo_Classe", "Data_Referencia", "Versao", "Patrimonio_Liquido", "Cotas_Emitidas", "Valor_Patrimonial_Cotas", "Percentual_Dividend_Yield_Mes", "Total_Numero_Cotistas", "Percentual_Despesas_Taxa_Administracao"],
+        "_ativo_passivo_": ["CNPJ_Fundo_Classe", "Data_Referencia", "Versao", "Total_Necessidades_Liquidez", "Total_Investido", "Direitos_Bens_Imoveis", "CRI", "CRI_CRA", "LCI", "LCI_LCA", "FII"],
+    },
+    "INF_TRIMESTRAL": {
+        "_fii_imovel_2": ["CNPJ_Fundo_Classe", "Data_Referencia", "Versao", "Classe", "Nome_Imovel", "Area", "Percentual_Vacancia", "Percentual_Inadimplencia", "Percentual_Receitas_FII"],
+        "_inquilino_": ["CNPJ_Fundo_Classe", "Data_Referencia", "Versao", "Setor_Atuacao", "Percentual_Receitas_FII"],
+        "_complemento_": ["CNPJ_Fundo_Classe", "Data_Referencia", "Versao", "Percentual_Vencimento_Receita_FII_Faixa_Ate_3Meses", "Percentual_Vencimento_Receita_FII_Faixa_Acima_36Meses", "Percentual_Indexador_Receita_FII_IPCA", "Percentual_Indexador_Receita_FII_IGPM"],
+    },
+}
+
 
 def last_bank_quarter(today):
     """The last quarter IF.data has: about three months after it ends."""
@@ -170,9 +184,20 @@ def checks():
             "needs",
             fields(*[("stocks", 0, k) for k in ("stock", "name", "close", "change", "volume", "market_cap", "sector", "subsector")]),
         ),
+        (
+            "brapi: lista de FIIs",
+            "https://brapi.dev/api/quote/list?type=fund&limit=1",
+            brapi,
+            "needs",
+            fields(*[("stocks", 0, k) for k in ("stock", "name", "close", "volume", "subType")]),
+        ),
         *[
             (f"CVM: {name}", f"{CVM}/api/3/action/package_show?id=cia_aberta-doc-{name.lower()}", None, "", fields(("result", "resources", 0, "url")))
             for name in ("DFP", "ITR", "FCA", "FRE", "IPE")
+        ],
+        *[
+            (f"CVM: FII {name}", f"{CVM}/api/3/action/package_show?id=fii-doc-{name.lower()}", None, "", fields(("result", "resources", 0, "url")))
+            for name in ("INF_MENSAL", "INF_TRIMESTRAL")
         ],
         (
             "Banco Central: IF.data (Basileia)",
@@ -336,6 +361,38 @@ def cvm_columns():
     return lines
 
 
+def cvm_fii_columns():
+    """The columns read from last year's FII reports (about 5 MB)."""
+    import io
+    import zipfile
+
+    year = datetime.now().year - 1
+    lines = []
+    for kind, parts in CVM_FII_COLUMNS.items():
+        url = f"{CVM}/dados/FII/DOC/{kind}/DADOS/{kind.lower()}_fii_{year}.zip"
+        try:
+            status, body = fetch(url)
+            if status != 200:
+                lines.append(f"FALHOU  CVM: FII {kind} {year}, HTTP {status}")
+                continue
+            changed = len(lines)
+            with zipfile.ZipFile(io.BytesIO(body)) as archive:
+                for part, columns in parts.items():
+                    names = [n for n in archive.namelist() if part in n]
+                    if not names:
+                        lines.append(f"MUDOU   CVM: FII {kind} {year} sem o arquivo {part}")
+                        continue
+                    header = archive.open(names[0]).readline().decode("latin-1").strip().lstrip("\ufeff").split(";")
+                    missing = [c for c in columns if c not in header]
+                    if missing:
+                        lines.append(f"MUDOU   CVM: {names[0]} sem {', '.join(missing)}")
+            if len(lines) == changed:
+                lines.append(f"OK      CVM: colunas do FII {kind} {year}")
+        except Exception as error:
+            lines.append(f"FALHOU  CVM: FII {kind}, {type(error).__name__}")
+    return lines
+
+
 def notify(text, urgent):
     if shutil.which("notify-send"):
         urgency = "critical" if urgent else "normal"
@@ -348,7 +405,7 @@ def main():
     results = [run_check(*check) for check in checks()]
     lines = [line for line, _ in results]
     problems = sum(1 for _, bad in results if bad)
-    extras = brapi_extras(state) + cvm_columns()
+    extras = brapi_extras(state) + cvm_columns() + cvm_fii_columns()
     lines += extras
     problems += sum(1 for line in extras if not line.startswith(("INFO", "OK")))
     header = f"Verificação de {datetime.now():%d/%m/%Y %H:%M}: "
