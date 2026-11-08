@@ -28,9 +28,12 @@ class _DailyBanksPageState extends State<DailyBanksPage> {
     final snapshot = await InvestmentsCache.load();
     final tags = await ServiceConfig.database.getAllTags();
     final names = {
-      for (final inv in snapshot?.investments ?? const []) Institution.of(inv).name,
+      for (final inv in snapshot?.investments ?? const [])
+        Institution.of(inv).name,
       for (final tag in tags)
-        if (KnownTag.of(tag)?.kind == KnownTagKind.bank) tag,
+        if (KnownTag.of(tag) case final known?
+            when known.kind == KnownTagKind.bank)
+          known.name,
     }.toList()..sort();
     if (mounted) setState(() => _banks = names);
   }

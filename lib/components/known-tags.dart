@@ -402,9 +402,19 @@ class KnownTag {
     'dinheiro vivo': 'dinheiro',
   };
 
+  /// Names and aliases without spaces: connectors also write them together
+  /// ("BTGPactual", "MercadoPago").
+  static final Map<String, KnownTag> _byCompact = {
+    for (final e in _byName.entries) _compact(e.key): e.value,
+    for (final e in _aliases.entries)
+      if (_byName[e.value] case final tag?) _compact(e.key): tag,
+  };
+
+  static String _compact(String key) => key.replaceAll(' ', '');
+
   static KnownTag? of(String tag) {
     final key = tag.trim().toLowerCase();
-    return _byName[_aliases[key] ?? key];
+    return _byName[_aliases[key] ?? key] ?? _byCompact[_compact(key)];
   }
 
   /// The bank named in free text (issuer, connector, position name), if any.
