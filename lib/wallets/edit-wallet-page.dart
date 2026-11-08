@@ -13,6 +13,7 @@ import 'package:aupp/models/wallet.dart';
 import 'package:aupp/services/database/database-interface.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/style.dart';
+import 'package:aupp/services/cash-wallet.dart';
 import 'package:aupp/services/total-wallets.dart';
 import 'package:aupp/wallets/wallet-picker-page.dart';
 import 'package:aupp/wallets/wallet-sections.dart';
@@ -56,6 +57,9 @@ class _EditWalletPageState extends State<EditWalletPage> {
   /// There is one wallet to invest.
   bool _otherToInvest = false;
 
+  /// Paper money: manual records go here ([CashWallet]).
+  bool _isCash = false;
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +88,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
       wallet = Wallet.fromMap(
           passedWallet!.toMap()..['balance'] = passedWallet!.balance);
       walletName = passedWallet!.name;
+      _isCash = CashWallet.isCash(passedWallet!);
     }
 
     if (passedWallet == null) {
@@ -217,6 +222,15 @@ class _EditWalletPageState extends State<EditWalletPage> {
                 if (kind != null) setState(() => wallet.kind = kind);
               },
             ),
+          ),
+          SwitchListTile(
+            title: const Text('Dinheiro em papel'),
+            subtitle: const Text(
+              'Lançamentos manuais sempre entram e saem desta carteira, '
+              'nunca da padrão.',
+            ),
+            value: _isCash,
+            onChanged: (value) => setState(() => _isCash = value),
           ),
         ],
       ],
@@ -362,6 +376,11 @@ class _EditWalletPageState extends State<EditWalletPage> {
       _logger.info('Updating wallet "${wallet.name}" (ID ${passedWallet!.id}, initialAmount: ${wallet.initialAmount})');
       await database.updateWallet(passedWallet!.id!, wallet);
       await TotalWallets.rename(passedWallet!.name, wallet.name);
+      if (_isCash) {
+        await CashWallet.save(wallet);
+      } else if (CashWallet.isCash(passedWallet!)) {
+        await CashWallet.save(null);
+      }
     }
 
     if (mounted) Navigator.of(context).pop();

@@ -41,6 +41,7 @@ class PreferencesBackupService {
     PreferencesKeys.allowManualRecords,
     PreferencesKeys.budgetPlan,
     PreferencesKeys.totalWallets,
+    PreferencesKeys.cashWallet,
     PreferencesKeys.disguiseEnabled,
   };
 
@@ -77,6 +78,7 @@ class PreferencesBackupService {
     PreferencesKeys.disguiseEnabled: (value) => value is bool,
     PreferencesKeys.totalWallets: (value) =>
         value is List && value.every((item) => item is String),
+    PreferencesKeys.cashWallet: (value) => value is String,
 
   };
 

@@ -10,6 +10,7 @@ import 'package:aupp/components/payment-code-sheet.dart';
 import 'package:aupp/dinzo/aporte-shortfall-tile.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
 import 'package:aupp/dinzo/pix-code.dart';
+import 'package:aupp/services/cash-wallet.dart';
 import 'package:aupp/services/recurrent-record-service.dart';
 import 'package:aupp/dinzo/payment-launcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
@@ -186,8 +187,8 @@ class EditRecordPageState extends State<EditRecordPage> {
       recurrentPeriod == null &&
       _selectedDestinationWallet == null;
 
-  /// New records (and new recurrent patterns) always use the default wallet
-  /// as source; only transfers started from a wallet keep that wallet.
+  /// New records (and new recurrent patterns) have a fixed source
+  /// ([_lockedSource]); only transfers started from a wallet keep that wallet.
   bool get _sourceLocked =>
       record?.id == null &&
       passedRecurrentRecordPattern == null &&
@@ -217,6 +218,18 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   Wallet? _selectedWallet;
   Wallet? _selectedDestinationWallet;
+
+  /// Fork: the default wallet (the banks' money) and the paper money one
+  /// ([CashWallet]), for [_lockedSource].
+  Wallet? _defaultWallet;
+  Wallet? _cashWallet;
+
+  /// Source of a new record: a "Manual" one moves paper money, never the
+  /// default wallet; estimates and transfers stay on the default wallet.
+  Wallet? get _lockedSource =>
+      !_isEstimate && _selectedDestinationWallet == null
+      ? _cashWallet ?? _defaultWallet
+      : _defaultWallet;
   int _totalWalletCount = 0;
   final _walletNameSizeGroup = AutoSizeGroup();
   final _dateTimeSizeGroup = AutoSizeGroup();
@@ -699,7 +712,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     final bool isExpense =
         record?.category?.categoryType == CategoryType.expense;
     return WalletTransferRow(
-      selectedWallet: _selectedWallet,
+      selectedWallet: _sourceLocked ? _lockedSource : _selectedWallet,
       selectedDestinationWallet: _selectedDestinationWallet,
       showTransferSide:
           !_fromDinzo &&
@@ -1387,6 +1400,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     }
 
     if (ServiceConfig.walletsEnabled) {
+      if (_sourceLocked) _selectedWallet = _lockedSource;
       record!.walletId = _selectedWallet?.id;
       record!.transferWalletId = _selectedDestinationWallet?.id;
     } else if (record!.id == null) {
@@ -1671,7 +1685,13 @@ class EditRecordPageState extends State<EditRecordPage> {
   /// nothing is left of it.
   Future<void> _makeReal() async {
     final occurrence = record!;
-    if (ServiceConfig.walletsEnabled) occurrence.walletId = _selectedWallet?.id;
+    if (ServiceConfig.walletsEnabled) {
+      // Now a "Manual" record: paper money, not the default wallet.
+      final wallet = _selectedWallet?.id == _defaultWallet?.id
+          ? _cashWallet ?? _selectedWallet
+          : _selectedWallet;
+      occurrence.walletId = wallet?.id;
+    }
     final tags = {..._selectedTags}
       ..remove(DinzoSyncService.estimateTag)
       ..remove(DinzoSyncService.virtualTag)
@@ -1937,9 +1957,11 @@ class EditRecordPageState extends State<EditRecordPage> {
     final allWallets = await database.getAllWallets();
     final activeWallets = allWallets.where((w) => !w.isArchived).toList();
 
+    _defaultWallet = await database.getDefaultWallet();
+    _cashWallet = CashWallet.findIn(allWallets);
     Wallet? walletToSelect;
     if (_sourceLocked) {
-      walletToSelect = await database.getDefaultWallet();
+      walletToSelect = _defaultWallet;
     } else if (record?.walletId != null) {
       // Fall back to the Predefined Wallet if the assigned wallet no longer exists
       walletToSelect =
@@ -2018,6 +2040,7 @@ class EditRecordPageState extends State<EditRecordPage> {
 
     // Assign wallet and transfer fields before creating the pattern
     if (ServiceConfig.walletsEnabled) {
+      if (_sourceLocked) _selectedWallet = _lockedSource;
       record!.walletId = _selectedWallet?.id;
       record!.transferWalletId = _selectedDestinationWallet?.id;
     } else if (id == null) {

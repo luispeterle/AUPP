@@ -63,6 +63,8 @@ class PreferencesKeys {
   static const disguiseEnabled = 'disguiseEnabled';
   // Spending wallets (Extrato's "Total" column, TotalWallets), by name, portable.
   static const totalWallets = 'totalWallets';
+  // Paper money wallet, where manual records go (CashWallet), by name, portable.
+  static const cashWallet = 'cashWallet';
   // Dinzo request budget (DinzoRateLimiter), device-only.
   static const dinzoRequestLog = 'dinzoRequestLog';
   static const dinzoBlockedUntil = 'dinzoQuotaBlockedUntil';

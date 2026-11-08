@@ -88,6 +88,7 @@ class DemoMode {
     PreferencesKeys.portfolioDiagram,
     PreferencesKeys.budgetPlan,
     PreferencesKeys.totalWallets,
+    PreferencesKeys.cashWallet,
   };
 
   /// Not backup preferences, but the demo needs them for its quotes: the brapi
