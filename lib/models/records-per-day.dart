@@ -1,3 +1,4 @@
+import 'package:aupp/dashboard/dashboard-data.dart';
 import 'package:aupp/models/record.dart';
 
 class RecordsPerDay {
@@ -8,6 +9,10 @@ class RecordsPerDay {
 
   List<Record?>? records;
   DateTime? dateTime;
+
+  /// Fork: card bills due this day, shown only as reminders: never in the
+  /// totals.
+  List<UpcomingBill> reminders = [];
 
   RecordsPerDay(this.dateTime, {this.records}) {
     if (this.records == null) {

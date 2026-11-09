@@ -16,11 +16,6 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="*/*" />
         </intent>
-        <!-- Fork: bank apps to pay a Pix / boleto from the Extrato. -->
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent>
     </queries>
     <!-- Fork: the Dinzo integration and the Central Bank rates need the
          network. -->
@@ -114,6 +109,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/aupp_balance_widget_info" />
+        </receiver>
+        <!-- Fork: a month calendar marking the days something is due. -->
+        <receiver
+            android:name=".widget.AuppCalendarWidgetProvider"
+            android:exported="false"
+            android:label="Calendário">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/aupp_calendar_widget_info" />
         </receiver>
         <service
             android:name=".SyncForegroundService"

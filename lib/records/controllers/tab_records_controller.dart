@@ -22,6 +22,7 @@ import '../../settings/constants/overview-time-interval.dart';
 import '../../settings/constants/preferences-keys.dart';
 import '../components/filter_modal_content.dart';
 import '../components/tab_records_date_picker.dart' show shownPeriodOf;
+import 'package:aupp/dashboard/dashboard-data.dart';
 import 'package:aupp/dinzo/aporte-shortfall.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
 
@@ -40,6 +41,13 @@ class TabRecordsController {
   /// What the list shows: [filteredRecords], without the upcoming
   /// occurrences unless [showUpcoming].
   List<Record?> listedRecords = [];
+
+  /// Fork: the Dinzo's card bills of the period still to come (today's
+  /// included), shown on their days as reminders ([RecordsPerDay.reminders]),
+  /// even with [showUpcoming] off: they are there to be seen. Never in a
+  /// total.
+  List<UpcomingBill> listedReminders = const [];
+  List<UpcomingBill> _cardBills = const [];
   List<Category?> categories = [];
   List<String> tags = [];
 
@@ -223,11 +231,22 @@ class TabRecordsController {
   }
 
   void _updateListed() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // A search or a filter looks for records: no reminders then.
+    final filtering = _searchController.text.isNotEmpty ||
+        selectedCategories.isNotEmpty ||
+        selectedTags.isNotEmpty;
+    listedReminders = filtering
+        ? const []
+        : _cardBills.where((b) {
+            final due = DateTime(b.dueDate.year, b.dueDate.month, b.dueDate.day);
+            return !due.isBefore(today);
+          }).toList();
     if (showUpcoming) {
       listedRecords = filteredRecords;
       return;
     }
-    final now = DateTime.now();
     listedRecords = filteredRecords.where((r) {
       if (r == null || !r.isFutureRecord) return true;
       final d = r.dateTime;
@@ -389,6 +408,12 @@ class TabRecordsController {
     final fromDate =
         DateTime(intervalFrom.year, intervalFrom.month, intervalFrom.day);
     final toDate = DateTime(intervalTo.year, intervalTo.month, intervalTo.day);
+
+    _cardBills = [
+      for (final b in (await DashboardCache.load())?.upcomingBills ??
+          const <UpcomingBill>[])
+        if (!b.dueDate.isBefore(fromDate) && !b.dueDate.isAfter(toDate)) b,
+    ];
 
     List<Record> filteredFutureRecords = futureRecords.where((record) {
       final recordLocal = record.dateTime;

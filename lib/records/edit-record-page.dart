@@ -1662,8 +1662,8 @@ class EditRecordPageState extends State<EditRecordPage> {
                 backgroundColor: const Color(0xFFF9A825),
                 foregroundColor: Colors.black87,
               ),
-              icon: const Icon(Icons.open_in_new, size: 18),
-              label: const Text('Pagar'),
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Copiar'),
               onPressed: () => PaymentLauncher.open(context, code),
             ),
       onTap: _editPaymentCode,
@@ -1802,14 +1802,24 @@ class EditRecordPageState extends State<EditRecordPage> {
     return CheckboxListTile(
       value: record!.markedPaid,
       onChanged: (v) async {
+        final before = record!.utcDateTime;
         await RecurrentRecordService.setMarkedPaid(record!, v ?? false);
-        if (mounted) setState(() {});
+        // Paid, it moves to today; undone, back to its day. Not an edit:
+        // saving afterwards keeps it in the recurrence.
+        final moved = record!.utcDateTime;
+        if (_occurrenceBefore?.utcDateTime == before) {
+          _occurrenceBefore!.utcDateTime = moved;
+        }
+        if (_originalUtcDateTime == before) _originalUtcDateTime = moved;
+        if (mounted) {
+          setState(() => localDisplayDate = record!.localDateTime);
+        }
       },
       secondary: const Icon(Icons.check_circle_outline, color: Colors.green),
       title: const Text('Já paguei'),
       subtitle: const Text(
-        'Para de avisar enquanto o lançamento não chega da Dinzo. Quando '
-        'chegar, vincule como sempre.',
+        'Passa para o dia do pagamento e para de avisar enquanto o '
+        'lançamento não chega da Dinzo. Quando chegar, vincule como sempre.',
       ),
     );
   }

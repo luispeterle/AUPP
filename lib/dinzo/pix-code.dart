@@ -48,16 +48,33 @@ class PixCode {
     }
     final digits = k.replaceAll(RegExp(r'\D'), '');
     if (k.startsWith('+')) return '+$digits';
-    // CPF or CNPJ typed with dots, dash or slash.
-    if (RegExp(r'^[\d.\-/ ]+$').hasMatch(k) &&
-        (digits.length == 11 || digits.length == 14)) {
+    if (!RegExp(r'^[\d.\-/() ]+$').hasMatch(k)) return k;
+    // CPF or CNPJ, with or without dots, dash or slash.
+    if (digits.length == 14) return digits;
+    if (digits.length == 11 && !k.contains('(') && _isCpf(digits)) {
       return digits;
     }
-    // A phone with area code, typed without +55: (11) 99999-9999.
-    if (RegExp(r'^[\d()\- ]+$').hasMatch(k) && k.contains('(')) {
-      return '+55$digits';
-    }
+    // A phone with area code, typed without +55: 48999999999 (11 digits
+    // that are not a CPF), (11) 99999-9999 or a landline's 10 digits.
+    if (digits.length == 10 || digits.length == 11) return '+55$digits';
+    // With the country code but no +: 5548999999999.
+    if (digits.length >= 12 && digits.startsWith('55')) return '+$digits';
     return k;
+  }
+
+  /// Whether 11 digits make a CPF: its two check digits match. A phone
+  /// with area code has 11 digits too.
+  static bool _isCpf(String digits) {
+    final d = digits.split('').map(int.parse).toList();
+    if (d.toSet().length == 1) return false;
+    for (final n in [9, 10]) {
+      var sum = 0;
+      for (var i = 0; i < n; i++) {
+        sum += d[i] * (n + 1 - i);
+      }
+      if (sum * 10 % 11 % 10 != d[n]) return false;
+    }
+    return true;
   }
 
   /// "Telefone", "CPF", "CNPJ", "E-mail" or "Chave aleatória".

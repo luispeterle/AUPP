@@ -38,6 +38,13 @@ void main() {
     expect(PixCode.normalizeKey('123.456.789-09'), '12345678909');
     expect(PixCode.normalizeKey(' Fulano@Mail.com '), 'fulano@mail.com');
     expect(PixCode.normalizeKey('+55 (11) 98765-4321'), '+5511987654321');
+    expect(PixCode.normalizeKey('12345678909'), '12345678909');
+    // 11 digits that are not a CPF: a phone with area code.
+    expect(PixCode.normalizeKey('11987654321'), '+5511987654321');
+    expect(PixCode.normalizeKey('11 98765-4321'), '+5511987654321');
+    expect(PixCode.normalizeKey('5511987654321'), '+5511987654321');
+    expect(PixCode.keyKind('11987654321'), 'Telefone');
+    expect(PixCode.keyKind('123.456.789-09'), 'CPF');
   });
 
   test('a bank boleto barcode becomes its 47-digit line', () {

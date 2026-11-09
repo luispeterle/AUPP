@@ -3,6 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:aupp/dashboard/dashboard-data.dart';
+import 'package:aupp/dashboard/due-bills.dart';
+import 'package:aupp/dinzo/estimate-link.dart';
+import 'package:aupp/services/recurrent-record-service.dart';
 import 'package:aupp/demo/demo-mode.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/home_widgets/widget_views.dart';
@@ -13,7 +17,8 @@ import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/style.dart';
 
-/// Android home screen widgets (overview, income, expenses, balance).
+/// Android home screen widgets (overview, income, expenses, balance, and
+/// the calendar of the days something is due).
 ///
 /// The native side renders text itself, so figures stay crisp at any widget
 /// size; only the small sparkline charts are bitmaps. Values follow the
@@ -32,6 +37,11 @@ class HomeWidgetService {
       '$_providerPackage.AuppExpensesWidgetProvider';
   static const String balanceProvider =
       '$_providerPackage.AuppBalanceWidgetProvider';
+  static const String calendarProvider =
+      '$_providerPackage.AuppCalendarWidgetProvider';
+
+  /// Bills overdue this many days still show, as on the Início.
+  static const _overdueDays = 7;
 
   /// Widgets are an Android-only feature in this app.
   static bool get isSupported => Platform.isAndroid;
@@ -63,10 +73,52 @@ class HomeWidgetService {
               monthStartDay: monthStartDay));
 
       await _refreshTotals(dark, records);
+      await _refreshCalendar();
     } catch (e, st) {
       _logger.handle(e, st, 'Failed to refresh home screen widgets');
     }
   }
+
+  /// The bills of the calendar, as the Início finds them ([DueBills]),
+  /// through the weeks the calendar shows.
+  static Future<void> _refreshCalendar() async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - _overdueDays);
+    final records = MoneyAccounts.withoutTransfers(
+      await _database.getAllRecordsInInterval(from, now),
+    ).whereType<Record>().toList();
+    final upcoming = await RecurrentRecordService()
+        .updateRecurrentRecords(DateTime(now.year, now.month + 2, 7).toUtc());
+    EstimateLink.markMatches([...records, ...upcoming]);
+    await saveDueDays(await DueBills.find(records, upcoming));
+  }
+
+  /// Calendar widget: only the days something is due (Pix and boletos not
+  /// paid yet, and the Dinzo's card bills), never what or how much. The
+  /// native side colors them by how near they are, also on days the app
+  /// stays closed.
+  static Future<void> saveDueDays(List<Record> bills) async {
+    if (!isSupported || DemoMode.active) return;
+    try {
+      final days = <String>{
+        for (final r in bills)
+          if (!r.markedPaid && DueBills.daysUntil(r.dateTime) >= -_overdueDays)
+            _day(r.dateTime),
+        for (final b in (await DashboardCache.load())?.upcomingBills ??
+            const <UpcomingBill>[])
+          if (DueBills.daysUntil(b.dueDate) >= 0) _day(b.dueDate),
+      };
+      await HomeWidget.saveWidgetData('aupp_calendar_due', days.join(','));
+      await HomeWidget.updateWidget(qualifiedAndroidName: calendarProvider);
+    } catch (e, st) {
+      _logger.handle(e, st, 'Failed to refresh the calendar widget');
+    }
+  }
+
+  static String _day(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   /// Balance color when amount colorization is disabled: green when
   /// positive, red when negative.

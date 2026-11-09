@@ -82,4 +82,36 @@ void main() {
     expect((water()..utcEndDate = DateTime.utc(2030, 5, 10)).happensOnce,
         isFalse);
   });
+
+  test('paid, an occurrence shows on the day it was paid; undone, back', () {
+    final feb = DateTime(2030, 2, 10);
+    final pattern = water()
+      ..setDueDate(feb, DateTime(2030, 2, 12))
+      ..setMarkedPaid(feb, true, on: DateTime(2030, 2, 5));
+    List<String> days() => RecurrentRecordService()
+        .generateRecurrentRecordsFromDateTime(pattern, DateTime.utc(2030, 3, 31))
+        .map((r) => RecurrentRecordPattern.occurrenceKey(r.localDateTime))
+        .toList();
+
+    expect(days(), ['2030-01-10', '2030-02-05', '2030-03-10']);
+    final paid = RecurrentRecordService()
+        .generateRecurrentRecordsFromDateTime(pattern, DateTime.utc(2030, 3, 31))[1]
+      ..occurrenceUtc = null;
+    // The day it was paid still finds the recurrence's day.
+    expect(pattern.occurrenceDayOf(paid), feb);
+
+    pattern.setMarkedPaid(feb, false);
+    expect(days()[1], '2030-02-12');
+  });
+
+  test('a mark from an older app leaves the occurrence on its day', () {
+    final feb = DateTime(2030, 2, 10);
+    final pattern = water()..setMarkedPaid(feb, true);
+    expect(pattern.isMarkedPaid(feb), isTrue);
+    expect(pattern.paidDateFor(feb), isNull);
+    final records = RecurrentRecordService()
+        .generateRecurrentRecordsFromDateTime(pattern, DateTime.utc(2030, 3, 31));
+    expect(RecurrentRecordPattern.occurrenceKey(records[1].localDateTime),
+        '2030-02-10');
+  });
 }

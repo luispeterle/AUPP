@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 /// Red, blinking card on the home screen: boletos and Pix due today (or
-/// overdue) and not paid yet. Each one can be paid or marked "Já paguei"
+/// overdue) and not paid yet. Each one's code can be copied, or it can be
+/// marked "Já paguei"
 /// while its real record has not come from the Dinzo.
 class DueTodayAlert extends StatefulWidget {
   final List<Record> due;
@@ -148,7 +149,7 @@ class _DueTodayAlertState extends State<DueTodayAlert>
                     foregroundColor: Colors.black87,
                   ),
                   onPressed: () => widget.onPay(r),
-                  child: const Text('Pagar'),
+                  child: const Text('Copiar'),
                 ),
               ),
             TextButton.icon(

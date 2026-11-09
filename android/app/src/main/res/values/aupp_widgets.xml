@@ -4,4 +4,5 @@
     <string name="aupp_income_widget_description">AUPP income total</string>
     <string name="aupp_expenses_widget_description">AUPP expenses total</string>
     <string name="aupp_balance_widget_description">AUPP balance total</string>
+    <string name="aupp_calendar_widget_description">Calendário</string>
 </resources>

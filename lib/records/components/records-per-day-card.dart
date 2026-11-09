@@ -1,4 +1,5 @@
 import 'package:aupp/components/known-tags.dart';
+import 'package:aupp/dashboard/dashboard-data.dart';
 import 'package:aupp/components/missing-payment-code-icon.dart';
 import 'package:aupp/components/due-date-badge.dart';
 import 'package:aupp/desktop/record-popup.dart';
@@ -353,7 +354,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 movement.tags.where((t) => t != Record.hiddenTag).toSet()),
         ],
       ),
-      // Fork: paying opens the bank apps of the phone; a boleto / Pix
+      // Fork: tapping the code copies it to pay; a boleto / Pix
       // occurrence still without its code blinks red until it gets one.
       trailing: movement.markedPaid
           ? Row(
@@ -514,7 +515,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
             ? KnownTag.of('Boleto')!.icon!
             : Icons.qr_code_2;
     return Tooltip(
-      message: 'Pagar $kind',
+      message: 'Copiar $kind',
       child: Material(
         color: const Color(0xFFF9A825),
         shape: const CircleBorder(),
@@ -562,6 +563,62 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                       ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Fork: a card bill due this day, as a reminder ([RecordsPerDay.reminders]):
+  /// shaped like a row, but faded, italic, with an outlined icon and a gray
+  /// amount, so it reads as a note and not as money. It sums nowhere.
+  Widget _buildReminderRow(UpcomingBill bill) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final bank =
+        bill.connector == null ? null : KnownTag.bankIn(bill.connector!);
+    return Opacity(
+      opacity: 0.7,
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+        horizontalTitleGap: 10,
+        minLeadingWidth: 36,
+        minVerticalPadding: 8,
+        visualDensity: const VisualDensity(vertical: -1),
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: muted, width: 1.2),
+          ),
+          alignment: Alignment.center,
+          child: bank != null
+              ? BankMark(bank, size: 20)
+              : Icon(Icons.credit_card, size: 18, color: muted),
+        ),
+        title: Text(
+          'Fatura ${bank?.name ?? bill.cardTitle}',
+          style: _titleFontStyle.copyWith(fontStyle: FontStyle.italic),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Row(
+          children: [
+            Icon(Icons.notifications_none, size: 13, color: muted),
+            const SizedBox(width: 3),
+            Text(
+              'Lembrete · não soma',
+              style: TextStyle(fontSize: 12, color: muted),
+            ),
+          ],
+        ),
+        trailing: Text(
+          '${bill.isEstimate ? '≈ ' : ''}${formatMoney(bill.amount.abs())}',
+          style: _currencyFontStyle.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            fontStyle: FontStyle.italic,
+            color: muted,
+          ),
         ),
       ),
     );
@@ -628,6 +685,12 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
             thickness: 0.5,
           ),
           _buildMovements(),
+          for (final (i, bill) in widget._movementDay.reminders.indexed) ...[
+            if (i > 0 || widget._movementDay.records!.isNotEmpty)
+              const Divider(
+                  height: 1, thickness: 0.5, endIndent: 10, indent: 10),
+            _buildReminderRow(bill),
+          ],
         ],
       )),
     );

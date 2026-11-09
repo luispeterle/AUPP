@@ -500,7 +500,9 @@ class TabRecordsState extends State<TabRecords> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  if (_controller.listedRecords.isEmpty) _buildEmptyState(),
+                  if (_controller.listedRecords.isEmpty &&
+                      _controller.listedReminders.isEmpty)
+                    _buildEmptyState(),
                   _buildRecordList(),
                   const SliverToBoxAdapter(child: SizedBox(height: 75)),
                 ],
@@ -608,7 +610,9 @@ class TabRecordsState extends State<TabRecords> {
     return <Widget>[
       if (!_controller.isSearchingEnabled) _buildMainSliverAppBar(),
       _buildSummarySection(),
-      if (_controller.listedRecords.isEmpty) _buildEmptyState(),
+      if (_controller.listedRecords.isEmpty &&
+          _controller.listedReminders.isEmpty)
+        _buildEmptyState(),
       _buildRecordList(),
       const SliverToBoxAdapter(
         child: SizedBox(height: 75),
@@ -618,6 +622,7 @@ class TabRecordsState extends State<TabRecords> {
 
   Widget _buildRecordList() => RecordsDayList(
     _controller.listedRecords,
+    reminders: _controller.listedReminders,
     onListBackCallback: _onRecordListBack,
     isSelectMode: _isSelectMode,
     selectedRecordIds: _selectedRecordIds,

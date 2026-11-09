@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:aupp/dashboard/dashboard-data.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/records-per-day.dart';
@@ -10,6 +11,10 @@ class RecordsDayList extends StatefulWidget {
   /// It contains also buttons for filtering the list of movements and add a new movement.
 
   final List<Record?> records;
+
+  /// Fork: card bills shown as reminders on their days (see
+  /// [RecordsPerDay.reminders]); a day with nothing else shows for them.
+  final List<UpcomingBill> reminders;
   final Function? onListBackCallback;
   final bool isSliver;
   final int batchSize;
@@ -25,6 +30,7 @@ class RecordsDayList extends StatefulWidget {
 
   RecordsDayList(
     this.records, {
+    this.reminders = const [],
     this.onListBackCallback,
     this.isSliver = true,
     this.batchSize = 50,
@@ -57,13 +63,25 @@ class _RecordsDayListState extends State<RecordsDayList> {
   void didUpdateWidget(RecordsDayList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.records, widget.records) ||
-        oldWidget.records.length != widget.records.length) {
+        oldWidget.records.length != widget.records.length ||
+        !identical(oldWidget.reminders, widget.reminders)) {
       _updateDaysShown();
     }
   }
 
   void _updateDaysShown() {
     _daysShown = groupRecordsByDay(widget.records);
+    if (widget.reminders.isNotEmpty) {
+      final byDate = {for (final d in _daysShown) d.dateTime!: d};
+      for (final bill in widget.reminders) {
+        final date = DateTime(
+            bill.dueDate.year, bill.dueDate.month, bill.dueDate.day);
+        final day = byDate[date] ??= RecordsPerDay(date);
+        day.reminders.add(bill);
+      }
+      _daysShown = byDate.values.toList()
+        ..sort((a, b) => b.dateTime!.compareTo(a.dateTime!));
+    }
     _displayedCount = _daysShown.length.clamp(0, widget.batchSize);
   }
 

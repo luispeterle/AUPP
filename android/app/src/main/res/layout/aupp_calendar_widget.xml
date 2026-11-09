@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fork: calendar widget (AuppCalendarWidgetProvider draws the month). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/aupp_widget_bg_dark">
+
+    <ImageView
+        android:id="@+id/calendar_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/aupp_calendar_widget_description"
+        android:scaleType="fitCenter" />
+</FrameLayout>

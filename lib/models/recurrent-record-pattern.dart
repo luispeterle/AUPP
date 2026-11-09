@@ -36,14 +36,23 @@ class RecurrentRecordPattern {
   String? get defaultPix => paymentCodes[defaultPixKey];
 
   /// "Já paguei" on one occurrence, while its real record has not come from
-  /// the Dinzo yet: no more alerts. Linking it later works as always.
+  /// the Dinzo yet: no more alerts. Linking it later works as always. Its
+  /// value is the day it was paid, where the occurrence shows; undone, it
+  /// goes back to its day. "1" (an older app, or a day set by hand) leaves
+  /// it on its day.
   static String paidKey(DateTime local) => 'pago:${occurrenceKey(local)}';
 
   bool isMarkedPaid(DateTime local) => paymentCodes.containsKey(paidKey(local));
 
-  void setMarkedPaid(DateTime local, bool paid) {
+  /// The day the occurrence on [local] was paid, when it moved there.
+  DateTime? paidDateFor(DateTime local) {
+    final paid = paymentCodes[paidKey(local)];
+    return paid == null ? null : DateTime.tryParse(paid);
+  }
+
+  void setMarkedPaid(DateTime local, bool paid, {DateTime? on}) {
     if (paid) {
-      paymentCodes[paidKey(local)] = '1';
+      paymentCodes[paidKey(local)] = on == null ? '1' : occurrenceKey(on);
     } else {
       paymentCodes.remove(paidKey(local));
     }
@@ -70,7 +79,8 @@ class RecurrentRecordPattern {
 
   /// Moves what belongs to the occurrence on [from] (its code, "Já paguei"
   /// mark and Pix charge amount) to [to] on the item [target] made from it.
-  /// Its day is now set by hand, so a code there counts as checked.
+  /// Its day is now set by hand, so a code there counts as checked and the
+  /// mark no longer moves it.
   void moveOccurrenceTo(
       RecurrentRecordPattern target, DateTime from, DateTime to) {
     final code = paymentCodes.remove(occurrenceKey(from));
@@ -81,7 +91,7 @@ class RecurrentRecordPattern {
       target.paymentCodes[occurrenceKey(to)] = code;
       target.setDueDate(to, to);
     }
-    if (paid != null) target.paymentCodes[paidKey(to)] = paid;
+    if (paid != null) target.paymentCodes[paidKey(to)] = '1';
     if (charge != null) target.paymentCodes[chargeValueKey(to)] = charge;
   }
 
@@ -160,16 +170,19 @@ class RecurrentRecordPattern {
       !paymentCodes.containsKey(dueKey(local));
 
   /// The recurrence's day of [r] (what keys its codes and marks): the
-  /// generated date, else the day a due date moved it from, else its date.
+  /// generated date, else the day a payment or a due date moved it from,
+  /// else its date.
   DateTime occurrenceDayOf(Record r) {
     if (r.occurrenceUtc != null) {
       return createTzDateTime(r.occurrenceUtc!, timeZoneName!);
     }
     final shown = occurrenceKey(r.localDateTime);
-    for (final e in paymentCodes.entries) {
-      if (e.key.startsWith('data:') && e.value == shown) {
-        final day = DateTime.tryParse(e.key.substring(5));
-        if (day != null) return day;
+    for (final prefix in ['pago:', 'data:']) {
+      for (final e in paymentCodes.entries) {
+        if (e.key.startsWith(prefix) && e.value == shown) {
+          final day = DateTime.tryParse(e.key.substring(prefix.length));
+          if (day != null) return day;
+        }
       }
     }
     return r.localDateTime;

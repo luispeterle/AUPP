@@ -9,7 +9,6 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
-import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -92,33 +91,6 @@ class MainActivity : FlutterFragmentActivity() {
                 } else if (call.method == "syncDone") {
                     SyncForegroundService.stop(applicationContext)
                     result.success(null)
-                } else if (call.method == "launcherApps") {
-                    // Fork: installed apps (package + label), so the Extrato
-                    // can offer the bank apps to pay a Pix / boleto.
-                    result.success(launcherApps())
-                } else if (call.method == "shareFileApps") {
-                    result.success(appsFor(Intent(Intent.ACTION_SEND).setType(call.argument<String>("mime"))))
-                } else if (call.method == "shareFileTo") {
-                    // Fork: hands a Pix QR image / boleto PDF to a bank app
-                    // (C6 reads them; it does not understand plain text). The
-                    // file lives in cache/share_plus, served by share_plus's
-                    // FileProvider.
-                    val uri = FileProvider.getUriForFile(
-                        this,
-                        "$packageName.flutter.share_provider",
-                        File(call.argument<String>("path")!!),
-                    )
-                    val intent = Intent(Intent.ACTION_SEND)
-                        .setType(call.argument<String>("mime"))
-                        .putExtra(Intent.EXTRA_STREAM, uri)
-                        .setPackage(call.argument<String>("package"))
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                    intent.clipData = android.content.ClipData.newRawUri("", uri)
-                    result.success(startSafely(intent))
-                } else if (call.method == "launchApp") {
-                    val pkg = call.argument<String>("package")
-                    val launch = pkg?.let { packageManager.getLaunchIntentForPackage(it) }
-                    result.success(launch != null && startSafely(launch))
                 } else if (call.method == "restart") {
                     result.success(null)
                     val launch = packageManager.getLaunchIntentForPackage(packageName)
@@ -175,28 +147,6 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
-    }
-
-    private fun launcherApps(): List<Map<String, String>> {
-        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return appsFor(main)
-    }
-
-    private fun appsFor(intent: Intent): List<Map<String, String>> =
-        packageManager.queryIntentActivities(intent, 0)
-            .map {
-                mapOf(
-                    "package" to it.activityInfo.packageName,
-                    "label" to it.loadLabel(packageManager).toString(),
-                )
-            }
-            .distinctBy { it["package"] }
-
-    private fun startSafely(intent: Intent): Boolean = try {
-        startActivity(intent)
-        true
-    } catch (e: Exception) {
-        false
     }
 
     override fun onNewIntent(intent: Intent) {

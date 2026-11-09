@@ -33,7 +33,10 @@ import 'package:aupp/services/service-config.dart';
 import 'package:aupp/wallets/wallets-tab-page.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
 
+import 'package:aupp/services/home-widget-service.dart';
+
 import 'dashboard-data.dart';
+import 'due-bills.dart';
 import 'due-today-alert.dart';
 
 import 'package:aupp/dinzo/estimate-link.dart';
@@ -89,8 +92,9 @@ class DashboardPageState extends State<DashboardPage> {
   double _freePending = 0;
   double _toInvest = 0;
 
-  /// Boleto / Pix occurrences due in the next [_billsDays] days (a
-  /// [Record.billingTags] recurrence, or any with a code pasted).
+  /// Boleto / Pix occurrences still to pay this month or in the next
+  /// [_billsDays] days ([_inBillsWindow]; a [Record.billingTags]
+  /// recurrence, or any with a code pasted).
   List<Record> _duePayments = [];
 
   /// Each company with its taxes due this month (last month's) and the
@@ -283,33 +287,13 @@ class DashboardPageState extends State<DashboardPage> {
       }
     }
 
-    // A plain boleto recurrence stores today's occurrence: it still counts
-    // as due today, with the code and the mark of its recurrence.
-    final patterns = {
-      for (final p in await db.getRecurrentRecordPatterns())
-        p.id: p,
-    };
-    final storedToday = <Record>[];
-    for (final r in records) {
-      final pattern = patterns[r.recurrencePatternId];
-      if (pattern == null || _daysUntil(r.dateTime) != 0) continue;
-      final day = pattern.occurrenceDayOf(r);
-      r.paymentCode = pattern.paymentCodeFor(day);
-      r.markedPaid = pattern.isMarkedPaid(day);
-      r.dueDateUnknown = pattern.dueDateMissing(day);
-      storedToday.add(r);
-    }
-    bool isBill(Record r) =>
-        r.estimateMatch == null &&
-        !r.isTransfer &&
-        (r.value ?? 0) < 0 &&
-        (r.paymentCode != null || Record.billingKindOf(r.tags) != null);
-    final bills = [...storedToday, ...upcoming].where(isBill).toList()
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
-    final duePayments = bills.where((r) {
-      final days = _daysUntil(r.dateTime);
-      return days >= 0 && days <= _billsDays;
-    }).toList();
+    final bills = await DueBills.find(records, upcoming);
+    HomeWidgetService.saveDueDays(bills);
+    // What is paid already leaves the list.
+    final duePayments = bills
+        .where((r) => !r.markedPaid && _daysUntil(r.dateTime) >= 0)
+        .where((r) => _inBillsWindow(r.dateTime))
+        .toList();
     final dueNow = bills.where((r) {
       final days = _daysUntil(r.dateTime);
       return !r.markedPaid && days <= 0 && days >= -_billsDays;
@@ -709,14 +693,7 @@ class DashboardPageState extends State<DashboardPage> {
 
   // ----------------------------------------------------------------- bills
 
-  static int _daysUntil(DateTime due) {
-    final today = DateTime.now();
-    return DateTime(
-      due.year,
-      due.month,
-      due.day,
-    ).difference(DateTime(today.year, today.month, today.day)).inDays;
-  }
+  static int _daysUntil(DateTime due) => DueBills.daysUntil(due);
 
   String _dueLabel(DateTime due) {
     final days = _daysUntil(due);
@@ -732,49 +709,29 @@ class DashboardPageState extends State<DashboardPage> {
     final dinzo = DinzoSyncService.apiKey != null;
     if (!dinzo && _duePayments.isEmpty) return const SizedBox.shrink();
     final bills = (_data?.upcomingBills ?? const <UpcomingBill>[])
-        .where((b) => _daysUntil(b.dueDate) <= _billsDays)
+        .where((b) => _inBillsWindow(b.dueDate))
         .toList();
     final theme = Theme.of(context);
+    // Boletos, Pix and cards together, by due date.
+    final rows = <(DateTime, Widget)>[
+      for (final r in _duePayments) (r.dateTime, _buildDuePayment(r)),
+      for (final b in bills) (b.dueDate, _buildCardBill(b)),
+    ]..sort((a, b) => a.$1.compareTo(b.$1));
     return _section(
       'Próximas faturas',
       Card(
         margin: EdgeInsets.zero,
-        child: bills.isEmpty && _duePayments.isEmpty
+        child: rows.isEmpty
             ? Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   dinzo && _data == null
                       ? 'Carregando faturas da Dinzo…'
-                      : 'Nada vencendo nos próximos $_billsDays dias.',
+                      : 'Nada vencendo neste mês nem nos próximos '
+                            '$_billsDays dias.',
                 ),
               )
-            : Column(
-                children: [
-                  for (final r in _duePayments) _buildDuePayment(r),
-                  for (final b in bills)
-                    ListTile(
-                      leading: _bankLogo(b.connector),
-                      title: Text(
-                        b.cardTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        _dueLabel(b.dueDate) +
-                            (b.isEstimate ? ' · estimada' : ''),
-                      ),
-                      trailing: Text(
-                        _money(b.amount),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color:
-                              b.dueDate.difference(DateTime.now()).inDays <= 3
-                              ? theme.colorScheme.error
-                              : null,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            : Column(children: [for (final (_, row) in rows) row]),
       ),
       action: _data == null
           ? null
@@ -785,7 +742,35 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  /// A boleto / Pix occurrence: tap to pay or paste its code; blinks red
+  /// "Próximas faturas" shows the rest of the month, or the next
+  /// [_billsDays] days when they go into the next month (on the 29th, what
+  /// is due on the 3rd).
+  static bool _inBillsWindow(DateTime due) {
+    final now = DateTime.now();
+    return _daysUntil(due) <= _billsDays ||
+        (due.year == now.year && due.month == now.month);
+  }
+
+  Widget _buildCardBill(UpcomingBill b) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: _bankLogo(b.connector),
+      title: Text(b.cardTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        _dueLabel(b.dueDate) + (b.isEstimate ? ' · estimada' : ''),
+      ),
+      trailing: Text(
+        _money(b.amount),
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: b.dueDate.difference(DateTime.now()).inDays <= 3
+              ? theme.colorScheme.error
+              : null,
+        ),
+      ),
+    );
+  }
+
+  /// A boleto / Pix occurrence: tap to copy or paste its code; blinks red
   /// while it has none.
   Widget _buildDuePayment(Record r) {
     final theme = Theme.of(context);
@@ -796,15 +781,8 @@ class DashboardPageState extends State<DashboardPage> {
     final title = r.title == null || r.title!.trim().isEmpty
         ? r.category?.name ?? kind
         : r.title!;
-    final paid = r.markedPaid;
     return ListTile(
-      leading: paid
-          ? const CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.green,
-              child: Icon(Icons.check, size: 18, color: Colors.white),
-            )
-          : r.needsPaymentCode
+      leading: r.needsPaymentCode
           ? MissingPaymentCodeIcon(kind, size: 32)
           : DueDateBadge(
               show: r.dueDateUnknown,
@@ -820,23 +798,19 @@ class DashboardPageState extends State<DashboardPage> {
             ),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        paid
-            ? 'pago · esperando chegar da Dinzo'
-            : '${_dueLabel(r.dateTime)} · '
-                  '${code == null ? '$kind sem código' : kind}',
+        '${_dueLabel(r.dateTime)} · '
+        '${code == null ? '$kind sem código' : kind}',
       ),
       trailing: Text(
         _money(-(r.value ?? 0)),
         style: theme.textTheme.titleMedium?.copyWith(
-          color: paid
-              ? theme.colorScheme.onSurfaceVariant
-              : _daysUntil(r.dateTime) <= 3
+          color: _daysUntil(r.dateTime) <= 3
               ? theme.colorScheme.error
               : null,
         ),
       ),
       onTap: () async {
-        if (code != null && !paid) {
+        if (code != null) {
           await PaymentLauncher.open(context, code);
           return;
         }

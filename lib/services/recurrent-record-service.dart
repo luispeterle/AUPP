@@ -22,14 +22,25 @@ class RecurrentRecordService {
   RecurrentRecordService();
 
   /// "Já paguei" on one occurrence (or undoes it), saved on its recurrence.
+  /// Paid, it moves to today; undone, back to its day.
   static Future<void> setMarkedPaid(Record occurrence, bool paid) async {
     final db = ServiceConfig.database;
     final pattern =
         await db.getRecurrentRecordPattern(occurrence.recurrencePatternId);
     if (pattern == null) return;
-    pattern.setMarkedPaid(pattern.occurrenceDayOf(occurrence), paid);
+    final day = pattern.occurrenceDayOf(occurrence);
+    pattern.setMarkedPaid(day, paid, on: DateTime.now());
     await db.updateRecordPatternById(pattern.id, pattern);
     occurrence.markedPaid = paid;
+    // Stored already (a plain recurrence's occurrence of today): its date
+    // stays.
+    if (occurrence.id != null) return;
+    final location = getLocation(pattern.timeZoneName!);
+    final time = pattern.localDateTime;
+    final generated = tz.TZDateTime(location, day.year, day.month, day.day,
+        time.hour, time.minute, time.second);
+    occurrence.occurrenceUtc ??= generated.toUtc();
+    occurrence.utcDateTime = _shownDate(pattern, generated).toUtc();
   }
 
   /// Saves the hand edits of one upcoming occurrence: [edited] is the
@@ -136,11 +147,15 @@ class RecurrentRecordService {
     return PaymentCodeSaved(pattern, day, dueBefore);
   }
 
-  /// The day an occurrence shows: its due date when one was read from its
-  /// code ([RecurrentRecordPattern.dueDateFor]), at the recurrence's time.
+  /// The day an occurrence shows: the day it was paid
+  /// ([RecurrentRecordPattern.paidDateFor]), else its due date when one was
+  /// read from its code ([RecurrentRecordPattern.dueDateFor]), at the
+  /// recurrence's time.
   static tz.TZDateTime _shownDate(
-      RecurrentRecordPattern pattern, tz.TZDateTime occurrence) {
-    final due = pattern.dueDateFor(occurrence);
+      RecurrentRecordPattern pattern, tz.TZDateTime occurrence,
+      {bool paid = true}) {
+    final due = (paid ? pattern.paidDateFor(occurrence) : null) ??
+        pattern.dueDateFor(occurrence);
     if (due == null) return occurrence;
     return tz.TZDateTime(occurrence.location, due.year, due.month, due.day,
         occurrence.hour, occurrence.minute, occurrence.second);
@@ -449,8 +464,14 @@ class RecurrentRecordService {
           // In the recurrence's order: a due date can move one occurrence
           // past the next, and the stored ones must come before the rest
           // (the last stored one is where the next update starts).
-          final firstFuture =
-              allRecords.indexWhere((r) => r.utcDateTime.isAfter(endOfToday));
+          // A paid one counts by its own day, not the payment's: until
+          // then the mark can still be undone. Stored, it keeps the
+          // payment's day.
+          final location = getLocation(pattern.timeZoneName!);
+          final firstFuture = allRecords.indexWhere((r) => _shownDate(
+                  pattern, tz.TZDateTime.from(r.occurrenceIdUtc, location),
+                  paid: false)
+              .isAfter(endOfToday));
           final pastRecords = firstFuture < 0
               ? allRecords
               : allRecords.sublist(0, firstFuture);
