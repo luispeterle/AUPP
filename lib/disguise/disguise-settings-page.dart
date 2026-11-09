@@ -22,6 +22,7 @@ class _DisguiseSettingsPageState extends State<DisguiseSettingsPage> {
       PreferencesKeys.disguiseEnabled,
       on,
     );
+    CalculatorGate.settingChanged();
     setState(() => _enabled = on);
   }
 

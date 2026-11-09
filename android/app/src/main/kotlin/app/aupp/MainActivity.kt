@@ -1,7 +1,12 @@
 package app.aupp
 
+import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -9,6 +14,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -24,6 +30,20 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingWidgetAction: String? = null
     private var sharedFileChannel: MethodChannel? = null
     private var pendingSharedFile: String? = null
+    private var lockChannel: MethodChannel? = null
+    private var askedNotifications = false
+
+    /**
+     * Fork: the disguise calculator covers the app again when the screen
+     * goes off (the phone was locked) or from "Bloquear agora" on the
+     * unlocked notification.
+     */
+    private val lockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            UnlockedNotification.cancel(context)
+            lockChannel?.invokeMethod("lock", null)
+        }
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -37,6 +57,14 @@ class MainActivity : FlutterFragmentActivity() {
         if (disguise && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             setRecentsScreenshotEnabled(false)
         }
+        ContextCompat.registerReceiver(
+            this,
+            lockReceiver,
+            IntentFilter(Intent.ACTION_SCREEN_OFF).apply {
+                addAction(UnlockedNotification.ACTION_LOCK)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -67,9 +95,19 @@ class MainActivity : FlutterFragmentActivity() {
         handleSharedFileIntent(intent)
         // Fork: real restart (new process), used after "Importar minha config"
         // so the import runs at startup before any screen or sync.
+        lockChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCK_CHANNEL)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_CHANNEL)
             .setMethodCallHandler { call, result ->
-                if (call.method == "moveToBack") {
+                if (call.method == "unlocked") {
+                    // Fork: the disguise calculator was unlocked; "until"
+                    // is when it locks again (null while the app is open).
+                    askNotifications()
+                    UnlockedNotification.show(this, call.argument<Number>("until")?.toLong())
+                    result.success(null)
+                } else if (call.method == "locked") {
+                    UnlockedNotification.cancel(this)
+                    result.success(null)
+                } else if (call.method == "moveToBack") {
                     // Fork: back on the disguise calculator leaves the app
                     // without finishing it.
                     moveTaskToBack(true)
@@ -271,7 +309,21 @@ class MainActivity : FlutterFragmentActivity() {
         )
     }
 
+    /** Once per run: the unlocked notification needs the permission. */
+    private fun askNotifications() {
+        if (askedNotifications || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        askedNotifications = true
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7001)
+        }
+    }
+
     override fun onDestroy() {
+        // The app starts locked again: the notification would be wrong.
+        unregisterReceiver(lockReceiver)
+        UnlockedNotification.cancel(this)
         pendingResult?.error("picker_cancelled", "The picker was dismissed", null)
         pendingResult = null
         ioExecutor.shutdown()
@@ -498,6 +550,7 @@ class MainActivity : FlutterFragmentActivity() {
         private const val CHANNEL = "aupp/backup_directory"
         private const val WIDGET_CHANNEL = "aupp/widget_action"
         private const val APP_CHANNEL = "aupp/app"
+        private const val LOCK_CHANNEL = "aupp/lock"
         private const val SHARED_FILE_CHANNEL = "aupp/shared_file"
         const val ACTION_SHARED_FILE = "app.aupp.SHARED_FILE"
         const val EXTRA_PATH = "path"

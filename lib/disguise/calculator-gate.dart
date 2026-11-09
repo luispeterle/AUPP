@@ -12,7 +12,9 @@ import 'package:aupp/services/sync-extensions.dart';
 
 /// Fork (2026-10-14): the app opens as a yellow calculator. Typing the code
 /// and "C" reveals the real app; anything else is just a calculation. After
-/// [relockAfter] in the background the calculator covers everything again.
+/// [relockAfter] in the background, or as soon as the phone is locked, the
+/// calculator covers everything again. While unlocked, a notification says
+/// so and until when (native: UnlockedNotification).
 /// [DemoMode.code] and "C" opens the demo instead (fake data, restarts the
 /// app to switch between the two).
 class CalculatorGate {
@@ -32,9 +34,12 @@ class CalculatorGate {
       typed == code ||
       typed == DemoMode.code ||
       SyncExtensions.calculatorPage(typed) != null;
-  static const relockAfter = Duration(minutes: 1);
+  static const relockAfter = Duration(minutes: 10);
 
   static const _appChannel = MethodChannel('aupp/app');
+
+  /// The screen went off, or "Bloquear agora" on the notification.
+  static const _lockChannel = MethodChannel('aupp/lock');
 
   static final _firstUnlock = Completer<void>();
   static bool _locked = true;
@@ -50,9 +55,36 @@ class CalculatorGate {
 
   static void install() {
     _listener = AppLifecycleListener(
-      onHide: () => _hiddenAt = DateTime.now(),
-      onShow: _maybeRelock,
+      onHide: () {
+        _hiddenAt = DateTime.now();
+        if (!_locked) _notifyUnlocked(_hiddenAt!.add(relockAfter));
+      },
+      onShow: () {
+        _maybeRelock();
+        if (!_locked) _notifyUnlocked(null);
+      },
     );
+    _lockChannel.setMethodCallHandler((call) async {
+      if (call.method == 'lock') _lock();
+    });
+  }
+
+  /// The disguise was turned on or off in Configurações: the notification
+  /// shows only while it is on.
+  static void settingChanged() {
+    if (enabled && !_locked) {
+      _notifyUnlocked(null);
+    } else if (!enabled) {
+      _appChannel.invokeMethod('locked').catchError((_) {});
+    }
+  }
+
+  /// [until] null: unlocked while the app shows.
+  static void _notifyUnlocked(DateTime? until) {
+    if (!enabled) return;
+    _appChannel.invokeMethod('unlocked', {
+      'until': until?.millisecondsSinceEpoch,
+    }).catchError((_) {});
   }
 
   /// The calculator route, placed above the real app from the first frame
@@ -105,6 +137,7 @@ class CalculatorGate {
       Navigator.of(context).removeRoute(route);
     }
     if (!_firstUnlock.isCompleted) _firstUnlock.complete();
+    _notifyUnlocked(null);
     final pending = List.of(_pending);
     _pending.clear();
     for (final fn in pending) {
@@ -117,10 +150,16 @@ class CalculatorGate {
     _hiddenAt = null;
     if (_locked || hiddenAt == null) return;
     if (DateTime.now().difference(hiddenAt) < relockAfter) return;
+    _lock();
+  }
+
+  static void _lock() {
+    if (_locked || !enabled) return;
     final navigator = _navigator?.call();
     if (navigator == null) return;
     _locked = true;
     navigator.push(route());
+    _appChannel.invokeMethod('locked').catchError((_) {});
   }
 
   static NavigatorState? Function()? _navigator;
