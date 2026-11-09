@@ -379,6 +379,18 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 _buildRecordAmountWidget(movement),
               ],
             )
+          : movement.needsCategory
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const BlinkingAlertIcon(
+                  Icons.question_mark,
+                  message: 'Sem categoria: toque para dizer o que foi',
+                ),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
           : movement.needsPaymentCode
           ? Row(
               mainAxisSize: MainAxisSize.min,

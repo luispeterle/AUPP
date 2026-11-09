@@ -10,6 +10,7 @@ import 'package:aupp/helpers/datetime-utility-functions.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/dinzo/aporte-shortfall.dart';
+import 'package:aupp/dinzo/broker-payment.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/recurrent-record-pattern.dart';
 import 'package:aupp/services/database/change-log.dart';
@@ -1456,12 +1457,17 @@ class SqliteDatabase implements DatabaseInterface {
   /// Fork: deleting a purchase also deletes the part paid with a caixinha
   /// (`livre:split:<dinzo_id>`, see Record.splitPrefix), and deleting an
   /// aporte the transfer that covered it (`livre:cobre:<dinzo_id>`, see
-  /// AporteShortfall), so no transfer is left behind moving money for a
-  /// record that no longer exists.
+  /// AporteShortfall), and deleting a payment straight from a broker its
+  /// withdrawal or aporte (`livre:pago:<dinzo_id>`, see BrokerPayment), so
+  /// nothing is left behind moving money for a record that no longer exists.
   Future<void> _deleteSplitPartsOf(Database db, List<Object?> ids) async {
     if (ids.isEmpty) return;
     final placeholders = List.filled(ids.length, '?').join(',');
-    for (final prefix in [Record.splitPrefix, AporteShortfall.prefix]) {
+    for (final prefix in [
+      Record.splitPrefix,
+      AporteShortfall.prefix,
+      BrokerPayment.prefix,
+    ]) {
       await db.rawDelete(
         "DELETE FROM records WHERE dinzo_id IN ("
         "SELECT '$prefix' || dinzo_id FROM records "

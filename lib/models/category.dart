@@ -43,8 +43,12 @@ class Category extends Model {
     withdrawalName,
     categoryType: CategoryType.investment,
     color: Colors.teal[200],
-    iconCodePoint: FontAwesomeIcons.rightFromBracket.data.codePoint,
+    iconCodePoint: FontAwesomeIcons.handHoldingDollar.data.codePoint,
   );
+
+  /// Fork: what a record from the Dinzo gets while nobody chose its category
+  /// ([Record.needsCategory]).
+  static const uncategorizedName = 'Sem categoria';
 
   /// What the wallet to invest gained or lost without an entry saying why.
   static const adjustmentName = 'Ajuste';

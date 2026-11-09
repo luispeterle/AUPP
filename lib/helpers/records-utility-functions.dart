@@ -385,6 +385,7 @@ class SetAsideSplit {
   ) {
     for (final r in records) {
       if (r != null && r.isInvestmentBuy) invested.add(r);
+      if (r != null && r.isInvestmentSell) taken.add(r);
       if (r == null || !r.countsAsSetAside) continue;
       if ((r.value ?? 0) >= 0) {
         taken.add(r);

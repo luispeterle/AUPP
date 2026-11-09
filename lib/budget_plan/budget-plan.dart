@@ -552,8 +552,9 @@ class BudgetPlanUsage {
         continue;
       }
       if (!isBase(r.walletId)) continue;
-      if (r.isInvestmentBuy) {
-        // From a wallet set aside, it already counted when it went there.
+      if (r.isInvestmentFlow) {
+        // From a wallet set aside, it already counted when it went there; a
+        // withdrawal (BrokerPayment) lowers it.
         add(BudgetPlan.investedGroup, -value, r);
       } else if (r.category?.categoryType == CategoryType.income) {
         // Estimated income is already in [estimatedIncome].

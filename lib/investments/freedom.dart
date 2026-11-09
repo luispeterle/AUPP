@@ -29,8 +29,8 @@ class Freedom {
   ///
   /// Income leaves out transfers and what lands in [investWallets]. Set aside =
   /// transfers from any other wallet into [investWallets], minus what comes back
-  /// out of them, plus what was invested straight from any other wallet, so
-  /// nothing is counted twice.
+  /// out of them, plus what was invested straight from any other wallet (minus
+  /// what came back straight into one), so nothing is counted twice.
   static double livingCost(
     Iterable<Record?> records,
     DateTime now, {
@@ -45,8 +45,10 @@ class Freedom {
       final d = r.dateTime;
       if (d.isBefore(start) || !d.isBefore(end)) continue;
       final amount = (r.value ?? 0).abs();
-      if (r.isInvestmentBuy) {
-        if (!investWallets.contains(r.walletId)) invested += amount;
+      if (r.isInvestmentFlow) {
+        if (!investWallets.contains(r.walletId)) {
+          invested += r.isInvestmentBuy ? amount : -amount;
+        }
         continue;
       }
       if (r.isTransfer) {

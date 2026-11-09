@@ -14,6 +14,7 @@ import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import 'broker-payment.dart';
 import 'dinzo-api.dart';
 import 'dinzo-config.dart';
 import 'dinzo-models.dart';
@@ -592,6 +593,12 @@ class DinzoSyncService {
       await db.deleteRecordsInBatch(toDelete);
       result.removed = toDelete.length;
     }
+    result.items.addAll(
+      await BrokerPayment.sync(
+        await linkedRecords(),
+        prepared.engine.outsideBankOf,
+      ),
+    );
 
     final balances = prepared.balances;
     // Without every balance the money is wrong: the wallet to invest keeps

@@ -225,6 +225,7 @@ class _DinzoSyncPageState extends State<DinzoSyncPage> {
             return _Section.internal;
           case DinzoSkipReason.hidden:
           case DinzoSkipReason.investment:
+          case DinzoSkipReason.outsideDailyBanks:
             return _Section.hidden;
         }
     }
@@ -575,6 +576,8 @@ class _DinzoSyncPageState extends State<DinzoSyncPage> {
             return 'Agora é visto como pagamento de fatura';
           case DinzoSkipReason.ignoredByUser:
             return 'Você marcou para não integrar';
+          case DinzoSkipReason.outsideDailyBanks:
+            return 'Ficou dentro da corretora';
           default:
             return 'Não existe mais na Dinzo';
         }

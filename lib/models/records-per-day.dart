@@ -42,7 +42,7 @@ class RecordsPerDay {
   /// Fork: money set aside (negative) or taken back (positive), see
   /// [Record.countsAsSetAside].
   double get setAside => records!
-      .where((e) => (e?.countsAsSetAside ?? false) || (e?.isInvestmentBuy ?? false))
+      .where((e) => (e?.countsAsSetAside ?? false) || (e?.isInvestmentFlow ?? false))
       .fold(0.0, (total, e) => total + (e!.value ?? 0));
 
   double get balance {

@@ -239,7 +239,7 @@ class DashboardPageState extends State<DashboardPage> {
       } else if (r.countsAsExpense) {
         month.expensesTotal += -r.value!;
         if (r.isFutureRecord) month.plannedExpenses += -r.value!;
-      } else if (r.isInvestmentBuy) {
+      } else if (r.isInvestmentFlow) {
         month.invested += -r.value!;
       } else if (r.countsAsSetAside) {
         final to = walletsById[r.transferWalletId];

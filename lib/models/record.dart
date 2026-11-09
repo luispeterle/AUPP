@@ -79,6 +79,11 @@ class Record extends Model {
 
   /// Upcoming occurrence of a boleto / Pix recurrence still without its code
   /// (and not already paid or matched to the real record).
+  /// Fork: real, and nobody chose what it was (the bank sent only "Pix"): the
+  /// Extrato asks for a category.
+  bool get needsCategory =>
+      !isFutureRecord && category?.name == Category.uncategorizedName;
+
   bool get needsPaymentCode =>
       isFutureRecord &&
       recurrencePatternId != null &&
@@ -234,6 +239,18 @@ class Record extends Model {
       !isTransfer &&
       category?.categoryType == CategoryType.investment &&
       category?.name == Category.investmentName;
+
+  /// Fork: money that came back from an investment: the opposite of
+  /// [isInvestmentBuy]. Into the wallet to invest it already counts there;
+  /// into another wallet ([BrokerPayment]) it lowers what was invested.
+  bool get isInvestmentSell =>
+      !isTransfer &&
+      category?.categoryType == CategoryType.investment &&
+      category?.name == Category.withdrawalName;
+
+  /// [isInvestmentBuy] or [isInvestmentSell]: its value, as is, is what
+  /// went to (negative) or came from (positive) the investments.
+  bool get isInvestmentFlow => isInvestmentBuy || isInvestmentSell;
 
   /// Fork: what the wallet to invest gained or lost in a month without an entry
   /// saying why: interest, and what was not entered.

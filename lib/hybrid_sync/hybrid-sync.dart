@@ -90,7 +90,11 @@ class HybridSync {
   /// as hidden in Dinzo and remove it on its next pull. Deleting an aporte
   /// also deletes the transfer that covered it (`livre:cobre:`); an older
   /// app would leave it behind.
-  static const dataCompat = 7;
+  /// 8 (2026-11-09): money moved inside the banks outside the everyday ones
+  /// is left out, and a payment straight from one has a withdrawal (or
+  /// aporte) next to it (`livre:pago:`); an older app would bring the first
+  /// back as income or expense and leave the second behind when deleting.
+  static const dataCompat = 8;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

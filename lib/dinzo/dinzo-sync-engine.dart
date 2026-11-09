@@ -182,6 +182,11 @@ enum DinzoSkipReason {
 
   /// The user chose "não integrar".
   ignoredByUser,
+
+  /// Moves inside the banks outside the everyday ones (BTG Banking → BTG
+  /// Investimentos, a broker's own entries): the money stayed invested.
+  /// Dinzo sometimes hides only one side of them.
+  outsideDailyBanks,
 }
 
 class DinzoPlanItem {
@@ -290,6 +295,18 @@ class DinzoSyncEngine {
   /// of the everyday side → the other bank's account. Filled by [plan].
   final Map<String, DinzoAccount> _brokerTransfers = {};
 
+  /// Ids of transactions on a bank outside the everyday ones whose other
+  /// side is on another own account (Dinzo hid one side only). Filled by
+  /// [plan].
+  final Set<String> _movesOutside = {};
+
+  /// A broker's own entries, when Dinzo neither hides them nor files them
+  /// under Investimentos.
+  static final RegExp _brokerEntry = RegExp(
+    r'liq\.? bolsa|tesouro direto|conta remunerada|dividendo|juros s(obre|/) ?capital|\bjcp\b|rendimento|amortiza[cç][aã]o|corretagem|cust[oó]dia|emolumento',
+    caseSensitive: false,
+  );
+
   /// A refund's credit by its id → the debit it undoes. Filled by [plan].
   final Map<String, DinzoTransaction> _refunded = {};
 
@@ -382,6 +399,12 @@ class DinzoSyncEngine {
     if (tx.hidden) return DinzoSkipReason.hidden;
     if (isBillPayment(tx)) return DinzoSkipReason.internalTransfer;
     if (isInvestment(tx)) return DinzoSkipReason.investment;
+    if (isOutsideDailyBanks(tx) &&
+        (isOwnTransfer(tx) ||
+            _movesOutside.contains(tx.id) ||
+            _brokerEntry.hasMatch(tx.description))) {
+      return DinzoSkipReason.outsideDailyBanks;
+    }
     if (tx.isInstallment && tx.installmentCurrent! > 1) {
       return DinzoSkipReason.laterInstallment;
     }
@@ -415,6 +438,53 @@ class DinzoSyncEngine {
 
   bool _isBankAccount(DinzoAccount? account) =>
       account != null && !account.isCreditCard;
+
+  /// A bank account outside the everyday banks (a broker's): its money is
+  /// invested, not money of the wallets.
+  bool isOutsideAccount(String? accountId) {
+    final account = accounts[accountId];
+    return _isBankAccount(account) && !isDailyAccount(account!);
+  }
+
+  /// Whatever is left of it after [skipReason] was paid to someone else, or
+  /// came from someone else (a Pix from the BTG Banking): a record like any
+  /// other, plus the withdrawal (or aporte) that keeps the wallets as the
+  /// everyday banks are ([BrokerPayment]).
+  bool isOutsideDailyBanks(DinzoTransaction tx) =>
+      isOutsideAccount(tx.accountId);
+
+  /// The bank's short name ("BTG") when [accountId] is outside the everyday
+  /// banks, else null.
+  String? outsideBankOf(String? accountId) =>
+      isOutsideAccount(accountId) ? _bankName(accounts[accountId]!) : null;
+
+  /// Finds the transactions on a bank outside the everyday ones that Dinzo
+  /// left visible but whose other side is on another own account: opposite
+  /// direction, same amount, up to 3 days apart, the other side hidden or
+  /// also outside the everyday banks.
+  void _findMovesOutside(List<DinzoTransaction> transactions) {
+    _movesOutside.clear();
+    final real = transactions.where((t) => !t.projected).toList();
+    for (final tx in real) {
+      if (tx.hidden || !isOutsideDailyBanks(tx)) continue;
+      final other = real.any(
+        (t) =>
+            t.accountId != tx.accountId &&
+            _isBankAccount(accounts[t.accountId]) &&
+            t.isDebit != tx.isDebit &&
+            (t.amount - tx.amount).abs() < 0.005 &&
+            DateTime.parse(t.date)
+                    .difference(DateTime.parse(tx.date))
+                    .inDays
+                    .abs() <=
+                3 &&
+            !isBillPayment(t) &&
+            !isInvestment(t) &&
+            (t.hidden || isOwnTransfer(t) || isOutsideDailyBanks(t)),
+      );
+      if (other) _movesOutside.add(tx.id);
+    }
+  }
 
   /// Pairs each transfer between own accounts on an everyday bank with the
   /// other side on a bank outside them: opposite direction, same amount, up
@@ -599,7 +669,7 @@ class DinzoSyncEngine {
 
   /// Category of transactions Dinzo has not categorised yet. Categorising
   /// them in Dinzo updates the record on the next sync.
-  static const String uncategorized = 'Sem categoria';
+  static const String uncategorized = Category.uncategorizedName;
 
   /// Dinzo is the source of truth: the record gets the Dinzo category as is
   /// (a subcategory such as "Luz"; AUPP knows its parent). A merchant rule or a category mapping, when present, is an
@@ -701,14 +771,39 @@ class DinzoSyncEngine {
       : config.merchantRules[merchantKey(tx.description)]?.walletId ??
             defaultWalletId;
 
-  /// "Aporte no BTG", "Resgate do BTG": the bank says more than "Pix to
-  /// myself".
+  /// "Aporte do Nubank para o BTG", "Resgate do BTG para o Nubank": the
+  /// banks say more than "Pix to myself". A bank that sends only how the
+  /// money moved ("Pix", "Tef") gets which way: "Pix enviado" (the bank is
+  /// in the tag).
   String titleFor(DinzoTransaction tx) {
+    final own = accounts[tx.accountId];
     final broker = brokerOf(tx);
-    if (broker == null) return cleanTitle(tx.description);
-    final bank = _bankName(broker);
-    return tx.isDebit ? 'Aporte no $bank' : 'Resgate do $bank';
+    if (broker != null && own != null) {
+      final here = _bankName(own);
+      final there = _bankName(broker);
+      return tx.isDebit
+          ? 'Aporte do $here para o $there'
+          : 'Resgate do $there para o $here';
+    }
+    final title = cleanTitle(tx.description);
+    final bare = _bareMethods[title.toLowerCase()];
+    if (bare == null) return title;
+    final (name, feminine) = bare;
+    return tx.isDebit
+        ? '$name ${feminine ? 'enviada' : 'enviado'}'
+        : '$name ${feminine ? 'recebida' : 'recebido'}';
   }
+
+  /// Descriptions that say only how the money moved (the BTG sends "Pix",
+  /// "Tef"), with how to name it and whether the name is feminine.
+  static const _bareMethods = {
+    'pix': ('Pix', false),
+    'tef': ('Transferência', true),
+    'ted': ('TED', true),
+    'doc': ('DOC', false),
+    'transferência': ('Transferência', true),
+    'transferencia': ('Transferência', true),
+  };
 
   /// The record as Dinzo alone would have it.
   DinzoSnapshot sourceFor(DinzoTransaction tx) {
@@ -761,6 +856,7 @@ class DinzoSyncEngine {
     _findRefunds(transactions);
     _findInstallmentTotals(transactions);
     _findBrokerTransfers(transactions);
+    _findMovesOutside(transactions);
 
     for (final tx in transactions) {
       if (tx.projected || tx.date.compareTo(startDay) < 0) continue;
