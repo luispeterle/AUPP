@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:aupp/investments/asset-sheet.dart';
 import 'package:aupp/investments/b3-market.dart';
 import 'package:aupp/investments/fii-data.dart';
 import 'package:aupp/services/logger.dart';
@@ -29,6 +30,7 @@ class FiiStore extends ChangeNotifier {
   Map<String, FiiFund> _funds = {};
   Map<String, String> _byRoot = {};
   Map<String, String>? _byName;
+  Map<String, String>? _byDigits;
   DateTime? builtAt;
 
   String? progress;
@@ -47,11 +49,21 @@ class FiiStore extends ChangeNotifier {
   bool get busy => _running != null;
   Iterable<FiiFund> get funds => _funds.values;
 
-  /// The fund of a ticker, by the root of its ISIN ("KNRI" of BRKNRICTF007) or,
-  /// when the ISIN is the CVM's code, by the name brapi gives it.
+  /// The fund of a ticker: by the CNPJ the B3's register gives it
+  /// ([B3Instrument.cnpj]); else by the root of its ISIN ("KNRI" of
+  /// BRKNRICTF007), which fails for a fund that changed its name (BTCI11 still
+  /// reports FEXC's), or by the name brapi gives it.
   FiiFund? byTicker(String ticker) {
     ticker = ticker.toUpperCase();
     if (ticker.length < 5) return null;
+    if (B3Instrument.of(ticker)?.cnpj case final cnpj?) {
+      _byDigits ??= {
+        for (final f in _funds.values)
+          f.cnpj.replaceAll(RegExp(r'\D'), ''): f.cnpj,
+      };
+      final fund = _funds[_byDigits![cnpj]];
+      if (fund != null) return fund;
+    }
     final cnpj = _byRoot[ticker.substring(0, 4)];
     if (cnpj != null) return _funds[cnpj];
     final name = plainFundName(B3Market.funds[ticker]?.name);
@@ -82,6 +94,7 @@ class FiiStore extends ChangeNotifier {
     }
     _byRoot = {for (final e in byRoot.entries) e.key: e.value.cnpj};
     _byName = null;
+    _byDigits = null;
   }
 
   static bool _newer(FiiFund a, FiiFund b) {

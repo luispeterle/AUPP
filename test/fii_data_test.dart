@@ -136,6 +136,18 @@ void main() {
     );
   });
 
+  test('a fund that changed its name is found by the CNPJ of the B3', () {
+    // BTCI11 still reports the ISIN and name of FEXC, before it was renamed.
+    FiiStore.instance.setForTest([
+      const FiiFund(
+        cnpj: '09.552.812/0001-14',
+        name: 'BTG CRÉDITO IMOB FII',
+        isin: 'BRFEXCCTF007',
+      ),
+    ]);
+    expect(FiiStore.instance.byTicker('BTCI11')?.cnpj, '09.552.812/0001-14');
+  });
+
   test('a ticker finds its fund by the ISIN, or by brapi\'s name', () {
     FiiStore.instance.setForTest(_parse().values);
     B3Market.funds.setForTest([

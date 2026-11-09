@@ -41,16 +41,28 @@ class AssetWorkspace {
   String? activeSite;
   bool standby = false;
 
-  /// Known once the sites are chosen; only stocks have Análise, and stocks
-  /// and FIIs have Comparar.
+  /// Known once the sites are chosen; only stocks (and BDRs of a company
+  /// known at the SEC) have Análise; they, FIIs and the other funds and ETFs
+  /// whose reports are known have Comparar.
   AssetKind? kind;
 
   static const comparePage = '#comparar';
 
   AssetWorkspace(this.ticker);
 
-  bool get hasAnalysis => kind == AssetKind.stock;
-  bool get hasCompare => hasAnalysis || kind == AssetKind.fii;
+  bool get hasAnalysis => analysed != null;
+  bool get hasCompare =>
+      hasAnalysis ||
+      kind == AssetKind.fii ||
+      ((kind == AssetKind.etf || kind == AssetKind.fund) &&
+          B3Instrument.of(ticker)?.id != null);
+
+  /// Whose numbers Análise and Comparar show: a BDR's are its company's.
+  String? get analysed => switch (kind) {
+    AssetKind.stock => ticker,
+    AssetKind.bdr => B3Instrument.of(ticker)?.secTicker,
+    _ => null,
+  };
 
   SiteTab? get active =>
       tabs.where((tab) => tab.id == activeSite).firstOrNull;

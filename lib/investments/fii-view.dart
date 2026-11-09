@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:aupp/components/time-chart.dart';
 import 'package:aupp/desktop/analysis-widgets.dart';
@@ -59,6 +60,14 @@ enum FiiIndicator {
   final String label;
   final int better;
   final String? help;
+
+  /// Where it came from when not the CVM: the price and the volume are
+  /// brapi's.
+  String? get unofficial => switch (this) {
+    pvp || dy || marketCap => Unofficial.brapiPrice,
+    FiiIndicator.price || traded => Unofficial.brapi,
+    _ => null,
+  };
 
   double? value(FiiQuote q) {
     final f = q.fund;
@@ -131,12 +140,7 @@ class FiiLoading extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         const LinearProgressIndicator(minHeight: 2),
-        const SizedBox(height: 8),
-        Text(
-          'Na primeira vez o app baixa da CVM os informes de todos os FIIs, '
-          'cerca de 10 MB. Depois, só o que a CVM mudar.',
-          style: mutedStyle(context),
-        ),
+
       ],
     );
   }
@@ -338,6 +342,7 @@ class _FiiPanelState extends State<FiiPanel> {
                     indicator.label,
                     indicator.format(q),
                     tooltip: indicator.help,
+                    unofficial: indicator.unofficial,
                   ),
             ],
           ),
@@ -405,6 +410,10 @@ class _FiiPanelState extends State<FiiPanel> {
     }
     return _card(
       'Preço e valor patrimonial',
+      trailing: const SourceMark(
+        'O valor patrimonial é da CVM; o preço é de fonte não oficial '
+        '(Yahoo Finance ou brapi.dev).',
+      ),
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

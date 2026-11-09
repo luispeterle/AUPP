@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:aupp/components/time-chart.dart';
 import 'package:aupp/desktop/analysis-page.dart';
@@ -18,13 +20,19 @@ import 'package:aupp/investments/sec-data.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'asset-sheet.dart';
+import 'fund-compare-page.dart';
+import 'fund-view.dart';
 import 'diagram-page.dart';
 import 'diagram.dart';
 import 'fii-view.dart';
 import 'investments-analytics.dart';
 import 'investments-cache.dart';
 import 'investments-page.dart';
+import 'price-history.dart';
+import 'yahoo-chart.dart';
 import 'stock-catalog.dart';
+import 'ticker-search.dart';
+import 'sec-fund.dart';
 import 'asset-lots.dart';
 
 String _money(double value) => getCurrencyValueString(value);
@@ -158,6 +166,17 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
     text: _diagram.typedGrades[widget.ticker]?.toString() ?? '',
   );
 
+  /// What the B3 says the ticker is; null for an ordinary share and abroad.
+  late final B3Instrument? _b3 = B3Instrument.of(widget.ticker);
+
+  /// Whose numbers the Análise and the Comparar show: the stock itself, or
+  /// a BDR's company at the SEC. Null when there is no analysis.
+  String? get _analysed => switch (_kind) {
+    AssetKind.stock => widget.ticker,
+    AssetKind.bdr => _b3?.secTicker,
+    _ => null,
+  };
+
   /// What was added by hand keeps its class; otherwise it follows the kind.
   DiagramAsset get _gradeAsset => DiagramAsset(
     key: widget.ticker,
@@ -168,7 +187,16 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
         switch (_kind) {
           AssetKind.fii => DiagramClass.fii,
           AssetKind.crypto => DiagramClass.crypto,
-          AssetKind.stock || AssetKind.etf => DiagramClass.nationalStock,
+          AssetKind.bdr => DiagramClass.intlStock,
+          AssetKind.fund =>
+            _b3?.type == B3Type.fiagro
+                ? DiagramClass.fii
+                : DiagramClass.fixedIncome,
+          AssetKind.etf =>
+            _b3?.type == B3Type.etfAbroad || _b3?.type == B3Type.bdrEtf
+                ? DiagramClass.intlStock
+                : DiagramClass.nationalStock,
+          AssetKind.stock => DiagramClass.nationalStock,
         },
     isEtf:
         _diagram.watchedEtfs.contains(widget.ticker) || _kind == AssetKind.etf,
@@ -215,6 +243,37 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
       _kind = kind;
       _quoteLoading = false;
     });
+    if (quote?.historyFailed ?? false) _retryHistory();
+  }
+
+  /// Yahoo did not answer the first time (the phone's connection busy with
+  /// the downloads of the opening, a timeout): asked again a few times, and
+  /// the chart gets the years when it answers.
+  bool _historyPending = false;
+
+  Future<void> _retryHistory() async {
+    if (_historyPending) return;
+    setState(() => _historyPending = true);
+    final client = http.Client();
+    try {
+      for (final wait in const [5, 15, 30, 60]) {
+        await Future<void>.delayed(Duration(seconds: wait));
+        if (!mounted) return;
+        final found = await YahooChart.fetch(widget.ticker, client);
+        // Not answered yet: wait and ask again.
+        if (found == null) continue;
+        // Answered: the years, or nothing to have (then brapi's stay).
+        if (found.closes.length >= 30 && mounted && _quote != null) {
+          setState(
+            () => _quote = _quote!.withHistory(found.closes, Unofficial.yahoo),
+          );
+        }
+        return;
+      }
+    } finally {
+      client.close();
+      if (mounted) setState(() => _historyPending = false);
+    }
   }
 
   Future<void> _loadPortfolio() async {
@@ -276,7 +335,7 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
     _diagram.save();
   }
 
-  Widget _buildStock() {
+  Widget _buildStock(String analysed) {
     return Scaffold(
       appBar: widget.embedded
           ? null
@@ -288,8 +347,8 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
                   tooltip: 'Comparar',
                   icon: const Icon(Icons.table_chart_outlined),
                   onPressed: () => _push(
-                    'Comparar · ${widget.ticker}',
-                    ComparePage(ticker: widget.ticker),
+                    'Comparar · $analysed',
+                    ComparePage(ticker: analysed),
                   ),
                 ),
               ],
@@ -297,7 +356,7 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
       body: _quoteLoading
           ? const Center(child: CircularProgressIndicator())
           : AnalysisPage(
-              ticker: widget.ticker,
+              ticker: analysed,
               held: !_holding.isEmpty,
               top: _stockTop(),
             ),
@@ -305,9 +364,40 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
   }
 
   /// The price of the last months on the left, the thesis on the right.
+  /// The range of the price charts, the same in all of them.
+  PriceRange _range = PriceRange.y1;
+
+  Widget _rangeBar(AssetQuote quote, {Widget? trailing}) => PriceRangeBar(
+    history: quote.history,
+    selected: _range,
+    onChanged: (range) => setState(() => _range = range),
+    source: quote.historySource,
+    trailing: !_historyPending
+        ? trailing
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ?trailing,
+              const SizedBox(width: 6),
+              const SizedBox.square(
+                dimension: 10,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'buscando o histórico longo',
+                style: mutedStyle(context, size: 11),
+              ),
+            ],
+          ),
+  );
+
   Widget _stockTop() {
     final quote = _quote;
-    final history = quote?.history ?? const <(DateTime, double)>[];
+    final history = inRange(
+      quote?.history ?? const <(DateTime, double)>[],
+      _range,
+    );
     final currency = quote?.currency ?? 'BRL';
     String price(double v) =>
         pricePerShare(v, currency: currency == 'BRL' ? 'BRL' : currency);
@@ -326,8 +416,17 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
       chart = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_kind == AssetKind.bdr) ...[
+            Text(
+              '${_b3!.description} · os números abaixo são da empresa, '
+              'o preço aqui é o do BDR na B3',
+              style: mutedStyle(context, size: 12),
+            ),
+            const SizedBox(height: 8),
+          ],
           SectionTitle(
-            'Preço · $months ${months == 1 ? 'mês' : 'meses'}',
+            'Preço${_kind == AssetKind.bdr ? ' do BDR' : ''} · '
+            '$months ${months == 1 ? 'mês' : 'meses'}',
             trailing: Text(
               '${price(history.last.$2)}  '
               '${up ? '+' : ''}${percent(change)} no período',
@@ -335,6 +434,8 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
                   .copyWith(color: color, fontWeight: FontWeight.w700),
             ),
           ),
+          const SizedBox(height: 4),
+          _rangeBar(quote!),
           const SizedBox(height: 8),
           TimeChart(
             area: true,
@@ -346,12 +447,9 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
             ],
             format: price,
             dateLabel: DateFormat('dd/MM/yyyy').format,
-            axisLabel: DateFormat('dd/MM').format,
-          ),
-          Text(
-            'Dados da ${_kind == AssetKind.crypto ? 'CoinGecko' : 'brapi.dev'}, '
-            'podem ter atraso',
-            style: mutedStyle(context, size: 11),
+            axisLabel: months > 18
+                ? DateFormat('MM/yy').format
+                : DateFormat('dd/MM').format,
           ),
         ],
       );
@@ -435,6 +533,7 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
     final quote = _quote;
     final company =
         cryptoNames[widget.ticker] ??
+        _b3?.abroadName ??
         StockCompany.of(widget.ticker)?.name ??
         quote?.longName;
     final change = quote?.changePct;
@@ -457,6 +556,8 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
                     Text(widget.ticker, style: theme.textTheme.titleLarge),
                     if (company != null)
                       Text(company, style: theme.textTheme.bodyMedium),
+                    if (_b3 case final b3? when b3.type != B3Type.share)
+                      Text(b3.description, style: theme.textTheme.bodySmall),
                   ],
                 ),
               ),
@@ -464,13 +565,19 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (quote != null) ...[
-                    Text(
-                      quote.currency == 'USD'
-                          ? 'US\$ ${NumberFormat('#,##0.00', 'pt_BR').format(quote.price)}'
-                          : getCurrencyValueString(quote.price),
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SourceMark(quote.priceSource),
+                        Text(
+                          quote.currency == 'USD'
+                              ? 'US\$ ${NumberFormat('#,##0.00', 'pt_BR').format(quote.price)}'
+                              : getCurrencyValueString(quote.price),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                     if (change != null)
                       Text(
@@ -500,14 +607,22 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
             SizedBox(
               height: 170,
               width: double.infinity,
-              child: _PriceChart(history: quote.history),
+              child: _PriceChart(history: inRange(quote.history, _range)),
             ),
             const SizedBox(height: 4),
-            Text(
-              '${(quote.history.last.$1.difference(quote.history.first.$1).inDays / 30).round()} meses · dados do '
-              '${_kind == AssetKind.crypto ? 'CoinGecko' : 'brapi.dev'}, podem ter atraso'
-              '${quote.at == null ? '' : ' · ${DateFormat('dd/MM HH:mm').format(quote.at!)}'}',
-              style: theme.textTheme.bodySmall,
+            Builder(
+              builder: (context) {
+                final shown = inRange(quote.history, _range);
+                final change = shown.last.$2 / shown.first.$2 - 1;
+                return _rangeBar(
+                  quote,
+                  trailing: Text(
+                    ' · ${change >= 0 ? '+' : ''}${percent(change)} no período'
+                    '${quote.at == null ? '' : ' · cotação de ${DateFormat('dd/MM HH:mm').format(quote.at!)}'}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                );
+              },
             ),
           ],
         ],
@@ -731,8 +846,9 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
 
   @override
   Widget build(BuildContext context) {
-    // A stock's page is its analysis: the chart and the thesis on top.
-    if (_kind == AssetKind.stock) return _buildStock();
+    // A stock's page is its analysis (a BDR's, its company's): the chart and
+    // the thesis on top.
+    if (_analysed case final analysed?) return _buildStock(analysed);
     // In a workspace with web views, the sites are in its bar.
     final links = widget.embedded && AssetWorkspaces.instance.supported
         ? null
@@ -745,13 +861,15 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
               title: const Text('Ficha do ativo'),
               // On the computer Comparar is a tab of the workspace.
               actions: [
-                if (fii)
+                if (fii || _b3?.id != null)
                   IconButton(
                     tooltip: 'Comparar',
                     icon: const Icon(Icons.table_chart_outlined),
                     onPressed: () => _push(
                       'Comparar · ${widget.ticker}',
-                      FiiComparePage(ticker: widget.ticker),
+                      fii
+                          ? FiiComparePage(ticker: widget.ticker)
+                          : FundComparePage(ticker: widget.ticker),
                     ),
                   ),
               ],
@@ -766,6 +884,22 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
               price: _quote?.price,
               history: _quote?.history ?? const [],
             ),
+          // Other funds and ETFs: what the CVM, or the SEC behind a BDR, has.
+          if (_b3 case final b3?
+              when !_quoteLoading &&
+                  (_kind == AssetKind.etf || _kind == AssetKind.fund))
+            b3.type == B3Type.bdrEtf
+                ? EtfAbroadPanel(ticker: widget.ticker)
+                : FundPanel(
+                    instrument: b3,
+                    price: _quote?.price,
+                    history: _quote?.history ?? const [],
+                  )
+          // An ETF of the United States by its own ticker.
+          else if (!_quoteLoading &&
+              _kind == AssetKind.etf &&
+              !isB3Ticker(widget.ticker))
+            EtfAbroadPanel(ticker: widget.ticker),
           AdaptiveColumns(
             left: [_buildSituation(), ?_buildCompany(), _buildThesis(), ?links],
             right: [_buildGrade()],
@@ -1024,7 +1158,6 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
   final _queryFocus = FocusNode();
   List<String> _held = const [];
   List<String> _noted = const [];
-  bool _checking = false;
 
   /// Other exchanges, asked only on request (OpenFIGI allows a few a minute).
   String? _otherQuery;
@@ -1038,6 +1171,8 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
     AssetWorkspaces.instance.addListener(_onWorkspacesChanged);
     SecCatalog.instance.addListener(_secChanged);
     SecCatalog.instance.ensure();
+    // ETFs and funds of the United States are not in the SEC's company list.
+    SecFundStore.instance.ensureFundTickers().then((_) => _secChanged());
   }
 
   void _secChanged() {
@@ -1133,40 +1268,6 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
     _readyForNextSearch();
   }
 
-  /// A company was chosen: which of its tickers exist?
-  Future<void> _openRoot(AssetSearchResult result) async {
-    setState(() => _checking = true);
-    final tickers = await tickersOfRoot(result.root);
-    if (!mounted) return;
-    setState(() => _checking = false);
-    if (tickers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Não encontrei cotação de ${result.root}. Digite o ticker completo.',
-          ),
-        ),
-      );
-    } else if (tickers.length == 1) {
-      await _openSheet(tickers.single);
-    } else {
-      final chosen = await showDialog<String>(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: Text(result.name ?? result.root),
-          children: [
-            for (final ticker in tickers)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, ticker),
-                child: Text(ticker),
-              ),
-          ],
-        ),
-      );
-      if (chosen != null && mounted) await _openSheet(chosen);
-    }
-  }
-
   Widget _tickerTile(String ticker) => ListTile(
     leading: InstitutionLogo(institution: StockCompany.badgeOf(ticker)),
     title: Text(
@@ -1185,6 +1286,19 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
     final abroad = query.length >= 2
         ? SecCatalog.instance.search(query, limit: 15)
         : const <SecListing>[];
+    // Abroad but not in the SEC's company list: the ETFs the app knows by
+    // name, and any fund by its exact ticker.
+    final shown = {for (final l in abroad) l.ticker};
+    final usFunds = query.length >= 2
+        ? [
+            for (final ticker in {
+              ...searchAbroad(query, limit: 6),
+              if (SecFundStore.instance.fundOf(query) != null)
+                query.toUpperCase(),
+            })
+              if (!shown.contains(ticker)) ticker,
+          ]
+        : const <String>[];
     Widget heading(String text) => Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Text(text, style: theme.textTheme.titleSmall),
@@ -1215,26 +1329,23 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
               ),
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) {
-                if (results.isEmpty && abroad.isNotEmpty) {
-                  _openSheet(abroad.first.ticker);
-                  return;
-                }
-                if (results.isEmpty) return;
-                final first = results.first;
-                first.ticker != null
-                    ? _openSheet(first.ticker!)
-                    : _openRoot(first);
+                final first =
+                    results.firstOrNull?.ticker ??
+                    abroad.firstOrNull?.ticker ??
+                    usFunds.firstOrNull;
+                if (first != null) _openSheet(first);
               },
             ),
           ),
-          if (_checking) const LinearProgressIndicator(),
           Expanded(
             child: widget.idle != null && _query.text.trim().length < 2
                 ? widget.idle!
                 : ListView(
                     children: _query.text.trim().length >= 2
                         ? [
-                            if (results.isEmpty && abroad.isEmpty)
+                            if (results.isEmpty &&
+                                abroad.isEmpty &&
+                                usFunds.isEmpty)
                               const Padding(
                                 padding: EdgeInsets.all(24),
                                 child: Center(
@@ -1247,16 +1358,21 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
                               ListTile(
                                 leading: InstitutionLogo(
                                   institution: StockCompany.badgeOf(
-                                    result.ticker ?? '${result.root}3',
+                                    result.ticker,
                                   ),
                                 ),
-                                title: Text(result.name ?? result.root),
-                                subtitle: Text(result.ticker ?? result.root),
-                                onTap: () => result.ticker != null
-                                    ? _openSheet(result.ticker!)
-                                    : _openRoot(result),
+                                title: Text(
+                                  result.name == null
+                                      ? result.ticker
+                                      : '${result.name} · ${result.ticker}',
+                                ),
+                                subtitle: result.what == null
+                                    ? null
+                                    : Text(result.what!),
+                                onTap: () => _openSheet(result.ticker),
                               ),
-                            if (abroad.isNotEmpty) heading('Nos EUA (SEC)'),
+                            if (abroad.isNotEmpty || usFunds.isNotEmpty)
+                              heading('Nos EUA (SEC)'),
                             for (final listing in abroad)
                               ListTile(
                                 leading: InstitutionLogo(
@@ -1274,6 +1390,19 @@ class _AssetSearchPageState extends State<AssetSearchPage> {
                                   ].join(' · '),
                                 ),
                                 onTap: () => _openSheet(listing.ticker),
+                              ),
+                            for (final ticker in usFunds)
+                              ListTile(
+                                leading: InstitutionLogo(
+                                  institution: StockCompany.badgeOf(ticker),
+                                ),
+                                title: Text(StockCompany.titleOf(ticker)),
+                                subtitle: Text(
+                                  SecFundStore.instance.fundOf(ticker) == null
+                                      ? ticker
+                                      : '$ticker · fundo ou ETF',
+                                ),
+                                onTap: () => _openSheet(ticker),
                               ),
                             heading('Outras bolsas'),
                             if (_otherQuery != query)

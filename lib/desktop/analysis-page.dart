@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:aupp/components/info-tip.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:aupp/desktop/analysis-sections.dart';
@@ -521,12 +522,6 @@ class StatementsLoading extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const LinearProgressIndicator(minHeight: 2),
-              const SizedBox(height: 8),
-              Text(
-                'Na primeira vez o app baixa os balanços de todas as empresas da '
-                'bolsa na CVM, cerca de 90 MB. Depois, só o que a CVM mudar.',
-                style: mutedStyle(context),
-              ),
             ],
           ],
         ),
@@ -555,13 +550,15 @@ class _IndicatorRow extends StatelessWidget {
       child: HoverRow(
         child: Row(
           children: [
-            Expanded(
+            Flexible(
               child: Text(
                 indicator.label,
                 style: labelStyle(context),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (indicator.usesPrice) const SourceMark(Unofficial.brapiPrice),
+            const Spacer(),
             Sparkline([for (final y in years) history[y]!]),
             SizedBox(
               width: 92,

@@ -3903,6 +3903,8 @@ class _AddAssetDialogState extends State<_AddAssetDialog> {
     final cls = switch (kind) {
       AssetKind.fii => DiagramClass.fii,
       AssetKind.crypto => DiagramClass.crypto,
+      // A BDR is a company abroad, though traded here.
+      AssetKind.bdr => DiagramClass.intlStock,
       _ => _cls == DiagramClass.fixedIncome ? DiagramClass.nationalStock : _cls,
     };
     Navigator.pop(context, (ticker, cls, kind == AssetKind.etf, 0.0));

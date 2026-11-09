@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:aupp/investments/fundamentals.dart';
 
@@ -195,11 +196,21 @@ TextStyle valueStyle(BuildContext context) =>
 
 /// A headline number: label above, value below.
 class StatCell extends StatelessWidget {
-  const StatCell(this.label, this.value, {super.key, this.tooltip});
+  const StatCell(
+    this.label,
+    this.value, {
+    super.key,
+    this.tooltip,
+    this.unofficial,
+  });
 
   final String label;
   final String value;
   final String? tooltip;
+
+  /// Where the figure came from when not an official source: a "!" beside
+  /// the label says so.
+  final String? unofficial;
 
   @override
   Widget build(BuildContext context) {
@@ -209,7 +220,13 @@ class StatCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: mutedStyle(context, size: 11)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: mutedStyle(context, size: 11)),
+              if (unofficial != null) SourceMark(unofficial!, size: 12),
+            ],
+          ),
           Text(
             value,
             style: denseStyle(

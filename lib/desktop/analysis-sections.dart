@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:aupp/components/info-tip.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:aupp/desktop/analysis-widgets.dart';
 import 'package:aupp/investments/analysis-source.dart';
@@ -20,10 +21,14 @@ class FactsTable extends StatelessWidget {
     super.key,
     required this.facts,
     this.title = 'Dados da empresa',
+    this.unofficial = const {},
   });
 
   final List<(String, String)> facts;
   final String title;
+
+  /// Label → where it came from, for the facts not from an official source.
+  final Map<String, String> unofficial;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +41,7 @@ class FactsTable extends StatelessWidget {
             child: Row(
               children: [
                 Text(label, style: labelStyle(context)),
+                if (unofficial[label] case final source?) SourceMark(source),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Tooltip(
@@ -100,7 +106,14 @@ class CompanyFacts extends StatelessWidget {
       if (row != null && row.volume > 0)
         ('Negociado hoje', moneyShort(row.volume * row.price)),
     ];
-    return FactsTable(facts: facts);
+    return FactsTable(
+      facts: facts,
+      unofficial: const {
+        'Preço': Unofficial.brapi,
+        'Setor (brapi)': Unofficial.brapi,
+        'Negociado hoje': Unofficial.brapi,
+      },
+    );
   }
 }
 
@@ -144,7 +157,14 @@ class ForeignFacts extends StatelessWidget {
           '1 ${company.currency} = R\$ ${NumberFormat('#,##0.0000', 'pt_BR').format(analysis.brlPerUnit)}',
         ),
     ];
-    return FactsTable(facts: facts);
+    return FactsTable(
+      facts: facts,
+      unofficial: const {
+        'Preço': Unofficial.brapi,
+        'Preço usado': Unofficial.brapi,
+        'ADR': Unofficial.brapi,
+      },
+    );
   }
 }
 

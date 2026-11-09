@@ -1,18 +1,132 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:aupp/components/source-mark.dart';
 import 'package:aupp/investments/b3-catalog.dart';
+import 'package:aupp/investments/b3-instruments.dart';
 import 'package:aupp/investments/brapi-api.dart';
 import 'package:aupp/investments/investments-analytics.dart';
 import 'package:aupp/investments/investments-cache.dart';
 import 'package:aupp/investments/sec-data.dart';
 import 'package:aupp/investments/stock-catalog.dart';
+import 'package:aupp/investments/yahoo-chart.dart';
 import 'package:aupp/services/crypto-quote-service.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 
-enum AssetKind { stock, fii, etf, crypto }
+/// [bdr]: a company abroad through its BDR, analysed at the SEC. [fund]: a
+/// listed fund that is neither a FII nor an ETF (Fiagro, infrastructure,
+/// FIDC...).
+enum AssetKind { stock, fii, etf, crypto, bdr, fund }
+
+/// What a B3 ticker is, from the B3's own register of listed instruments
+/// ([b3Instruments], scripts/b3_instruments.py). A ticker newer than the app
+/// is told by its number: 31 to 35 a BDR of a company, 39 of an ETF.
+enum B3Type {
+  share('Ação'),
+  unit('Unit'),
+  fii('FII'),
+  fiagro('Fiagro'),
+  infra('Fundo de infraestrutura'),
+  fidc('FIDC'),
+  fund('Fundo'),
+  etf('ETF'),
+  etfAbroad('ETF de índice de fora'),
+  bdr('BDR'),
+  bdrEtf('BDR de ETF');
+
+  final String label;
+  const B3Type(this.label);
+
+  static const _codes = {
+    'A': share,
+    'U': unit,
+    'F': fii,
+    'G': fiagro,
+    'I': infra,
+    'D': fidc,
+    'P': fund,
+    'E': etf,
+    'X': etfAbroad,
+    'B': bdr,
+    'T': bdrEtf,
+  };
+}
+
+class B3Instrument {
+  final B3Type type;
+
+  /// A BDR's company or ETF abroad ("Apple Inc.").
+  final String? abroadName;
+
+  /// A BDR's company or ETF in the United States ("AAPL", "IVV").
+  final String? abroadTicker;
+
+  /// A BDR of an ETF: its series at the SEC (S000004310), whose N-PORT has
+  /// what it holds. A fund here: its CNPJ, digits only, for its reports to
+  /// the CVM.
+  final String? id;
+
+  const B3Instrument(this.type, {this.abroadName, this.abroadTicker, this.id});
+
+  /// A BDR's company at the SEC: its Análise and Comparar.
+  String? get secTicker => type == B3Type.bdr ? abroadTicker : null;
+
+  String? get secSeries => type == B3Type.bdrEtf ? id : null;
+
+  String? get cnpj => type == B3Type.bdr || type == B3Type.bdrEtf ? null : id;
+
+  /// Null for what is not on the B3.
+  static B3Instrument? of(String ticker) {
+    final code = ticker.toUpperCase();
+    if (b3Instruments[code] case (
+      final type,
+      final name,
+      final abroad,
+      final id,
+    )) {
+      return B3Instrument(
+        B3Type._codes[type]!,
+        abroadName: name,
+        abroadTicker: abroad,
+        id: id,
+      );
+    }
+    if (!isB3Ticker(code)) return null;
+    final number = int.tryParse(code.substring(4)) ?? 0;
+    if (number >= 31 && number <= 35) return const B3Instrument(B3Type.bdr);
+    if (number == 39) return const B3Instrument(B3Type.bdrEtf);
+    return null;
+  }
+
+  AssetKind get kind => switch (type) {
+    B3Type.share || B3Type.unit => AssetKind.stock,
+    B3Type.fii => AssetKind.fii,
+    B3Type.fiagro ||
+    B3Type.infra ||
+    B3Type.fidc ||
+    B3Type.fund => AssetKind.fund,
+    B3Type.etf || B3Type.etfAbroad || B3Type.bdrEtf => AssetKind.etf,
+    B3Type.bdr => AssetKind.bdr,
+  };
+
+  /// "BDR de Apple Inc. (AAPL na SEC)", "Fiagro", "BDR de ETF: iShares Core
+  /// S&P 500 ETF".
+  String get description => switch (type) {
+    B3Type.bdr =>
+      abroadName == null
+          ? 'BDR de empresa de fora'
+          : 'BDR de $abroadName'
+                '${secTicker == null ? '' : ' ($secTicker nos EUA)'}',
+    B3Type.bdrEtf =>
+      abroadName == null
+          ? 'BDR de ETF de fora'
+          : 'BDR do $abroadName'
+                '${abroadTicker == null ? '' : ' ($abroadTicker nos EUA)'}',
+    _ => type.label,
+  };
+}
 
 /// Names of the cryptocurrencies the app has quotes for ("BTC" → "Bitcoin").
 Map<String, String> get cryptoNames => {
@@ -40,9 +154,12 @@ AssetKind? kindOfProduct(String? product) => switch (product) {
 /// From the names in a quote, as neither source says what an asset is.
 AssetKind kindFromNames(String? shortName, String? longName) {
   final names = '${shortName ?? ''} ${longName ?? ''}'.toUpperCase();
-  if (names.contains('FII') ||
-      names.contains('FIAGRO') ||
-      names.contains('IMOBILI')) {
+  if (names.contains('FIAGRO') ||
+      names.contains('INFRA') ||
+      names.contains('DIREITOS CREDITORIOS')) {
+    return AssetKind.fund;
+  }
+  if (names.contains('FII') || names.contains('IMOBILI')) {
     return AssetKind.fii;
   }
   if (names.contains(' ETF') ||
@@ -56,10 +173,13 @@ AssetKind kindFromNames(String? shortName, String? longName) {
   return AssetKind.stock;
 }
 
-/// What an asset is: known for crypto and for what is held; otherwise by the
-/// names in its quote.
+/// What an asset is: known for crypto, for what the B3 lists and for what is
+/// held; otherwise by the names in its quote.
 Future<AssetKind> resolveAssetKind(String ticker, {AssetQuote? quote}) async {
   if (isCryptoTicker(ticker)) return AssetKind.crypto;
+  // The B3 says what it lists; a position from the Dinzo calls a BDR a stock.
+  final b3 = B3Instrument.of(ticker);
+  if (b3 != null) return b3.kind;
   final snapshot = await InvestmentsCache.load();
   for (final inv in snapshot?.investments ?? const []) {
     if (!inv.archived && StockCompany.tickerOf(inv) == ticker) {
@@ -88,6 +208,15 @@ class AssetQuote {
   final String currency;
   final List<(DateTime, double)> history;
 
+  /// Where the price and the history came from: none of them is an official
+  /// source ([Unofficial]), so the sheet marks both.
+  final String priceSource;
+  final String historySource;
+
+  /// Yahoo did not answer (a timeout, no network): [history] is brapi's
+  /// three months for now, and asking again may bring the years.
+  final bool historyFailed;
+
   const AssetQuote({
     required this.ticker,
     required this.price,
@@ -97,13 +226,31 @@ class AssetQuote {
     this.shortName,
     this.currency = 'BRL',
     this.history = const [],
+    this.priceSource = Unofficial.brapi,
+    this.historySource = Unofficial.brapi,
+    this.historyFailed = false,
   });
+
+  AssetQuote withHistory(List<(DateTime, double)> history, String source) =>
+      AssetQuote(
+        ticker: ticker,
+        price: price,
+        changePct: changePct,
+        at: at,
+        longName: longName,
+        shortName: shortName,
+        currency: currency,
+        history: history,
+        priceSource: priceSource,
+        historySource: source,
+      );
 
   /// Null when the answer has no price. [history] comes in its own request.
   static AssetQuote? fromBrapiJson(
     String ticker,
     Map<String, dynamic> json, {
     List<(DateTime, double)> history = const [],
+    String historySource = Unofficial.brapi,
   }) {
     final data = _brapiData(json);
     final price = (data?['regularMarketPrice'] as num?)?.toDouble();
@@ -123,6 +270,7 @@ class AssetQuote {
       shortName: data['shortName'] as String?,
       currency: (data['currency'] as String?) ?? 'BRL',
       history: history,
+      historySource: historySource,
     );
   }
 
@@ -172,6 +320,8 @@ class AssetQuote {
           : (last.$2 - previous) / previous * 100,
       at: last.$1,
       history: history,
+      priceSource: Unofficial.coingecko,
+      historySource: Unofficial.coingecko,
     );
   }
 
@@ -230,11 +380,53 @@ class AssetQuote {
       final answer = await BrapiApi.get(http_, 'stocks/quote', {
         'symbols': ticker,
       });
-      if (answer.status != 200 || answer.body == null) return null;
-      return fromBrapiJson(
-        ticker,
-        answer.body!,
-        history: withHistory ? await _brapiHistory(ticker, http_) : const [],
+      // Years of closes from Yahoo; brapi's plan gives three months, kept for
+      // what Yahoo does not have (a BDR of an ETF has a single day there).
+      final yahoo = withHistory || answer.status != 200
+          ? await YahooChart.fetch(ticker, http_)
+          : null;
+      var history = yahoo?.closes ?? const <(DateTime, double)>[];
+      var historySource = Unofficial.yahoo;
+      if (withHistory && history.length < 30) {
+        history = await _brapiHistory(ticker, http_);
+        historySource = Unofficial.brapi;
+      }
+      if (!withHistory) history = const [];
+      final failed = withHistory && yahoo == null;
+      final quote = answer.status == 200 && answer.body != null
+          ? fromBrapiJson(
+              ticker,
+              answer.body!,
+              history: history,
+              historySource: historySource,
+            )
+          : null;
+      if (quote != null) {
+        return failed
+            ? AssetQuote(
+                ticker: quote.ticker,
+                price: quote.price,
+                changePct: quote.changePct,
+                at: quote.at,
+                longName: quote.longName,
+                shortName: quote.shortName,
+                currency: quote.currency,
+                history: quote.history,
+                historySource: quote.historySource,
+                historyFailed: true,
+              )
+            : quote;
+      }
+      final price = yahoo?.price;
+      if (price == null) return null;
+      return AssetQuote(
+        ticker: ticker,
+        price: price,
+        currency: yahoo?.currency ?? 'BRL',
+        history: history,
+        priceSource: Unofficial.yahoo,
+        historySource: historySource,
+        historyFailed: failed,
       );
     } catch (e, st) {
       Logger.withClass(AssetQuote).handle(e, st, 'Quote of $ticker failed');
@@ -530,6 +722,49 @@ List<AssetLink> assetLinks(
         ),
         news,
       ];
+    case AssetKind.bdr:
+      final abroad = B3Instrument.of(ticker);
+      final sec = abroad?.secTicker;
+      return [
+        if (sec != null) ...[
+          AssetLink(
+            'AUVP Analítica',
+            Uri.parse('https://analitica.auvp.com.br/stocks/$sec'),
+          ),
+          AssetLink(
+            'SEC',
+            Uri.https('www.sec.gov', '/cgi-bin/browse-edgar', {
+              'action': 'getcompany',
+              'CIK': sec,
+            }),
+          ),
+        ],
+        AssetLink(
+          'TradingView',
+          Uri.parse('https://br.tradingview.com/symbols/BMFBOVESPA-$ticker/'),
+        ),
+        AssetLink(
+          'RI da empresa',
+          search(
+            'www.google.com',
+            'investor relations ${abroad?.abroadName ?? company}',
+          ),
+        ),
+        news,
+      ];
+    case AssetKind.fund:
+      return [
+        AssetLink(
+          'TradingView',
+          Uri.parse('https://br.tradingview.com/symbols/BMFBOVESPA-$ticker/'),
+        ),
+        AssetLink(
+          'Gestora',
+          search('www.google.com', 'relatório gerencial $ticker $company'),
+        ),
+        cvm,
+        news,
+      ];
     case AssetKind.etf:
       return [
         AssetLink(
@@ -563,13 +798,17 @@ List<AssetLink> assetLinks(
   }
 }
 
-/// A search result: a full ticker, or a company whose share class is unknown.
+/// A search result: a ticker, its name and, on the B3, what it is.
 class AssetSearchResult {
-  final String? ticker;
-  final String root;
+  final String ticker;
   final String? name;
+  final B3Instrument? b3;
 
-  const AssetSearchResult(this.root, this.name, {this.ticker});
+  const AssetSearchResult(this.ticker, this.name, {this.b3});
+
+  /// "BDR de Apple Inc. (AAPL nos EUA)", "FII"; null for a plain share.
+  String? get what =>
+      b3 == null || b3!.type == B3Type.share ? null : b3!.description;
 }
 
 final _fullTicker = RegExp(r'^[A-Z0-9]{4}\d{1,2}[A-Z]?$');
@@ -585,53 +824,48 @@ String _fold(String text) {
   return buffer.toString();
 }
 
-/// By ticker or company name, in the B3 catalogue. A typed ticker comes first
-/// even when the catalogue does not know it.
+/// By ticker or name, every ticker traded on the B3 ([b3Instruments]) and the
+/// coins: the whole ticker (AAPL34, not AAPL), shares before units, funds,
+/// ETFs and BDRs. A BDR is found by its company's name too ("apple"). A typed
+/// ticker comes first even when the register does not know it.
 List<AssetSearchResult> searchAssets(String query, {int limit = 30}) {
   final upper = query.trim().toUpperCase();
   if (upper.length < 2) return const [];
-  final results = <AssetSearchResult>[];
-  final foldedQuery = _fold(query.trim());
-  for (final entry in cryptoNames.entries) {
-    if (entry.key.startsWith(upper) ||
-        _fold(entry.value).contains(foldedQuery)) {
-      results.add(AssetSearchResult(entry.key, entry.value, ticker: entry.key));
-    }
-  }
-  if (_fullTicker.hasMatch(upper)) {
-    final root = upper.substring(0, 4);
-    results.add(
-      AssetSearchResult(
-        root,
-        b3Catalog[root]?.$1,
-        ticker: upper.replaceFirst(RegExp(r'[A-Z]$'), ''),
-      ),
-    );
-  }
   final folded = _fold(query.trim());
-  final byRoot = <AssetSearchResult>[];
-  final byName = <AssetSearchResult>[];
-  final taken = {for (final result in results) result.root};
-  for (final entry in b3Catalog.entries) {
-    if (taken.contains(entry.key)) continue;
-    if (entry.key.startsWith(upper)) {
-      byRoot.add(AssetSearchResult(entry.key, entry.value.$1));
-    } else if (_fold(entry.value.$1 ?? '').contains(folded)) {
-      byName.add(AssetSearchResult(entry.key, entry.value.$1));
+  final results = <AssetSearchResult>[];
+  for (final entry in cryptoNames.entries) {
+    if (entry.key.startsWith(upper) || _fold(entry.value).contains(folded)) {
+      results.add(AssetSearchResult(entry.key, entry.value));
     }
   }
-  return [...results, ...byRoot, ...byName].take(limit).toList();
-}
+  String? nameOf(String ticker, B3Instrument? b3) =>
+      b3?.abroadName ?? b3Catalog[ticker.substring(0, 4)]?.$1;
+  if (_fullTicker.hasMatch(upper) && !b3Instruments.containsKey(upper)) {
+    final ticker = upper.replaceFirst(RegExp(r'[A-Z]$'), '');
+    results.add(AssetSearchResult(ticker, nameOf(ticker, null)));
+  }
+  final byTicker = <AssetSearchResult>[];
+  final byName = <AssetSearchResult>[];
+  for (final ticker in b3Instruments.keys) {
+    final b3 = B3Instrument.of(ticker);
+    final name = nameOf(ticker, b3);
+    final result = AssetSearchResult(ticker, name, b3: b3);
+    if (ticker.startsWith(upper)) {
+      byTicker.add(result);
+    } else if (folded.length >= 3 && _fold(name ?? '').contains(folded)) {
+      byName.add(result);
+    }
+  }
+  int rank(AssetSearchResult a, AssetSearchResult b) {
+    final exact = (a.ticker == upper ? 0 : 1) - (b.ticker == upper ? 0 : 1);
+    if (exact != 0) return exact;
+    final kind = (a.b3?.type.index ?? 0) - (b.b3?.type.index ?? 0);
+    return kind != 0 ? kind : a.ticker.compareTo(b.ticker);
+  }
 
-/// Tickers of a company that exist, as most only trade in some share classes.
-Future<List<String>> tickersOfRoot(String root, {http.Client? client}) async {
-  const classes = ['3', '4', '11', '5', '6'];
-  final quotes = await Future.wait([
-    for (final suffix in classes)
-      AssetQuote.fetch('$root$suffix', client: client, withHistory: false),
-  ]);
   return [
-    for (final quote in quotes)
-      if (quote != null) quote.ticker,
-  ];
+    ...results,
+    ...byTicker..sort(rank),
+    ...byName..sort(rank),
+  ].take(limit).toList();
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:aupp/accounts/accounts-sheet.dart';
 import 'package:aupp/investments/brapi-api.dart';
+import 'package:aupp/investments/investment-data.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/services/service-config.dart';
@@ -235,6 +236,31 @@ class _DinzoSettingsPageState extends State<DinzoSettingsPage> {
                 'As chaves ficam só neste aparelho, fora dos backups.',
                 style: subtitleTextStyle,
               ),
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: InvestmentData.status,
+              builder: (context, status, _) {
+                final done = InvestmentData.doneAt;
+                return SettingsItem(
+                  icon: Icon(
+                    status == null ? Icons.download : Icons.downloading,
+                    color: Colors.white,
+                  ),
+                  iconBackgroundColor: Colors.blueGrey.shade600,
+                  title: 'Baixar dados de investimentos de novo',
+                  subtitle: status != null
+                      ? 'Baixando: $status'
+                      : done == null
+                      ? 'Balanços e informes da CVM, carteiras da SEC e '
+                            'cotações da B3. Também baixa sozinho ao abrir o app.'
+                      : 'Atualizado às '
+                            '${TimeOfDay.fromDateTime(done).format(context)}'
+                            '${InvestmentData.failed ? ' · algo falhou, toque para tentar de novo' : ''}',
+                  onPressed: status != null
+                      ? null
+                      : () => InvestmentData.preload(force: true),
+                );
+              },
             ),
             const Divider(),
             SettingsItem(

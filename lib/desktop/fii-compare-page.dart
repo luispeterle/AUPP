@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:aupp/components/time-chart.dart';
 import 'package:aupp/desktop/analysis-widgets.dart';
 import 'package:aupp/investments/b3-market.dart';
@@ -381,10 +382,18 @@ class _FiiComparePageState extends State<FiiComparePage> {
           builder: (context) {
             final values = [for (final q in quotes) indicator.value(q)];
             final (best, worst) = _marks(indicator, values);
-            final label = Text(
-              indicator.label,
-              style: labelStyle(context).copyWith(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
+            final label = Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    indicator.label,
+                    style: labelStyle(context).copyWith(fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (indicator.unofficial case final source?)
+                  SourceMark(source, size: 12),
+              ],
             );
             return SizedBox(
               width: width,

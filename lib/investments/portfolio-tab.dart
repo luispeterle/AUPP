@@ -339,6 +339,17 @@ class _PortfolioTabState extends State<PortfolioTab> {
             ),
             EvolutionCard(
               info: _chartNote(undrawn),
+              unofficial:
+                  shown.any(
+                    (c) =>
+                        c != PortfolioClass.fixedIncome &&
+                        c != PortfolioClass.dailyFixedIncome,
+                  )
+                  ? 'Ações, FIIs e o exterior seguem o fechamento de cada dia '
+                        'do Yahoo Finance (ou da brapi.dev) e cripto o da '
+                        'CoinGecko ou Kraken; nenhum é fonte oficial. A renda '
+                        'fixa segue o CDI do Banco Central.'
+                  : null,
               points: [
                 for (final p in series)
                   if (_sinceStart || !p.date.isBefore(cutoff))

@@ -563,7 +563,12 @@ class SecFacts {
       }
     }
     final sic = int.tryParse(submissions?['sic'] as String? ?? '');
-    final cik = (factsJson['cik'] as num?)?.toInt();
+    // A number for most companies, text with zeros ("0001691493") for some.
+    final cik = switch (factsJson['cik']) {
+      final num n => n.toInt(),
+      final String s => int.tryParse(s),
+      _ => null,
+    };
     final name = (factsJson['entityName'] as String?) ??
         (submissions?['name'] as String?) ??
         ticker;

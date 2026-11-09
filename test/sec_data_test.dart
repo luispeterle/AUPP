@@ -130,6 +130,11 @@ void main() {
     expect(company.shares, 14594180000);
   });
 
+  test('the company number may come as text with zeros', () {
+    final facts = {..._usFacts(), 'cik': '0000320193'};
+    expect(SecFacts.parse('AAPL', facts, null)!.code, 'SEC320193');
+  });
+
   test('the last twelve months from the 10-Q', () {
     final company = SecFacts.parse('AAPL', _usFacts(), null)!;
     expect(company.ttmEnd, DateTime(2026, 6, 27));

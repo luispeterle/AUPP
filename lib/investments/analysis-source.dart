@@ -43,12 +43,24 @@ class ForeignAnalysis {
 /// Where the numbers of any ticker come from: the B3's from the CVM at
 /// brapi's list prices, the rest from the SEC at its home price.
 class AnalysisSource {
-  static final _foreign = <String, ForeignAnalysis?>{};
+  static final _foreign = <String, ForeignAnalysis>{};
   static final _pending = <String, Future<ForeignAnalysis?>>{};
+
+  /// A ticker the SEC gave nothing for, and when: answered as such for a
+  /// while (Comparar asks again for what is not loaded), then asked again
+  /// (the SEC may just not have answered).
+  static final _failedAt = <String, DateTime>{};
+  static const _retryAfter = Duration(minutes: 1);
+
+  static bool _failedLately(String ticker) {
+    final at = _failedAt[ticker];
+    return at != null && DateTime.now().difference(at) < _retryAfter;
+  }
 
   static void resetForTests() {
     _foreign.clear();
     _pending.clear();
+    _failedAt.clear();
   }
 
   /// Ready now: a B3 ticker, or one abroad already loaded.
@@ -63,13 +75,16 @@ class AnalysisSource {
   }
 
   static bool loaded(String ticker) =>
-      isB3Ticker(ticker) || _foreign.containsKey(ticker);
+      isB3Ticker(ticker) ||
+      _foreign.containsKey(ticker) ||
+      _failedLately(ticker);
 
   static ForeignAnalysis? cached(String ticker) => _foreign[ticker];
 
   /// Null when the SEC has no statements of it (a stock only abroad, an ETF).
   static Future<ForeignAnalysis?> foreign(String ticker) {
     if (_foreign.containsKey(ticker)) return Future.value(_foreign[ticker]);
+    if (_failedLately(ticker)) return Future.value(null);
     // A block: an arrow would hand back the pending future, which then
     // waits for itself.
     return _pending[ticker] ??= _load(ticker).whenComplete(() {
@@ -79,7 +94,10 @@ class AnalysisSource {
 
   static Future<ForeignAnalysis?> _load(String ticker) async {
     final loaded = await SecStore.instance.load(ticker);
-    if (loaded == null) return _foreign[ticker] = null;
+    if (loaded == null) {
+      _failedAt[ticker] = DateTime.now();
+      return null;
+    }
     final (company, notices) = loaded;
     final price = await HomeListing.priceFor(company, ticker);
     final fx = await Fx.brlPer(company.currency);

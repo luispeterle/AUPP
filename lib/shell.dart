@@ -17,6 +17,7 @@ import 'package:aupp/investments/investments-page.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:aupp/investments/investment-data.dart';
 import 'package:aupp/desktop/calculators-area.dart';
 import 'package:flutter/services.dart';
 import 'package:aupp/disguise/calculator-gate.dart';
@@ -436,6 +437,9 @@ class ShellState extends State<Shell> {
               // sync (connecting it in Configurações → Integrações com API starts the
               // first sync there).
               if (DinzoSyncService.apiKey != null) DinzoAutoSync.run();
+              // The funds' reports, so the Ficha has them when it opens; each
+              // screen then only checks for news.
+              InvestmentData.preload();
               WelcomePage.showOnFirstOpening(context);
             });
           }

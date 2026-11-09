@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:aupp/desktop/analysis-page.dart';
 import 'package:aupp/desktop/analysis-widgets.dart';
 import 'package:aupp/investments/analysis-source.dart';
@@ -494,6 +495,8 @@ class _ComparePageState extends State<ComparePage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (indicator.usesPrice)
+                            const SourceMark(Unofficial.brapiPrice, size: 12),
                           // Has a history to chart: hover or tap shows it.
                           if (companies.any(
                             (f) => f.history(indicator).isNotEmpty,
@@ -703,14 +706,23 @@ class _ComparePageState extends State<ComparePage> {
         }),
         child: SizedBox(
           width: columnWidth,
-          child: Text(
-            '${Indicator.byId(id).label}${active ? (_sortDown ? ' ↓' : ' ↑') : ''}',
-            textAlign: TextAlign.right,
-            overflow: TextOverflow.ellipsis,
-            style: style.copyWith(
-              fontWeight: FontWeight.w700,
-              color: active ? scheme.primary : null,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (Indicator.byId(id).usesPrice)
+                const SourceMark(Unofficial.brapiPrice, size: 11),
+              Flexible(
+                child: Text(
+                  '${Indicator.byId(id).label}${active ? (_sortDown ? ' ↓' : ' ↑') : ''}',
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                  style: style.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: active ? scheme.primary : null,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );

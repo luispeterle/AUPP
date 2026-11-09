@@ -157,10 +157,12 @@ class B3Market extends ChangeNotifier {
           row.ticker: row,
   };
 
-  Future<void> ensure() async {
+  Future<void> ensure({bool force = false}) async {
     if (_rows.isEmpty) await _loadSaved();
     final at = fetchedAt;
-    if (at != null && DateTime.now().difference(at) < freshFor) return;
+    if (!force && at != null && DateTime.now().difference(at) < freshFor) {
+      return;
+    }
     return _running ??= _fetch().whenComplete(() => _running = null);
   }
 

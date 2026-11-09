@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:aupp/components/source-mark.dart';
 import 'package:intl/intl.dart';
 import 'package:aupp/components/time-chart.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
@@ -17,11 +18,19 @@ String _pct(double value) => '${NumberFormat('0.0', 'pt_BR').format(value)}%';
 
 /// What the module holds over time, in reais.
 class EvolutionCard extends StatelessWidget {
-  const EvolutionCard({super.key, required this.points, this.info});
+  const EvolutionCard({
+    super.key,
+    required this.points,
+    this.info,
+    this.unofficial,
+  });
 
   /// Already cut to the period shown, oldest first.
   final List<(DateTime, double)> points;
   final String? info;
+
+  /// Where prices behind the line came from, when not an official source.
+  final String? unofficial;
 
   static const color = SelicComparison.portfolioColor;
 
@@ -55,6 +64,11 @@ class EvolutionCard extends StatelessWidget {
                     text: '  ${day.format(points.last.$1)}',
                     style: theme.textTheme.bodySmall,
                   ),
+                  if (unofficial != null)
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: SourceMark(unofficial!),
+                    ),
                 ],
               ),
             ),

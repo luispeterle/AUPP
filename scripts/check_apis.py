@@ -73,6 +73,14 @@ CVM_FII_COLUMNS = {
 }
 
 
+def last_weekday(today):
+    """The B3 publishes its register on business days."""
+    day = today - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day.strftime("%Y-%m-%d")
+
+
 def last_bank_quarter(today):
     """The last quarter IF.data has: about three months after it ends."""
     back = today - timedelta(days=100)
@@ -209,6 +217,21 @@ def checks():
             fields(("value", 0, "CodConglomeradoPrudencial")),
         ),
         (
+            "B3: cadastro de instrumentos",
+            "https://arquivos.b3.com.br/api/download/requestname"
+            f"?fileName=InstrumentsConsolidated&date={last_weekday(today)}",
+            None,
+            "",
+            fields(("token",)),
+        ),
+        (
+            "Yahoo Finance: histórico de preço (PETR4)",
+            "https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA?range=1mo&interval=1d",
+            None,
+            "",
+            fields(("chart", "result", 0, "timestamp", 0), ("chart", "result", 0, "indicators", "quote", 0, "close", 0), ("chart", "result", 0, "meta", "regularMarketPrice")),
+        ),
+        (
             "SEC: lista de tickers",
             "https://www.sec.gov/files/company_tickers_exchange.json",
             key("sec_contact"),
@@ -221,6 +244,20 @@ def checks():
             key("sec_contact"),
             "needs",
             fields(("facts", "us-gaap", "NetIncomeLoss", "units", "USD", 0, "end"), ("facts", "dei", "EntityCommonStockSharesOutstanding")),
+        ),
+        (
+            "SEC: tickers de fundos e ETFs",
+            "https://www.sec.gov/files/company_tickers_mf.json",
+            key("sec_contact"),
+            "needs",
+            fields(("fields", 1), ("data", 0, 1)),
+        ),
+        (
+            "SEC: N-PORT de um ETF (iShares Core S&P 500)",
+            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=S000004310&type=NPORT-P&owner=include&count=1&output=atom",
+            key("sec_contact"),
+            "needs",
+            lambda body: [] if b"<filing-href>" in body else ["filing-href"],
         ),
         (
             "SEC: relatórios (Apple)",
@@ -393,6 +430,60 @@ def cvm_fii_columns():
     return lines
 
 
+CVM_FUND_COLUMNS = {
+    "registro_fundo_classe.zip": (
+        "FI/CAD/DADOS/registro_fundo_classe.zip",
+        {
+            "registro_fundo": ["ID_Registro_Fundo", "CNPJ_Fundo", "Denominacao_Social", "Data_Constituicao", "Gestor", "Administrador"],
+            "registro_classe": ["ID_Registro_Fundo", "CNPJ_Classe", "Denominacao_Social", "Patrimonio_Liquido", "Data_Patrimonio_Liquido", "Forma_Condominio", "Situacao"],
+        },
+    ),
+    "informe diário": (
+        "FI/DOC/INF_DIARIO/DADOS/inf_diario_fi_{month}.zip",
+        {"inf_diario_fi": ["CNPJ_FUNDO_CLASSE", "ID_SUBCLASSE", "DT_COMPTC", "VL_QUOTA", "VL_PATRIM_LIQ", "CAPTC_DIA", "RESG_DIA", "NR_COTST"]},
+    ),
+    "informe de Fiagro": (
+        "FIAGRO/DOC/INF_MENSAL/DADOS/inf_mensal_fiagro_{month}.zip",
+        {"inf_mensal_fiagro_2": ["CNPJ_Classe", "Codigo_ISIN", "Data_Referencia", "Numero_Cotistas", "Patrimonio_Liquido", "Valor_Patrimonial_Cotas", "Rentabilidade_Patrimonial_Mes", "Dividend_Yield_Mes"]},
+    ),
+}
+
+
+def cvm_fund_columns():
+    """The columns read from the register of funds, last month's daily report
+    and the Fiagro report of two months ago (about 10 MB)."""
+    import io
+    import zipfile
+
+    today = datetime.now().replace(day=1)
+    last = (today - timedelta(days=1)).strftime("%Y%m")
+    before = ((today - timedelta(days=1)).replace(day=1) - timedelta(days=1)).strftime("%Y%m")
+    lines = []
+    for label, (path, parts) in CVM_FUND_COLUMNS.items():
+        url = f"{CVM}/dados/{path.format(month=before if 'FIAGRO' in path else last)}"
+        try:
+            status, body = fetch(url)
+            if status != 200:
+                lines.append(f"FALHOU  CVM: {label}, HTTP {status}")
+                continue
+            changed = len(lines)
+            with zipfile.ZipFile(io.BytesIO(body)) as archive:
+                for part, columns in parts.items():
+                    names = [n for n in archive.namelist() if n.startswith(part)]
+                    if not names:
+                        lines.append(f"MUDOU   CVM: {label} sem o arquivo {part}")
+                        continue
+                    header = archive.open(names[0]).readline().decode("latin-1").strip().lstrip("\ufeff").split(";")
+                    missing = [c for c in columns if c not in header]
+                    if missing:
+                        lines.append(f"MUDOU   CVM: {names[0]} sem {', '.join(missing)}")
+            if len(lines) == changed:
+                lines.append(f"OK      CVM: colunas do {label}")
+        except Exception as error:
+            lines.append(f"FALHOU  CVM: {label}, {type(error).__name__}")
+    return lines
+
+
 def notify(text, urgent):
     if shutil.which("notify-send"):
         urgency = "critical" if urgent else "normal"
@@ -405,7 +496,7 @@ def main():
     results = [run_check(*check) for check in checks()]
     lines = [line for line, _ in results]
     problems = sum(1 for _, bad in results if bad)
-    extras = brapi_extras(state) + cvm_columns() + cvm_fii_columns()
+    extras = brapi_extras(state) + cvm_columns() + cvm_fii_columns() + cvm_fund_columns()
     lines += extras
     problems += sum(1 for line in extras if not line.startswith(("INFO", "OK")))
     header = f"Verificação de {datetime.now():%d/%m/%Y %H:%M}: "
