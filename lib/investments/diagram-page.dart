@@ -132,14 +132,13 @@ class _DiagramPageState extends State<DiagramPage> {
 
   /// Grades come straight from the state: a changed question takes one away.
   List<DiagramAsset> get assets {
-    final valued = [for (final a in _base) a.withData(value: _valueOf(a))];
-    final topFull = topOfTriangle(valued, _state.tiers, wealth: _wealth).full;
     return [
       for (final asset in _base)
         DiagramAsset(
           key: asset.key,
           label: asset.label,
           cls: asset.cls,
+          autoCls: asset.autoCls,
           ticker: asset.ticker,
           value: _valueOf(asset),
           quantity: _state.abroad[asset.key] ?? asset.quantity,
@@ -148,9 +147,6 @@ class _DiagramPageState extends State<DiagramPage> {
           isManual: asset.isManual,
           isEtf: asset.isEtf,
           status: _state.statusOf(asset.key),
-          blockedReason: topFull && _state.tiers[asset.key] == PortfolioTier.top
-              ? 'topo no limite de 10%'
-              : null,
         ),
     ];
   }
@@ -171,9 +167,11 @@ class _DiagramPageState extends State<DiagramPage> {
   /// A save here or in a Ficha that is also open.
   void _saved() {
     final fresh = DiagramState.load();
-    final watchedChanged = !mapEquals(fresh.watched, _state.watched);
+    final linesChanged =
+        !mapEquals(fresh.watched, _state.watched) ||
+        !mapEquals(fresh.classes, _state.classes);
     setState(() => _state = fresh);
-    if (watchedChanged) _load();
+    if (linesChanged) _load();
   }
 
   Future<void> _load() async {
@@ -355,20 +353,8 @@ class _DiagramPageState extends State<DiagramPage> {
     return close == null || dollar == null ? null : close * dollar;
   }
 
-  /// The total held abroad follows the purchases. A total from before them
-  /// becomes one purchase today, for the user to correct.
+  /// The total held abroad follows the purchases.
   Future<void> _syncAbroad() async {
-    for (final e in _state.abroad.entries.toList()) {
-      if (AssetLots.of(e.key).isEmpty) {
-        await AssetLots.save(e.key, [
-          AssetLot(
-            day: DateTime.now(),
-            quantity: e.value,
-            note: 'Total de antes das compras: ajuste a data',
-          ),
-        ]);
-      }
-    }
     final held = AssetLots.all;
     var changed = false;
     for (final key in _state.abroad.keys.toList()) {
@@ -524,7 +510,6 @@ class _DiagramPageState extends State<DiagramPage> {
             _loading(
               () => _AssetsTab(
                 assets: assets,
-                wealth: _wealth,
                 state: _state,
                 outside: _outside,
                 goals: _goals,
@@ -696,11 +681,14 @@ class _KeepAliveState extends State<_KeepAlive>
 /// What is held abroad: typed by hand, since no foreign broker is read. Valued
 /// by the quote in dollars times the dollar of the day.
 class _Pill extends StatelessWidget {
-  const _Pill(this.cls, {this.selected = true, this.onTap});
+  const _Pill(this.cls, {this.selected = true, this.onTap, this.short = false});
 
   final DiagramClass? cls;
   final bool selected;
   final VoidCallback? onTap;
+
+  /// The two letters of the class ([DiagramClass.short]).
+  final bool short;
 
   @override
   Widget build(BuildContext context) {
@@ -712,9 +700,9 @@ class _Pill extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+          padding: EdgeInsets.symmetric(horizontal: short ? 6 : 9, vertical: 3),
           child: Text(
-            cls?.label ?? 'Todos',
+            (short ? cls?.short : cls?.label) ?? 'Todos',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -930,11 +918,15 @@ class _Column {
   final bool right;
   final bool wideOnly;
 
+  /// Its width on a phone, when not [flex].
+  final int? narrowFlex;
+
   const _Column(
     this.title,
     this.flex, {
     this.right = false,
     this.wideOnly = false,
+    this.narrowFlex,
   });
 }
 
@@ -964,7 +956,7 @@ class _Table extends StatelessWidget {
             for (final (i, column) in columns.indexed)
               if (wide || !column.wideOnly)
                 Expanded(
-                  flex: column.flex,
+                  flex: wide ? column.flex : column.narrowFlex ?? column.flex,
                   child: Align(
                     alignment: column.right
                         ? Alignment.centerRight
@@ -1396,43 +1388,6 @@ class DiagramQuestionsPanel extends StatelessWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'No triângulo:',
-                style: _rowStyle.copyWith(fontWeight: FontWeight.w600),
-              ),
-              SegmentedButton<PortfolioTier>(
-                emptySelectionAllowed: true,
-                showSelectedIcon: false,
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity(horizontal: -3, vertical: -3),
-                  textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
-                ),
-                segments: [
-                  for (final tier in PortfolioTier.values)
-                    ButtonSegment(
-                      value: tier,
-                      label: Text(tier.label),
-                      tooltip: tier.description,
-                    ),
-                ],
-                selected: {?state.tiers[asset.key]},
-                onSelectionChanged: (value) {
-                  if (value.isEmpty) {
-                    state.tiers.remove(asset.key);
-                  } else {
-                    state.tiers[asset.key] = value.single;
-                  }
-                  onChanged();
-                },
-              ),
-            ],
-          ),
           const SizedBox(height: 4),
           for (final question in _questions) _question(context, question),
           Align(
@@ -1451,6 +1406,70 @@ class DiagramQuestionsPanel extends StatelessWidget {
 
 /// Aportando, pausado or desmontando, beside the name. Changing it asks why:
 /// only fundamentals, an emergency or living off the portfolio justify it.
+/// The class of an asset, in two letters where the column is narrow. Tapping
+/// it chooses another class, or gives it back to the app.
+class _ClassButton extends StatelessWidget {
+  const _ClassButton({
+    required this.asset,
+    required this.state,
+    required this.onChanged,
+  });
+
+  final DiagramAsset asset;
+  final DiagramState state;
+  final VoidCallback onChanged;
+
+  static const _auto = 'auto';
+
+  void _choose(String value) {
+    final cls = DiagramClass.values.where((c) => c.name == value).firstOrNull;
+    if (cls == null || cls == asset.autoCls) {
+      state.classes.remove(asset.key);
+    } else {
+      state.classes[asset.key] = cls;
+    }
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pill = _Pill(asset.cls, short: constraints.maxWidth < 100);
+        if (!asset.hasOwnClass) return pill;
+        final chosen = state.classes[asset.key];
+        PopupMenuItem<String> item(String value, String label, bool on) =>
+            PopupMenuItem(
+              value: value,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 26,
+                    child: on ? const Icon(Icons.check, size: 18) : null,
+                  ),
+                  Flexible(child: Text(label)),
+                ],
+              ),
+            );
+        return PopupMenuButton<String>(
+          tooltip: chosen == null
+              ? '${asset.cls.label} (automático)'
+              : '${asset.cls.label} (escolhido por você)',
+          padding: EdgeInsets.zero,
+          onSelected: _choose,
+          itemBuilder: (context) => [
+            item(_auto, 'Automático · ${asset.autoCls.label}', chosen == null),
+            const PopupMenuDivider(),
+            for (final cls in DiagramClass.values)
+              item(cls.name, cls.label, chosen == cls),
+          ],
+          child: pill,
+        );
+      },
+    );
+  }
+}
+
 class _StatusButton extends StatelessWidget {
   const _StatusButton({
     required this.asset,
@@ -1631,10 +1650,11 @@ Widget _rowIcon(String tooltip, IconData icon, VoidCallback onPressed) =>
       onPressed: onPressed,
     );
 
-/// The asset's logo and name in a row of a table. Fixed income has no logo.
+/// The asset's logo and name in a row of a table. A group of fixed income
+/// has no logo.
 Widget _assetCell(DiagramAsset asset) => Row(
   children: [
-    if (asset.ticker != null && asset.cls != DiagramClass.fixedIncome) ...[
+    if (asset.ticker != null) ...[
       InstitutionLogo(
         institution: StockCompany.badgeOf(asset.ticker!),
         size: 20,
@@ -1656,7 +1676,6 @@ String _nameOf(DiagramAsset asset) {
 class _AssetsTab extends StatefulWidget {
   const _AssetsTab({
     required this.assets,
-    required this.wealth,
     required this.state,
     required this.outside,
     required this.goals,
@@ -1667,7 +1686,6 @@ class _AssetsTab extends StatefulWidget {
   });
 
   final List<DiagramAsset> assets;
-  final double wealth;
   final DiagramState state;
   final double outside;
   final double goals;
@@ -1729,15 +1747,16 @@ class _AssetsTabState extends State<_AssetsTab> {
         child: Center(child: Text('Nenhum ativo aqui.')),
       );
     }
+    final removable = shown.any((a) => a.isManual);
     return _Table(
-      columns: const [
-        _Column('Tipo', 5, wideOnly: true),
-        _Column('Ativo', 5),
-        _Column('Valor atual', 4, right: true),
-        _Column('Falta', 4, right: true),
-        _Column('Nota', 3, right: true),
-        _Column('Qtd.', 3, right: true, wideOnly: true),
-        _Column('', 4, right: true),
+      columns: [
+        const _Column('Tipo', 5, narrowFlex: 3),
+        const _Column('Ativo', 5),
+        const _Column('Valor atual', 4, right: true),
+        const _Column('Falta', 4, right: true),
+        const _Column('Nota', 3, right: true),
+        const _Column('Qtd.', 3, right: true, wideOnly: true),
+        if (removable) const _Column('', 2, right: true),
       ],
       below: {
         for (final (i, asset) in shown.indexed)
@@ -1751,7 +1770,11 @@ class _AssetsTabState extends State<_AssetsTab> {
       rows: [
         for (final asset in shown)
           [
-            _Pill(asset.cls),
+            _ClassButton(
+              asset: asset,
+              state: widget.state,
+              onChanged: widget.onChanged,
+            ),
             Row(
               children: [
                 if (asset.cls != DiagramClass.fixedIncome)
@@ -1760,7 +1783,15 @@ class _AssetsTabState extends State<_AssetsTab> {
                     state: widget.state,
                     onChanged: widget.onChanged,
                   ),
-                Flexible(child: _assetCell(asset)),
+                Flexible(
+                  child: asset.ticker == null
+                      ? _assetCell(asset)
+                      : InkWell(
+                          onTap: () =>
+                              AssetSheetPage.open(context, asset.ticker!),
+                          child: _assetCell(asset),
+                        ),
+                ),
               ],
             ),
             asset.cls == DiagramClass.intlStock ||
@@ -1794,23 +1825,14 @@ class _AssetsTabState extends State<_AssetsTab> {
               ),
             ),
             _text(asset.quantity > 0 ? _units(asset.quantity) : '—'),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (asset.ticker != null)
-                  _rowIcon(
-                    'Abrir a Ficha',
-                    Icons.manage_search,
-                    () => AssetSheetPage.open(context, asset.ticker!),
-                  ),
-                if (asset.isManual)
-                  _rowIcon(
-                    'Remover',
-                    Icons.delete_outline,
-                    () => widget.onRemove(asset),
-                  ),
-              ],
-            ),
+            if (removable)
+              asset.isManual
+                  ? _rowIcon(
+                      'Remover',
+                      Icons.delete_outline,
+                      () => widget.onRemove(asset),
+                    )
+                  : const SizedBox.shrink(),
           ],
       ],
     );
@@ -1918,12 +1940,6 @@ class _AssetsTabState extends State<_AssetsTab> {
                       children: [
                         summary,
                         const SizedBox(height: 16),
-                        _TriangleCard(
-                          widget.assets,
-                          widget.state,
-                          widget.wealth,
-                        ),
-                        const SizedBox(height: 12),
                         ?_sectorsCard(context, widget.assets, widget.state),
                       ],
                     ),
@@ -1935,8 +1951,6 @@ class _AssetsTabState extends State<_AssetsTab> {
               const SizedBox(height: 12),
               main,
               const SizedBox(height: 16),
-              _TriangleCard(widget.assets, widget.state, widget.wealth),
-              const SizedBox(height: 12),
               ?_sectorsCard(context, widget.assets, widget.state),
             ],
           ],
@@ -2550,136 +2564,6 @@ class _TargetsTabState extends State<_TargetsTab> {
       ),
     );
   }
-}
-
-const _tierColors = {
-  PortfolioTier.base: Color(0xFFF2B33D),
-  PortfolioTier.middle: Color(0xFFC0CA33),
-  PortfolioTier.top: Color(0xFF7CB342),
-};
-
-/// The inverted triangle of the course: how the stocks and funds split
-/// between base, middle and top, and the top against its limit.
-class _TriangleCard extends StatelessWidget {
-  const _TriangleCard(this.assets, this.state, this.wealth);
-
-  final List<DiagramAsset> assets;
-  final DiagramState state;
-  final double wealth;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final byTier = <PortfolioTier, double>{};
-    for (final asset in assets) {
-      final tier = state.tiers[asset.key];
-      if (tier != null) byTier[tier] = (byTier[tier] ?? 0) + asset.value;
-    }
-    final total = byTier.values.fold<double>(0, (a, b) => a + b);
-    final top = topOfTriangle(assets, state.tiers, wealth: wealth);
-    String share(PortfolioTier tier) =>
-        total <= 0 ? '—' : _pct((byTier[tier] ?? 0) / total * 100);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text('Base, meio e topo', style: theme.textTheme.titleSmall),
-                const SizedBox(width: 6),
-                InfoTip(
-                  'Cerca de ${PortfolioTier.baseShare.round()}% fica na base, em '
-                  'empresas antigas e lucrativas. O topo fica limitado a '
-                  '${PortfolioTier.topLimit.round()}% do patrimônio.',
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Center(
-              child: SizedBox(
-                width: 220,
-                height: 130,
-                child: CustomPaint(
-                  painter: _TrianglePainter({
-                    for (final tier in PortfolioTier.values)
-                      tier: '${tier.label} ${share(tier)}',
-                  }, font: theme.textTheme.labelSmall!),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            if (total <= 0)
-              Text(
-                'Escolha base, meio ou topo nas perguntas de cada ação ou fundo.',
-                style: theme.textTheme.bodySmall,
-              )
-            else ...[
-              const SizedBox(height: 4),
-              Text(
-                'Topo: ${_money(top.top)}, ${_pct(top.share)} do patrimônio '
-                '(limite ${PortfolioTier.topLimit.round()}%).'
-                '${top.full ? ' Chegou ao limite: o topo não recebe mais aportes.' : ''}',
-                style: _rowStyle.copyWith(
-                  color: top.full ? theme.colorScheme.error : null,
-                  fontWeight: top.full ? FontWeight.w700 : null,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TrianglePainter extends CustomPainter {
-  final Map<PortfolioTier, String> labels;
-
-  /// The theme's text, so the labels use the app's font.
-  final TextStyle font;
-
-  _TrianglePainter(this.labels, {required this.font});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final band = size.height / 3;
-    for (final (i, tier) in PortfolioTier.values.indexed) {
-      double halfWidth(double y) => size.width / 2 * (1 - y / size.height);
-      final y0 = band * i;
-      final y1 = band * (i + 1) - 2;
-      final path = Path()
-        ..moveTo(size.width / 2 - halfWidth(y0), y0)
-        ..lineTo(size.width / 2 + halfWidth(y0), y0)
-        ..lineTo(size.width / 2 + halfWidth(y1), y1)
-        ..lineTo(size.width / 2 - halfWidth(y1), y1)
-        ..close();
-      canvas.drawPath(path, Paint()..color = _tierColors[tier]!);
-      final text = TextPainter(
-        text: TextSpan(
-          text: labels[tier],
-          style: font.copyWith(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: size.width);
-      text.paint(
-        canvas,
-        Offset(
-          size.width / 2 - text.width / 2,
-          (y0 + y1) / 2 - text.height / 2,
-        ),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TrianglePainter old) => !mapEquals(old.labels, labels);
 }
 
 /// How the stocks held split by sector (brapi.dev). Null with no sector known.

@@ -177,12 +177,14 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
     _ => null,
   };
 
-  /// What was added by hand keeps its class; otherwise it follows the kind.
+  /// The class chosen in Meus ativos, or the one of what was added by hand;
+  /// otherwise it follows the kind.
   DiagramAsset get _gradeAsset => DiagramAsset(
     key: widget.ticker,
     label: widget.ticker,
     ticker: widget.ticker,
     cls:
+        _diagram.classes[widget.ticker] ??
         _diagram.watched[widget.ticker] ??
         switch (_kind) {
           AssetKind.fii => DiagramClass.fii,
@@ -195,6 +197,8 @@ class _AssetSheetPageState extends State<AssetSheetPage> {
           AssetKind.etf =>
             _b3?.type == B3Type.etfAbroad || _b3?.type == B3Type.bdrEtf
                 ? DiagramClass.intlStock
+                : isFixedIncomeFund(widget.ticker, '')
+                ? DiagramClass.fixedIncome
                 : DiagramClass.nationalStock,
           AssetKind.stock => DiagramClass.nationalStock,
         },

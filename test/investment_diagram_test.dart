@@ -1,7 +1,9 @@
 // The portfolio method: grades, and how a contribution is split between classes
 // and assets.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:aupp/dinzo/dinzo-taxes.dart';
 import 'package:aupp/investments/diagram.dart';
+import 'package:aupp/investments/investments-analytics.dart';
 
 void main() {
   DiagramAsset asset(
@@ -362,19 +364,6 @@ void main() {
       );
     });
 
-    test('an old saved list gets the new criteria, keeping its answers', () {
-      final read = DiagramState.decode(
-        '{"stockQuestions":["minha"],"fiiQuestions":["x"],'
-        '"answers":{"PETR4":{"minha":true}}}',
-      );
-      expect(read.stockQuestions.first, 'minha');
-      expect(read.stockQuestions, hasLength(5));
-      expect(read.fiiQuestions, hasLength(4));
-      expect(read.answers['PETR4'], {'minha': true});
-      // Once saved, it does not grow again.
-      expect(DiagramState.decode(read.encode()).stockQuestions, hasLength(5));
-    });
-
     test('what does not apply counts nothing', () {
       expect(
         questionnaireGrade(['a', 'b', 'c'], {'a': true, 'b': true}, skipped: {'c'}),
@@ -475,21 +464,7 @@ void main() {
     });
   });
 
-  group('triangle, profiles and gold', () {
-    test('the top of the triangle stops at 10% of wealth', () {
-      final assets = [
-        DiagramAsset(key: 'WEGE3', label: 'WEGE3', cls: DiagramClass.nationalStock, value: 900),
-        DiagramAsset(key: 'OIBR3', label: 'OIBR3', cls: DiagramClass.nationalStock, value: 100),
-      ];
-      final tiers = {'WEGE3': PortfolioTier.base, 'OIBR3': PortfolioTier.top};
-      expect(topOfTriangle(assets, tiers, wealth: 2000).full, isFalse);
-      final top = topOfTriangle(assets, tiers, wealth: 1000);
-      expect(top.share, 10);
-      expect(top.full, isTrue);
-      final blocked = assets.last.withData(grade: 5, price: 1, blockedReason: 'topo');
-      expect(blocked.ineligibleReason, 'topo');
-    });
-
+  group('profiles and gold', () {
     test('each PIAR range is a valid band', () {
       for (final profile in PiarProfile.values) {
         for (final (low, high) in profile.ranges.values) {
@@ -520,16 +495,16 @@ void main() {
       expect(bought['GOLD11']! % 1, 0);
     });
 
-    test('tiers, sectors, profile and monthly sum survive a round trip', () {
+    test('classes, sectors, profile and monthly sum survive a round trip', () {
       final read = DiagramState.decode(
         DiagramState(
-          tiers: {'WEGE3': PortfolioTier.base},
+          classes: {'AUPO11': DiagramClass.nationalStock},
           sectors: {'WEGE3': 'Bens Industriais'},
           monthlyContribution: 2000,
           piarProfile: PiarProfile.balanced,
         ).encode(),
       );
-      expect(read.tiers['WEGE3'], PortfolioTier.base);
+      expect(read.classes['AUPO11'], DiagramClass.nationalStock);
       expect(read.sectors['WEGE3'], 'Bens Industriais');
       expect(read.monthlyContribution, 2000);
       expect(read.piarProfile, PiarProfile.balanced);
@@ -593,6 +568,95 @@ void main() {
       expect(diagramClassOf('Fundo'), isNull);
       expect(diagramClassOf('Previdência'), isNull);
       expect(diagramClassOf('COE'), isNull);
+    });
+
+    Position held(String code, String name, String type, {double balance = 1000}) =>
+        InvestmentsOverview.from([
+          DinzoInvestment.fromJson({
+            'id': code,
+            'asset_key': code,
+            'name': name,
+            'code': code,
+            'type': type,
+            'balance': balance,
+            'quantity': 10,
+            'value': balance / 10,
+          }),
+        ], DateTime(2026, 11, 1)).positions.single;
+
+    test('a fund of bonds on the B3 is fixed income, on its own line', () {
+      expect(isFixedIncomeFund('AUPO11', 'BTG PACTUAL TEVA AUVP ITBR LIQUIDEZ'), isTrue);
+      expect(isFixedIncomeFund('IMAB11', ''), isTrue);
+      expect(isFixedIncomeFund('5PRE11', ''), isTrue);
+      expect(isFixedIncomeFund('LFTS11', ''), isTrue);
+      expect(isFixedIncomeFund('AUVP11', 'BTG PACTUAL TEVA AUVP ACOES FUNDAMENTOS'), isFalse);
+      expect(isFixedIncomeFund('BOVA11', ''), isFalse);
+      expect(isFixedIncomeFund('DIVO11', ''), isFalse);
+      expect(isFixedIncomeFund('PETR4', 'PETROBRAS PN'), isFalse);
+
+      final result = diagramAssetsFrom(
+        positions: [
+          held('AUPO11', 'AUPO11', 'ETF'),
+          held('AUVP11', 'AUVP11', 'ETF'),
+        ],
+        coins: const [],
+        state: DiagramState(),
+      );
+      final aupo = result.assets.firstWhere((a) => a.key == 'AUPO11');
+      expect(aupo.cls, DiagramClass.fixedIncome);
+      expect(aupo.ticker, 'AUPO11');
+      expect(aupo.step, 1);
+      expect(result.fixedIncomeHeld, 1000);
+      expect(
+        result.assets.firstWhere((a) => a.key == 'AUVP11').cls,
+        DiagramClass.nationalStock,
+      );
+    });
+
+    test('a bond fund is bought in whole shares and needs its price', () {
+      final aupo = DiagramAsset(
+        key: 'AUPO11',
+        label: 'AUPO11',
+        cls: DiagramClass.fixedIncome,
+        ticker: 'AUPO11',
+        isEtf: true,
+        grade: 5,
+      );
+      expect(aupo.ineligibleReason, 'sem cotação');
+      final plan = planContribution(
+        assets: [
+          aupo.withData(price: 110),
+          const DiagramAsset(key: 'rf:cdi', label: 'CDI', cls: DiagramClass.fixedIncome, grade: 5),
+        ],
+        targetPercent: {DiagramClass.fixedIncome: 100},
+        amount: 1000,
+      );
+      final bought = {for (final s in plan.suggestions) s.asset.key: s};
+      expect(bought['AUPO11']!.units! % 1, 0);
+      // The rest of the class is any amount in reais.
+      expect(bought['rf:cdi']!.units, isNull);
+      expect(bought['rf:cdi']!.amount, greaterThan(0));
+    });
+
+    test('the class chosen by the user wins, and the app keeps its own', () {
+      final state = DiagramState(
+        classes: {'AUPO11': DiagramClass.nationalStock},
+        watched: {'VOO': DiagramClass.intlStock},
+      );
+      state.classes['VOO'] = DiagramClass.reit;
+      final assets = diagramAssetsFrom(
+        positions: [held('AUPO11', 'AUPO11', 'ETF')],
+        coins: const [],
+        state: state,
+      ).assets;
+      final aupo = assets.firstWhere((a) => a.key == 'AUPO11');
+      expect(aupo.cls, DiagramClass.nationalStock);
+      expect(aupo.autoCls, DiagramClass.fixedIncome);
+      final voo = assets.firstWhere((a) => a.key == 'VOO');
+      expect(voo.cls, DiagramClass.reit);
+      expect(voo.autoCls, DiagramClass.intlStock);
+      state.forget('VOO');
+      expect(state.classes.keys, ['AUPO11']);
     });
   });
 }

@@ -67,7 +67,7 @@ class HybridSync {
   /// would read or write wrong (a breaking change). A device on an older app
   /// that finds a higher level stays read-only until updated ([readOnly]); a
   /// newer database schema does the same by itself.
-  static const dataCompat = 10;
+  static const dataCompat = 11;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

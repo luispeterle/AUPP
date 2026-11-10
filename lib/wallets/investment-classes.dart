@@ -66,7 +66,7 @@ class InvestmentTotals {
         if (held.value > 0 && state.watched[held.key] != null)
           AssetQuote.fetch(held.key, withHistory: false).then((quote) {
             if (quote == null) return;
-            final cls = state.watched[held.key]!;
+            final cls = state.classes[held.key] ?? state.watched[held.key]!;
             dollars[cls] = (dollars[cls] ?? 0) + held.value * quote.price;
           }),
     ]);
@@ -100,10 +100,7 @@ class InvestmentClasses extends StatelessWidget {
       FontAwesomeIcons.earthAmericas.data,
       const Color(0xFF3949AB),
     ),
-    DiagramClass.fii: (
-      FontAwesomeIcons.building.data,
-      const Color(0xFF8E24AA),
-    ),
+    DiagramClass.fii: (FontAwesomeIcons.building.data, const Color(0xFF8E24AA)),
     DiagramClass.reit: (FontAwesomeIcons.city.data, const Color(0xFFD81B60)),
     DiagramClass.crypto: (FontAwesomeIcons.coins.data, const Color(0xFFF9A825)),
   };

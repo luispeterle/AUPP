@@ -11,24 +11,24 @@ import 'stock-catalog.dart';
 /// The classes of the portfolio. What goes outside them (funds, pension plans,
 /// COE) is left out of the method: the user does not choose what those hold.
 enum DiagramClass {
-  intlStock('Ações Internacionais'),
-  nationalStock('Ações Nacionais'),
-  fii('Fundos Imobiliários'),
-  reit('REITs'),
-  crypto('Reserva de valor'),
-  fixedIncome('Renda Fixa');
+  intlStock('Ações Internacionais', 'AI'),
+  nationalStock('Ações Nacionais', 'AN'),
+  fii('Fundos Imobiliários', 'FI'),
+  reit('REITs', 'RE'),
+  crypto('Reserva de valor', 'OU'),
+  fixedIncome('Renda Fixa', 'RF');
 
   final String label;
-  const DiagramClass(this.label);
+
+  /// Two letters, for a phone.
+  final String short;
+  const DiagramClass(this.label, this.short);
 
   /// Graded by a questionnaire; the others by a number typed by the user.
   bool get hasQuestionnaire => this != crypto && this != fixedIncome;
 
   /// The questionnaire of a class: FIIs have their own.
   bool get usesFiiQuestions => this == fii || this == reit;
-
-  /// A purchase needs the price to know how many units fit.
-  bool get needsPrice => this == nationalStock || this == fii || this == crypto;
 
   /// Smallest amount bought: whole shares on the B3, 4 decimals of a coin.
   /// Null is any amount in reais (fixed income; foreign assets in dollars).
@@ -90,6 +90,9 @@ class DiagramAsset {
   final String label;
   final DiagramClass cls;
 
+  /// The class the app finds by itself; [cls] differs when the user chose.
+  final DiagramClass autoCls;
+
   /// B3 ticker or coin code, when the line has a Ficha.
   final String? ticker;
   final double value;
@@ -106,12 +109,9 @@ class DiagramAsset {
   final bool isManual;
 
   /// An index fund: same class as stocks, its own questions. A gold ETF is a
-  /// reserve of value, bought in whole shares.
+  /// reserve of value and a bond ETF is fixed income, both bought in whole
+  /// shares.
   final bool isEtf;
-
-  /// Why it cannot receive money now, beyond its grade (the top of the
-  /// triangle at its limit).
-  final String? blockedReason;
 
   final HoldStatus status;
 
@@ -119,6 +119,7 @@ class DiagramAsset {
     required this.key,
     required this.label,
     required this.cls,
+    DiagramClass? autoCls,
     this.ticker,
     this.value = 0,
     this.quantity = 0,
@@ -127,12 +128,21 @@ class DiagramAsset {
     this.isManual = false,
     this.isEtf = false,
     this.status = HoldStatus.buying,
-    this.blockedReason,
-  });
+  }) : autoCls = autoCls ?? cls;
 
   /// Smallest amount bought: whole shares, 4 decimals of a coin, any amount
   /// of fixed income.
-  double? get step => cls == DiagramClass.crypto && isEtf ? 1 : cls.step;
+  double? get step =>
+      isEtf && (cls == DiagramClass.crypto || cls == DiagramClass.fixedIncome)
+      ? 1
+      : cls.step;
+
+  /// A purchase needs the price to know how many units fit.
+  bool get needsPrice => step != null;
+
+  /// One of the positions or of what the user added, not a group of fixed
+  /// income: its class can be chosen.
+  bool get hasOwnClass => ticker != null;
 
   QuestionSet get questionSet => cls.usesFiiQuestions
       ? QuestionSet.fii
@@ -145,11 +155,11 @@ class DiagramAsset {
     double? price,
     num? grade,
     HoldStatus? status,
-    String? blockedReason,
   }) => DiagramAsset(
     key: key,
     label: label,
     cls: cls,
+    autoCls: autoCls,
     ticker: ticker,
     value: value ?? this.value,
     quantity: quantity,
@@ -158,18 +168,16 @@ class DiagramAsset {
     isManual: isManual,
     isEtf: isEtf,
     status: status ?? this.status,
-    blockedReason: blockedReason ?? this.blockedReason,
   );
 
   /// Why it gets no money, or null when it can.
   String? get ineligibleReason {
     if (status == HoldStatus.paused) return 'aportes pausados';
     if (status == HoldStatus.unwinding) return 'desmontando';
-    if (blockedReason != null) return blockedReason;
     final g = grade;
     if (g == null) return 'sem nota';
     if (g <= 0) return 'nota $g';
-    if (cls.needsPrice && (price == null || price! <= 0)) return 'sem cotação';
+    if (needsPrice && (price == null || price! <= 0)) return 'sem cotação';
     return null;
   }
 
@@ -362,6 +370,20 @@ bool isGoldFund(Position position) {
   return text.contains('GOLD') || text.contains('OURO');
 }
 
+/// A fund on the B3 that holds bonds (AUPO11, IMAB11, LFTS11, an
+/// infrastructure debt fund): fixed income, though bought like a share.
+bool isFixedIncomeFund(String? ticker, String name) {
+  final listed = ticker == null ? null : StockCompany.of(ticker)?.name;
+  return _fixedIncomeFund.hasMatch('$name ${listed ?? ''}');
+}
+
+final _fixedIncomeFund = RegExp(
+  r'tesouro|renda fixa|\brf\b|ima-?b|irf-?m|selic|\bipca\b|\bpr[eé](?=[\s-]|$)|'
+  r'prefixad|\blft\b|deb[eê]ntures|t-bill|bonds?\b|brazil treasury|liquidez|'
+  r'\bc?di\b',
+  caseSensitive: false,
+);
+
 /// A coin held in the app's wallets (the Dinzo does not see those).
 class DiagramCoin {
   final String code;
@@ -391,6 +413,7 @@ diagramAssetsFrom({
             key: line.key,
             label: line.label,
             cls: line.cls,
+            autoCls: line.autoCls,
             ticker: line.ticker,
             value: current.value + line.value,
             quantity: current.quantity + line.quantity,
@@ -418,18 +441,28 @@ diagramAssetsFrom({
       continue;
     }
     final ticker = StockCompany.tickerOf(position.inv);
-    final gold = cls == DiagramClass.nationalStock && isGoldFund(position);
+    final share = cls == DiagramClass.nationalStock;
+    final gold = share && isGoldFund(position);
+    final bonds =
+        share && !gold && isFixedIncomeFund(ticker, position.inv.name);
+    final auto = gold
+        ? DiagramClass.crypto
+        : bonds
+        ? DiagramClass.fixedIncome
+        : cls;
+    final key = ticker ?? position.inv.assetKey;
     final quantity = (position.inv.raw['quantity'] as num?)?.toDouble() ?? 0;
     add(
       DiagramAsset(
-        key: ticker ?? position.inv.assetKey,
+        key: key,
         label: ticker ?? position.inv.name,
-        cls: gold ? DiagramClass.crypto : cls,
+        cls: ticker == null ? auto : state.classes[key] ?? auto,
+        autoCls: auto,
         ticker: ticker,
         value: position.balance,
         quantity: quantity,
         price: (position.inv.raw['value'] as num?)?.toDouble(),
-        isEtf: gold || position.product == 'ETF',
+        isEtf: gold || bonds || position.product == 'ETF',
       ),
     );
   }
@@ -455,7 +488,8 @@ diagramAssetsFrom({
       () => DiagramAsset(
         key: entry.key,
         label: entry.key,
-        cls: entry.value,
+        cls: state.classes[entry.key] ?? entry.value,
+        autoCls: entry.value,
         ticker: entry.key,
         isManual: true,
         isEtf: state.watchedEtfs.contains(entry.key),
@@ -552,26 +586,7 @@ Map<CerradoRoot, bool> cerradoRoots({
     CerradoRoot.digital: holds((a) => a.cls == DiagramClass.crypto && !a.isEtf),
     CerradoRoot.physical: holds((a) => a.cls == DiagramClass.crypto && a.isEtf),
   };
-  return {
-    for (final root in CerradoRoot.values)
-      root: seen[root] ?? false,
-  };
-}
-
-/// The course's inverted triangle for stocks: a wide base of perennial,
-/// profitable companies, strategic ones in the middle, speculation on top.
-enum PortfolioTier {
-  base('Base', 'Setores perenes, empresas antigas e lucrativas'),
-  middle('Meio', 'Setores estratégicos, empresas em crescimento e com lucro'),
-  top('Topo', 'Especulação: dinheiro que se aceita perder');
-
-  final String label;
-  final String description;
-  const PortfolioTier(this.label, this.description);
-
-  /// The base is about 60% of stocks; the top never more than 10% of wealth.
-  static const baseShare = 60.0;
-  static const topLimit = 10.0;
+  return {for (final root in CerradoRoot.values) root: seen[root] ?? false};
 }
 
 /// The profiles of the course's risk questionnaire (PIAR) and the range each
@@ -740,19 +755,6 @@ enum PiarGroup {
   const PiarGroup(this.label, this.classes);
 }
 
-/// How far the top of the triangle may still grow, and whether it is full.
-({double top, double share, bool full}) topOfTriangle(
-  List<DiagramAsset> assets,
-  Map<String, PortfolioTier> tiers, {
-  required double wealth,
-}) {
-  final top = assets
-      .where((a) => tiers[a.key] == PortfolioTier.top)
-      .fold<double>(0, (sum, a) => sum + a.value);
-  final share = wealth <= 0 ? 0.0 : top / wealth * 100;
-  return (top: top, share: share, full: share >= PortfolioTier.topLimit);
-}
-
 /// Targets, grades and questions. Goes in the backup and to the other devices.
 class DiagramState {
   static const defaultStockQuestions = [
@@ -767,12 +769,6 @@ class DiagramState {
     'Tem boa governança, sem histórico de corrupção?',
     'É independente do governo e de um único cliente?',
     'A dívida líquida/EBITDA ficou abaixo de 2 nos últimos 5 anos?',
-    ..._addedStockQuestions,
-  ];
-
-  /// The criteria of the course's tool that the first version lacked. Added to a
-  /// saved list once ([_questionsVersion]), so no answer is lost.
-  static const _addedStockQuestions = [
     'A dívida líquida é menor que o lucro dos últimos 12 meses?',
     'Teve lucro operacional (EBIT) no último ano?',
     'O P/L está abaixo de 30?',
@@ -786,10 +782,6 @@ class DiagramState {
     'Paga dividendos consistentes há mais de 4 anos?',
     'Não depende de um único inquilino ou imóvel?',
     'O rendimento está na média ou acima da média do seu tipo?',
-    ..._addedFiiQuestions,
-  ];
-
-  static const _addedFiiQuestions = [
     'A vacância é baixa?',
     'Os contratos de aluguel são longos?',
     'A taxa de administração é baixa?',
@@ -803,8 +795,6 @@ class DiagramState {
     'Acompanha bem o índice, com pouca diferença?',
     'Não repete o que já tenho na carteira?',
   ];
-
-  static const _questionsVersion = 2;
 
   /// Targets of whoever has not set any: those of the balanced profile.
   static final defaultTargets = PiarProfile.balanced.suggestedTargets;
@@ -910,8 +900,8 @@ class DiagramState {
   /// The emergency reserve to have before investing.
   double emergencyTarget;
 
-  /// Where each stock or fund sits in the triangle.
-  final Map<String, PortfolioTier> tiers;
+  /// The class the user chose for an asset, over the one the app finds.
+  final Map<String, DiagramClass> classes;
 
   /// Sector of each ticker, from brapi.dev, kept to avoid asking again.
   final Map<String, String> sectors;
@@ -939,7 +929,7 @@ class DiagramState {
     List<String>? etfQuestions,
     this.lastContribution = 0,
     this.emergencyTarget = 20000,
-    Map<String, PortfolioTier>? tiers,
+    Map<String, DiagramClass>? classes,
     Map<String, String>? sectors,
     Map<String, double>? abroad,
     this.monthlyContribution = 0,
@@ -948,7 +938,7 @@ class DiagramState {
            piarProfile ??
            (targets == null || targets.isEmpty ? PiarProfile.balanced : null),
        abroad = abroad ?? {},
-       tiers = tiers ?? {},
+       classes = classes ?? {},
        sectors = sectors ?? {},
        targets = targets == null || targets.isEmpty
            ? Map.of(defaultTargets)
@@ -1031,7 +1021,7 @@ class DiagramState {
     gradedAt.remove(key);
     status.remove(key);
     statusNotes.remove(key);
-    tiers.remove(key);
+    classes.remove(key);
     abroad.remove(key);
   }
 
@@ -1040,22 +1030,10 @@ class DiagramState {
   static DiagramClass? _classNamed(Object? name) =>
       DiagramClass.values.where((c) => c.name == name).firstOrNull;
 
-  static List<String>? _withAdded(List<String>? saved, List<String> added) =>
-      saved == null
-      ? null
-      : [...saved, ...added.where((q) => !saved.contains(q))];
-
   factory DiagramState.decode(String? raw) {
     if (raw == null || raw.isEmpty) return DiagramState();
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      final old = ((json['questionsVersion'] as num?) ?? 1) < _questionsVersion;
-      var stock = (json['stockQuestions'] as List?)?.cast<String>();
-      var fii = (json['fiiQuestions'] as List?)?.cast<String>();
-      if (old) {
-        stock = _withAdded(stock, _addedStockQuestions);
-        fii = _withAdded(fii, _addedFiiQuestions);
-      }
       return DiagramState(
         targets: {
           for (final e in (json['targets'] as Map? ?? const {}).entries)
@@ -1094,15 +1072,15 @@ class DiagramState {
         statusNotes: Map<String, String>.from(
           json['statusNotes'] as Map? ?? const {},
         ),
-        stockQuestions: stock,
-        fiiQuestions: fii,
+        stockQuestions: (json['stockQuestions'] as List?)?.cast<String>(),
+        fiiQuestions: (json['fiiQuestions'] as List?)?.cast<String>(),
         etfQuestions: (json['etfQuestions'] as List?)?.cast<String>(),
         lastContribution: (json['lastContribution'] as num?)?.toDouble() ?? 0,
         emergencyTarget: (json['emergencyTarget'] as num?)?.toDouble() ?? 20000,
-        tiers: {
-          for (final e in (json['tiers'] as Map? ?? const {}).entries)
-            if (PortfolioTier.values.any((t) => t.name == e.value))
-              e.key as String: PortfolioTier.values.byName(e.value as String),
+        classes: {
+          for (final e in (json['classes'] as Map? ?? const {}).entries)
+            if (_classNamed(e.value) != null)
+              e.key as String: _classNamed(e.value)!,
         },
         sectors: Map<String, String>.from(json['sectors'] as Map? ?? const {}),
         abroad: {
@@ -1121,7 +1099,6 @@ class DiagramState {
   }
 
   String encode() => jsonEncode({
-    'questionsVersion': _questionsVersion,
     'targets': {for (final e in targets.entries) e.key.name: e.value},
     'watched': {for (final e in watched.entries) e.key: e.value.name},
     'watchedEtfs': watchedEtfs.toList(),
@@ -1141,7 +1118,7 @@ class DiagramState {
     'etfQuestions': etfQuestions,
     'lastContribution': lastContribution,
     'emergencyTarget': emergencyTarget,
-    'tiers': {for (final e in tiers.entries) e.key: e.value.name},
+    'classes': {for (final e in classes.entries) e.key: e.value.name},
     'sectors': sectors,
     'abroad': abroad,
     'monthlyContribution': monthlyContribution,
