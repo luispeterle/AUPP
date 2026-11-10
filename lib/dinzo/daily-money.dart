@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:aupp/components/known-tags.dart';
 import 'package:aupp/investments/investments-analytics.dart';
@@ -53,6 +54,10 @@ class DailyBanks {
     }
   }
 
+  /// Bumped on every choice: the pages that split money from investments
+  /// stay open and must split again.
+  static final revision = ValueNotifier<int>(0);
+
   static bool isDaily(String bank) => _choices[bank] ?? !brokers.contains(bank);
 
   static Future<void> choose(String bank, bool daily) async {
@@ -60,6 +65,7 @@ class DailyBanks {
       PreferencesKeys.dailyBanks,
       jsonEncode({..._choices, bank: daily}),
     );
+    revision.value++;
   }
 
   static Map<String, Map<String, bool>> get _productChoices {
@@ -107,11 +113,13 @@ class DailyBanks {
     await _saveProducts(_productChoices..remove(bank));
   }
 
-  static Future<void> _saveProducts(Map<String, Map<String, bool>> all) =>
-      ServiceConfig.sharedPreferences!.setString(
-        PreferencesKeys.dailyProducts,
-        jsonEncode(all),
-      );
+  static Future<void> _saveProducts(Map<String, Map<String, bool>> all) async {
+    await ServiceConfig.sharedPreferences!.setString(
+      PreferencesKeys.dailyProducts,
+      jsonEncode(all),
+    );
+    revision.value++;
+  }
 
   /// An account without a bank behind it was added by hand: it is everyday.
   static bool holdsAccount(DinzoAccount account) {

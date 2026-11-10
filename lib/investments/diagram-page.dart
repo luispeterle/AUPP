@@ -155,12 +155,14 @@ class _DiagramPageState extends State<DiagramPage> {
   void initState() {
     super.initState();
     DiagramState.revision.addListener(_saved);
+    DailyBanks.revision.addListener(_load);
     _load();
   }
 
   @override
   void dispose() {
     DiagramState.revision.removeListener(_saved);
+    DailyBanks.revision.removeListener(_load);
     super.dispose();
   }
 

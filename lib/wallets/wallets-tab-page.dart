@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:aupp/dinzo/daily-money.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/models/wallet.dart';
@@ -44,7 +45,14 @@ class WalletsTabPageState extends State<WalletsTabPage> {
   @override
   void initState() {
     super.initState();
+    DailyBanks.revision.addListener(_loadInvestments);
     _loadWallets().then((_) => _initializeSortPreference());
+  }
+
+  @override
+  void dispose() {
+    DailyBanks.revision.removeListener(_loadInvestments);
+    super.dispose();
   }
 
   Future<void> _initializeSortPreference() async {

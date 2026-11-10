@@ -247,6 +247,14 @@ void main() {
       expect(DailyMoney.parkedIn([cdb, stock, fund, atRico]), 300);
     });
 
+    test('every choice tells the open pages', () async {
+      final before = DailyBanks.revision.value;
+      await DailyBanks.choose('Nubank', false);
+      await DailyBanks.chooseProduct('Nubank', 'Ações', true);
+      await DailyBanks.followBank('Nubank');
+      expect(DailyBanks.revision.value, before + 3);
+    });
+
     test('the user decides, against what each bank usually is', () async {
       expect(DailyBanks.isDaily('Nubank'), isTrue);
       expect(DailyBanks.isDaily('BTG'), isFalse);
