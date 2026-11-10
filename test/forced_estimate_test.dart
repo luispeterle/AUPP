@@ -118,7 +118,13 @@ void main() {
       );
       await pumpEditRecordPage(tester);
 
-      expect(find.textContaining('vira estimativa'), findsOneWidget);
+      // The explanation is behind the "i" next to "Estimativa".
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Tooltip && (w.message ?? '').contains('vira estimativa'),
+        ),
+        findsOneWidget,
+      );
       await tester.enterText(amountField(), '25');
       await tester.pump();
       await tapSave(tester);

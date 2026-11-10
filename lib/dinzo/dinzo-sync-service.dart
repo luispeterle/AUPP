@@ -558,10 +558,16 @@ class DinzoSyncService {
           record.tags
             ..removeAll(previousTags)
             ..addAll(d.tags);
+          // A partial refund keeps its expense's category (RefundLink).
+          final partialRefund =
+              record.refundLink != null && !record.isRefundPair &&
+              (record.value ?? 0) > 0;
           record
             ..value = d.value
             ..title = d.title
-            ..category = await categoryFor(d.categoryName, item.categoryType!)
+            ..category = partialRefund
+                ? record.category
+                : await categoryFor(d.categoryName, item.categoryType!)
             ..walletId = d.walletId
             ..dinzoId = item.transaction!.id
             ..dinzoSnapshot = DinzoLink(item.source!, d).toJsonString();

@@ -254,7 +254,7 @@ class DaysSummaryBoxState extends State<DaysSummaryBox> {
         brightness);
     final expenseTotal = purchaseParts(widget.records).isEmpty
         ? null
-        : 'total ${formatMoney(recordsTotal(_expenseRecords, isAbsValue: true))}';
+        : 'total ${formatMoney(recordsTotal(_expenseRecords).abs())}';
     return Card(
         elevation: 1,
         margin: EdgeInsets.zero,

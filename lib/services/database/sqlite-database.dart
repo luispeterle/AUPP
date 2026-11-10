@@ -1,3 +1,4 @@
+import 'package:aupp/records/refund-link.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -473,7 +474,13 @@ class SqliteDatabase implements DatabaseInterface {
   static const _insertColumns =
       'title, value, datetime, timezone, category_name, category_type, '
       'description, recurrence_id, wallet_id, transfer_wallet_id, '
-      'transfer_value, dinzo_id, dinzo_snapshot, estimate_link';
+      'transfer_value, dinzo_id, dinzo_snapshot, estimate_link, refund_link';
+
+  /// One "?" per column of [_insertColumns].
+  static final _insertPlaceholders = List.filled(
+    _insertColumns.split(',').length,
+    '?',
+  ).join(', ');
 
   List<Object?> _insertValues(Record record) => [
     record.title,
@@ -490,6 +497,7 @@ class SqliteDatabase implements DatabaseInterface {
     record.dinzoId,
     record.dinzoSnapshot,
     record.estimateLink,
+    record.refundLink,
   ];
 
   Future<int> _maxRecordId(Database db) async =>
@@ -576,7 +584,7 @@ class SqliteDatabase implements DatabaseInterface {
         batch.rawInsert(
           """
       INSERT INTO records ($_insertColumns)
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      SELECT $_insertPlaceholders
       WHERE NOT EXISTS (
         SELECT 1 FROM records
         WHERE id <= ?
@@ -637,7 +645,7 @@ class SqliteDatabase implements DatabaseInterface {
         record.id = null;
         batch.rawInsert(
           'INSERT INTO records ($_insertColumns) '
-          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'VALUES ($_insertPlaceholders)',
           _insertValues(record),
         );
       }
@@ -1477,10 +1485,27 @@ class SqliteDatabase implements DatabaseInterface {
     }
   }
 
+  /// Fork: deleting a refund takes it off its expense, and deleting an
+  /// expense lets its refunds go ([RefundLink]).
+  Future<void> _releaseRefundPartnersOf(Database db, List<Object?> ids) async {
+    if (ids.isEmpty) return;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT id FROM records WHERE id IN ($placeholders) '
+      'AND refund_link IS NOT NULL',
+      ids,
+    );
+    for (final row in rows) {
+      final record = await getRecordById(row['id'] as int);
+      if (record != null) await RefundLink.forget(record);
+    }
+  }
+
   @override
   Future<void> deleteRecordById(int? id) async {
     final db = (await database)!;
     final logged = await ChangeLog.before(db, 'records', 'id = ?', [id]);
+    await _releaseRefundPartnersOf(db, [id]);
     await _deleteSplitPartsOf(db, [id]);
     await db.delete("records", where: "id = ?", whereArgs: [id]);
     await logged?.commit(db);
@@ -1500,6 +1525,7 @@ class SqliteDatabase implements DatabaseInterface {
       'id IN ($placeholders)',
       ids,
     );
+    await _releaseRefundPartnersOf(db, ids);
     await _deleteSplitPartsOf(db, ids);
     await db.delete("records", where: "id IN ($placeholders)", whereArgs: ids);
     await logged?.commit(db);

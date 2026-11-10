@@ -511,6 +511,8 @@ class BudgetPlanUsage {
       }
       final value = r.value;
       if (value == null) continue;
+      // A refund and its expense: the money came back.
+      if (r.isRefundPair) continue;
       if (r.tags.contains(outOfBudgetTag)) {
         if (!r.isTransfer &&
             isBase(r.walletId) &&

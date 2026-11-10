@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:aupp/components/known-tags.dart';
 import 'package:aupp/dashboard/dashboard-data.dart';
 import 'package:aupp/components/missing-payment-code-icon.dart';
@@ -13,6 +15,8 @@ import 'package:aupp/models/record.dart';
 import 'package:aupp/models/records-per-day.dart';
 import 'package:aupp/models/wallet.dart';
 import 'package:aupp/records/edit-record-page.dart';
+import 'package:aupp/records/refund-link-ui.dart';
+import 'package:aupp/records/refund-link.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/services/transfer-icon-service.dart';
 
@@ -155,57 +159,161 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
         if (!(r.isSplitPart && parts.containsKey(r.splitParentDinzoId))) r,
     ];
     // An estimate right above the real record it matches.
-    for (final estimate in rows.where((r) => r.estimateMatch != null).toList()) {
+    for (final estimate
+        in rows.where((r) => r.estimateMatch != null).toList()) {
       if (!rows.contains(estimate.estimateMatch)) continue;
       rows.remove(estimate);
       rows.insert(rows.indexOf(estimate.estimateMatch!), estimate);
     }
+    // A matched pair is one item, so no divider falls between the two.
+    final items = <List<Record>>[];
+    for (var i = 0; i < rows.length; i++) {
+      if (widget.onLinkMatch != null &&
+          i + 1 < rows.length &&
+          identical(rows[i].estimateMatch, rows[i + 1])) {
+        items.add([rows[i], rows[++i]]);
+      } else {
+        items.add([rows[i]]);
+      }
+    }
     return ListView.separated(
-        physics: const NeverScrollableScrollPhysics(),
-        shrinkWrap: true,
-        itemCount: rows.length,
-        separatorBuilder: (context, index) {
-          if (identical(rows[index].estimateMatch, rows[index + 1]) &&
-              widget.onLinkMatch != null) {
-            return _buildMatchLink(rows[index]);
-          }
-          return Divider(
-            height: 1,
-            thickness: 0.5,
-            endIndent: 10,
-            indent: 10,
-          );
-        },
-        padding: const EdgeInsets.symmetric(vertical: 2.0),
-        itemBuilder: /*1*/ (context, i) {
-          return _buildMovementRow(rows[i], splitPart: parts[rows[i].dinzoId]);
-        });
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: items.length,
+      // The pair's own outline separates it, so no divider next to it.
+      separatorBuilder: (context, index) =>
+          items[index].length == 2 || items[index + 1].length == 2
+              ? const SizedBox.shrink()
+              : const Divider(
+                  height: 1, thickness: 0.5, endIndent: 10, indent: 10),
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      itemBuilder: /*1*/ (context, i) {
+        final item = items[i];
+        if (item.length == 2) return _buildMatchPair(item[0], item[1], parts);
+        return _buildMovementRow(item[0], splitPart: parts[item[0].dinzoId]);
+      },
+    );
   }
 
-  /// The dot joining an estimate to the real record of the same day and amount.
-  Widget _buildMatchLink(Record estimate) {
-    final scheme = Theme.of(context).colorScheme;
+  static const _estimateAmber = Color(0xFFF9A825);
+
+  /// Width of a row's trailing (amount plus the icon left of it, see
+  /// [_buildMovementRow]), to place the pair's link button beside it.
+  double _trailingWidth(Record r, Map<String, Record> parts) {
+    final amount = TextPainter(
+      text: TextSpan(
+        text: formatMoney(r.value!),
+        style: DefaultTextStyle.of(context).style.merge(_currencyFontStyle),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final icon = r.markedPaid
+        ? 32.0
+        : _offersRefund(r) ||
+              r.investShortfall != null ||
+              r.needsCategory ||
+              r.needsPaymentCode ||
+              r.paymentCode != null
+        ? 42.0
+        : r.dueDateUnknown
+        ? 16.0
+        : 0.0;
+    final width = amount.width + icon;
+    amount.dispose();
+    return parts[r.dinzoId] != null ? math.max(width, 150) : width;
+  }
+
+  /// An estimate and the real record of the same day and amount, as one
+  /// block: outlined, no divider between them, and a link between the two
+  /// icons (icon - link - icon) that links them when tapped.
+  Widget _buildMatchPair(
+    Record estimate,
+    Record real,
+    Map<String, Record> parts,
+  ) {
     final busy = widget.isSelectMode || widget.linkingEstimate != null;
-    return Row(
-      children: [
-        const Expanded(child: Divider(height: 1, thickness: 0.5, indent: 10)),
-        Tooltip(
-          message: 'Vincular estimativa',
-          child: Material(
-            color: scheme.primary,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: busy ? null : () => widget.onLinkMatch!(estimate),
-              child: Padding(
-                padding: const EdgeInsets.all(5),
-                child: Icon(Icons.link, size: 18, color: scheme.onPrimary),
+    // Center of the row icons: ListTile left padding (8) + half the icon (18).
+    const iconCenterX = 26.0;
+    const iconRadius = 18.0;
+    const linkSize = 34.0;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _estimateAmber.withValues(alpha: 0.35),
+          width: 0.8,
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Line from the bottom of the upper icon to the top of the lower
+          // one (icons sit at the middle of each half).
+          Positioned(
+            left: iconCenterX - 1,
+            width: 2,
+            top: 0,
+            bottom: 0,
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final length = box.maxHeight / 2 - 2 * iconRadius;
+                if (length <= 0) return const SizedBox.shrink();
+                return Center(
+                  child: Container(
+                    height: length,
+                    color: _estimateAmber.withValues(alpha: 0.7),
+                  ),
+                );
+              },
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildMovementRow(estimate, splitPart: parts[estimate.dinzoId]),
+              _buildMovementRow(real, splitPart: parts[real.dinzoId]),
+            ],
+          ),
+          // Right, between the two rows, just left of the widest trailing.
+          Positioned(
+            right:
+                12 +
+                math.max(
+                  _trailingWidth(estimate, parts),
+                  _trailingWidth(real, parts),
+                ) +
+                10,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Tooltip(
+                message: 'Vincular estimativa',
+                child: Material(
+                  color: _estimateAmber,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: busy ? null : () => widget.onLinkMatch!(estimate),
+                    child: SizedBox(
+                      width: linkSize,
+                      height: linkSize,
+                      child: Transform.rotate(
+                        angle: math.pi / 2,
+                        child: const Icon(
+                          Icons.link,
+                          size: 20,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-        const Expanded(child: Divider(height: 1, thickness: 0.5, endIndent: 10)),
-      ],
+        ],
+      ),
     );
   }
 
@@ -241,14 +349,18 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
           : movement.isTransfer && movement.category != null
               ? TransferIconService.color
               : null,
-      badgeIcon: movement.tags.contains(DinzoSyncService.estimateTag)
+      badgeIcon: movement.refundLink != null
+          ? Icons.undo
+          : movement.tags.contains(DinzoSyncService.estimateTag)
           ? Icons.query_stats
           : movement.tags.contains(DinzoSyncService.virtualTag)
               ? Icons.savings
               : movement.tags.contains(DinzoSyncService.manualTag)
                   ? Icons.edit
                   : null,
-      badgeColor: movement.tags.contains(DinzoSyncService.estimateTag)
+      badgeColor: movement.refundLink != null
+          ? const Color(0xFF43A047)
+          : movement.tags.contains(DinzoSyncService.estimateTag)
           ? const Color(0xFFF9A825)
           : movement.tags.contains(DinzoSyncService.virtualTag)
               ? Colors.purple
@@ -349,6 +461,8 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
             overflow: TextOverflow.ellipsis,
           ),
           if (movement.isHidden) _buildHiddenNote(),
+          if (_partialRefundOf(movement) case final refunded?)
+            _buildPartialRefundNote(refunded),
           if (movement.tags.any((t) => t != Record.hiddenTag))
             _buildTagChipsRow(
                 movement.tags.where((t) => t != Record.hiddenTag).toSet()),
@@ -376,6 +490,15 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                   Icons.priority_high,
                   message: 'O Investir não tinha todo o dinheiro do aporte',
                 ),
+                const SizedBox(width: 8),
+                _buildRecordAmountWidget(movement),
+              ],
+            )
+          : _offersRefund(movement)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildRefundButton(movement),
                 const SizedBox(width: 8),
                 _buildRecordAmountWidget(movement),
               ],
@@ -485,6 +608,25 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     );
   }
 
+  /// What came back of an expense through a partial refund, if any.
+  double? _partialRefundOf(Record r) {
+    final link = RefundLink.decode(r.refundLink);
+    return link != null && link.isPartial && !link.isRefund
+        ? link.refunded
+        : null;
+  }
+
+  /// "Reembolso parcial de R\$ 100,00" under the expense's title.
+  Widget _buildPartialRefundNote(double refunded) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2.0),
+      child: Text(
+        'Reembolso parcial de ${formatMoney(refunded)}',
+        style: const TextStyle(fontSize: 12.5, color: Color(0xFF43A047)),
+      ),
+    );
+  }
+
   /// "R\$ 600,00 por: Caixinha Saude" under the purchase amount.
   Widget _buildSplitNote(Record part) {
     final amount = (part.value ?? 0).abs();
@@ -528,6 +670,45 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
             width: 34,
             height: 34,
             child: Icon(icon, size: 17, color: Colors.black87),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Money in named like a refund, not linked yet ([RefundLink]).
+  bool _offersRefund(Record r) =>
+      RefundLink.canBeRefund(r) && RefundLink.looksLikeRefund(r);
+
+  /// Fork: money in that looks like a refund: tapping links it to an
+  /// expense, the suggested one ([RefundLink.markSuggestions]) or another.
+  Widget _buildRefundButton(Record refund) {
+    final expense = refund.refundSuggestion;
+    return Tooltip(
+      message: expense == null
+          ? 'Vincular como estorno'
+          : 'Parece estorno de "${expense.title}"',
+      child: Material(
+        color: const Color(0xFFF9A825),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: widget.isSelectMode || widget.linkingEstimate != null
+              ? null
+              : () async {
+                  if (await linkRefund(
+                        context,
+                        refund,
+                        suggestion: expense,
+                      ) &&
+                      widget.onListBackCallback != null) {
+                    await widget.onListBackCallback!();
+                  }
+                },
+          child: const SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(Icons.undo, size: 18, color: Colors.black87),
           ),
         ),
       ),

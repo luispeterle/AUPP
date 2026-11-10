@@ -50,14 +50,15 @@ class ComparisonDataAggregator {
       final key = config.getKey(truncated);
 
       if (data.containsKey(key) && !record.isOwnMove) {
-        // Income/expenses are stored as positive magnitudes in this model
-        // (netSavings = income - expenses), so abs() is applied at the model
-        // boundary .
+        // Income/expenses are positive magnitudes in this model
+        // (netSavings = income - expenses). An expense is stored negative; a
+        // partial refund (fork, RefundLink) is positive in its category and
+        // lowers it.
         final value = record.value!;
         if (record.category?.categoryType == CategoryType.expense) {
-          data[key]!.expenses += value.abs();
+          data[key]!.expenses -= value;
         } else {
-          data[key]!.income += value.abs();
+          data[key]!.income += value;
         }
       }
     }

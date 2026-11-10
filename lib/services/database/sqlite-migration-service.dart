@@ -646,6 +646,9 @@ class SqliteMigrationService {
     if (!columns.contains('estimate_link')) {
       await db.execute("ALTER TABLE records ADD COLUMN estimate_link TEXT");
     }
+    if (!columns.contains('refund_link')) {
+      await db.execute("ALTER TABLE records ADD COLUMN refund_link TEXT");
+    }
     final patternColumns =
         (await db.rawQuery("PRAGMA table_info(recurrent_record_patterns)"))
             .map((c) => c['name'] as String)

@@ -32,6 +32,16 @@ class Record extends Model {
   /// Estimate occurrence this real record was linked to (JSON, see
   /// EstimateLink; fork-only). Linking consumes the occurrence.
   String? estimateLink;
+
+  /// Fork: a refund and the expense it undoes, linked by the user (JSON on
+  /// both, see RefundLink). All of it came back: neither counts. Part of it
+  /// (a partial refund): the refund is in the expense's category and takes
+  /// that part off it.
+  String? refundLink;
+
+  /// Fork, transient: on an income that looks like a refund, an expense of
+  /// the same amount it may undo ([RefundLink.markSuggestions]).
+  Record? refundSuggestion;
   int aggregatedValues =
       1; // internal variables - used to identified an aggregated records (statistics)
 
@@ -134,6 +144,7 @@ class Record extends Model {
     this.dinzoId,
     this.dinzoSnapshot,
     this.estimateLink,
+    this.refundLink,
   }) {
     if (timeZoneName == null) {
       timeZoneName = ServiceConfig.localTimezone;
@@ -169,6 +180,7 @@ class Record extends Model {
       dinzoId: map['dinzo_id'] as String?,
       dinzoSnapshot: map['dinzo_snapshot'] as String?,
       estimateLink: map['estimate_link'] as String?,
+      refundLink: map['refund_link'] as String?,
       tags:
           map['tags'] != null ? (map['tags'] as String).split(',').toSet() : {},
     );
@@ -193,10 +205,16 @@ class Record extends Model {
       'dinzo_id': dinzoId,
       'dinzo_snapshot': dinzoSnapshot,
       'estimate_link': estimateLink,
+      'refund_link': refundLink,
     };
   }
 
   bool get isTransfer => transferWalletId != null;
+
+  /// Fork: one side of a refund that undid all of its expense
+  /// ([refundLink]): neither counts.
+  bool get isRefundPair =>
+      refundLink != null && !refundLink!.contains('"partial":true');
 
   /// Fork: tag that keeps a record out of the Extrato's list (not deleted,
   /// still counted in the totals) unless "Exibir ocultos" is on. A tag, not a
@@ -212,6 +230,7 @@ class Record extends Model {
   bool get countsTowardTotals =>
       !isAdjustment &&
       estimateMatch == null &&
+      !isRefundPair &&
       (!isTransfer || isSingleSideTransferView);
 
   /// Fork: income and expenses are only money that came from outside or is
@@ -219,11 +238,13 @@ class Record extends Model {
   /// transfer is never one of them: see [countsAsSetAside].
   bool get countsAsExpense =>
       estimateMatch == null &&
+      !isRefundPair &&
       !isTransfer &&
       category?.categoryType == CategoryType.expense;
 
   bool get countsAsIncome =>
       estimateMatch == null &&
+      !isRefundPair &&
       !isTransfer &&
       category?.categoryType == CategoryType.income;
 
@@ -263,6 +284,7 @@ class Record extends Model {
   bool get isOwnMove =>
       isTransfer ||
       estimateMatch != null ||
+      isRefundPair ||
       category?.categoryType == CategoryType.investment;
 
   /// Fork: part of a purchase paid with a caixinha ([SplitPayment]): a
@@ -329,7 +351,9 @@ class Record extends Model {
       dinzoId: this.dinzoId,
       dinzoSnapshot: this.dinzoSnapshot,
       estimateLink: this.estimateLink,
+      refundLink: this.refundLink,
     );
+    copy.refundSuggestion = refundSuggestion;
     copy.isDestinationTransferView =
         isDestinationTransferView ?? this.isDestinationTransferView;
     copy.isSingleSideTransferView =

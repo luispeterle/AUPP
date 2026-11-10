@@ -98,7 +98,12 @@ class HybridSync {
   /// to a crypto exchange, a transfer to myself that reached no everyday
   /// bank) is an Aporte (or Resgate) too; an older app would remove it on
   /// its next pull.
-  static const dataCompat = 9;
+  /// 10 (2026-11-09): refunds and the expense they undo, linked by the user
+  /// (`refund_link` on each): one refund of all of it, neither counts;
+  /// partial ones (several per expense, never more than it) are positive in
+  /// the expense's category. An older app would count them all again and sum
+  /// the partial ones as spending in the balance chart.
+  static const dataCompat = 10;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

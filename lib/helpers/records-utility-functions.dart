@@ -438,6 +438,8 @@ Color? getAmountColor(double amount, Brightness brightness) {
 /// Non-transfer records are always colored by sign.
 Color? getRecordAmountColor(Record record, Brightness brightness) {
   if (record.isTransfer && !record.isSingleSideTransferView) return null;
+  // A refund and its expense count for nothing (fork, RefundLink).
+  if (record.isRefundPair) return null;
   return getAmountColor(record.value ?? 0.0, brightness);
 }
 

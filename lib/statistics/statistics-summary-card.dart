@@ -273,7 +273,9 @@ class _StatisticsSummaryCardState extends State<StatisticsSummaryCard> {
       if (r?.category == null) return false;
       return categoriesOfThisType.contains(r!.category);
     }).toList();
-    final sectionTotal = recordsTotal(sectionRecords, isAbsValue: true);
+    // A partial refund (RefundLink) is positive in an expense category: the
+    // section shows what is left.
+    final sectionTotal = recordsTotal(sectionRecords).abs();
     // Signed total drives the header color so expense sections render red
     // (the displayed amounts are absolute).
     final signedSectionTotal =

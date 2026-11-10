@@ -1,4 +1,5 @@
 
+import 'package:aupp/records/refund-link.dart';
 import 'package:aupp/accounts/money-accounts.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -429,6 +430,9 @@ class TabRecordsController {
 
     // The same money twice counts once, whatever the period shows.
     EstimateLink.markMatches([...newRecords, ...futureRecords]);
+    // Money in that may be the refund of an expense: only a suggestion.
+    await RefundLink.loadAccount();
+    RefundLink.markSuggestions(newRecords);
     // Aportes the wallet to invest could not pay alone.
     await AporteShortfall.mark(newRecords);
 

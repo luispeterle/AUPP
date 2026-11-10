@@ -16,6 +16,8 @@ import 'package:aupp/dinzo/payment-launcher.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart' show SetEquality;
 import 'package:flutter/material.dart';
+import 'package:aupp/records/refund-link-ui.dart';
+import 'package:aupp/components/info-tip.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:aupp/categories/categories-tab-page-view.dart';
@@ -106,13 +108,10 @@ class EditRecordPageState extends State<EditRecordPage> {
       !DinzoSyncService.isSynthetic(record!.dinzoId) &&
       record!.transferWalletId == null;
 
-  /// A Dinzo expense or income can be moved to another wallet (e.g. paid by
-  /// a caixinha); the sync keeps that choice. The app's own records stay locked.
-  bool get _dinzoWalletEditable =>
-      _fromDinzo &&
-      !readOnly &&
-      !DinzoSyncService.isSynthetic(record!.dinzoId) &&
-      record!.transferWalletId == null;
+  /// A Dinzo record keeps the wallet the sync gave it (the default one, or
+  /// the wallet to invest for an aporte): part paid by a caixinha is
+  /// "Pago com caixinha" ([SplitPaymentTile]), not another wallet.
+  bool get _dinzoWalletEditable => false;
 
   /// Forecast entry (see [DinzoSyncService.estimateTag]); never a transfer.
   bool _isEstimateChecked = false;
@@ -189,6 +188,11 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   /// New records (and new recurrent patterns) have a fixed source
   /// ([_lockedSource]); only transfers started from a wallet keep that wallet.
+  /// A new one-off record that is not an estimate: paper money spent or
+  /// received ([_lockedSource]), never a transfer.
+  bool get _isRealOneOff =>
+      _sourceLocked && !_isEstimate && recurrentPeriod == null;
+
   bool get _sourceLocked =>
       record?.id == null &&
       passedRecurrentRecordPattern == null &&
@@ -716,7 +720,8 @@ class EditRecordPageState extends State<EditRecordPage> {
       selectedDestinationWallet: _selectedDestinationWallet,
       showTransferSide:
           !_fromDinzo &&
-          (isTransferFlow || (isExpense && _totalWalletCount > 1)),
+          (isTransferFlow ||
+              (isExpense && _totalWalletCount > 1 && !_isRealOneOff)),
       requireDestination: isTransferFlow,
       readOnly: _locked && !_dinzoWalletEditable,
       sourceLocked: _sourceLocked,
@@ -1351,8 +1356,10 @@ class EditRecordPageState extends State<EditRecordPage> {
     var numericValue = tryParseCurrencyString(text);
     if (numericValue != null) {
       numericValue = numericValue.abs();
+      // A partial refund stays positive in its expense's category.
       if (isTransferFlow ||
-          record!.category?.categoryType == CategoryType.expense) {
+          (record!.category?.categoryType == CategoryType.expense &&
+              record!.refundLink == null)) {
         numericValue = numericValue * -1;
       }
       record!.value = numericValue;
@@ -1520,19 +1527,14 @@ class EditRecordPageState extends State<EditRecordPage> {
               _applyAutoCash(isTransfer: _selectedDestinationWallet != null);
             }),
       secondary: const Icon(Icons.query_stats, color: Color(0xFFF9A825)),
-      title: const Text('Estimativa'),
-      subtitle: Text(
+      title: InfoTitle(
+        'Estimativa',
         forced
-            ? 'Os lançamentos reais vêm da Dinzo, então um lançamento avulso '
-                  'vira estimativa (data futura). Para um recorrente de verdade, '
-                  'como o vale-alimentação, escolha uma repetição. Dá pra liberar '
-                  'lançamentos manuais em Configurações → Integrações com API.'
+            ? 'Lançamento avulso vira estimativa: os reais vêm da Dinzo. '
+                  'Libere manuais em Integrações com API.'
             : _isEditableOccurrence
-            ? 'Desmarque e salve para virar um lançamento real nesta data, com '
-                  'estes dados. As outras ocorrências continuam estimativa.'
-            : 'Para prever os próximos meses. Fica no Extrato até ser vinculada '
-                  'ao lançamento real: segure a estimativa e toque no lançamento. '
-                  'Use a repetição para salário e gastos médios.',
+            ? 'Desmarcar e salvar vira lançamento real nesta data.'
+            : 'Fica no Extrato até ser vinculada ao lançamento real.',
       ),
     );
   }
@@ -1641,11 +1643,11 @@ class EditRecordPageState extends State<EditRecordPage> {
     return ListTile(
       leading: const Icon(Icons.qr_code_2),
       title: const Text('Pix / linha digitável'),
-      subtitle: Text(
+      subtitle: code == null && !unknown
+          ? null
+          : Text(
         [
-          code == null
-              ? 'Toque para colar o código desta ocorrência'
-              : '${Record.paymentCodeKind(code)} · $code',
+          if (code != null) '${Record.paymentCodeKind(code)} · $code',
           if (unknown)
             'O código não trouxe o vencimento: confira a data acima e salve.',
         ].join('\n'),
@@ -1717,19 +1719,6 @@ class EditRecordPageState extends State<EditRecordPage> {
     );
   }
 
-  /// Says that changing this occurrence takes it out of its recurrence.
-  Widget _createOccurrenceNote() {
-    return ListTile(
-      leading: const Icon(Icons.link_off),
-      title: const Text('Só esta ocorrência'),
-      subtitle: const Text(
-        'Mudar valor, data ou outro dado aqui solta esta ocorrência do '
-        'recorrente: ela fica como você deixar, mesmo que o recorrente '
-        'mude depois, e não aparece outra no lugar.',
-      ),
-    );
-  }
-
   /// Tags that only say where a record came from; they do not make an edit.
   static Set<String> _withoutOrigin(Set<String> tags) => {...tags}
     ..remove(DinzoSyncService.manualTag)
@@ -1763,7 +1752,6 @@ class EditRecordPageState extends State<EditRecordPage> {
           _withoutOrigin(edited.tags),
           _withoutOrigin(before.tags),
         );
-    final messenger = ScaffoldMessenger.of(context);
     if (!changed) {
       if (before.dueDateUnknown) {
         final pattern = await database.getRecurrentRecordPattern(
@@ -1780,21 +1768,9 @@ class EditRecordPageState extends State<EditRecordPage> {
       if (mounted) Navigator.of(context).pop();
       return;
     }
-    final leaves = _occurrenceLeavesRecurrence;
-    final saved = await RecurrentRecordService.saveOccurrence(edited);
+    await RecurrentRecordService.saveOccurrence(edited);
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
-    if (saved != null && leaves) {
-      messenger.showSnackBar(
-        const SnackBar(
-          duration: Duration(seconds: 5),
-          content: Text(
-            'Só esta ocorrência mudou. O recorrente continua '
-            'igual nas outras datas.',
-          ),
-        ),
-      );
-    }
   }
 
   /// "Já paguei" on this occurrence while the real record has not come.
@@ -1816,10 +1792,10 @@ class EditRecordPageState extends State<EditRecordPage> {
         }
       },
       secondary: const Icon(Icons.check_circle_outline, color: Colors.green),
-      title: const Text('Já paguei'),
-      subtitle: const Text(
-        'Passa para o dia do pagamento e para de avisar enquanto o '
-        'lançamento não chega da Dinzo. Quando chegar, vincule como sempre.',
+      title: const InfoTitle(
+        'Já paguei',
+        'Vai para o dia do pagamento e para de avisar até o lançamento '
+            'chegar da Dinzo.',
       ),
     );
   }
@@ -1910,10 +1886,9 @@ class EditRecordPageState extends State<EditRecordPage> {
         }
       }),
       secondary: const Icon(Icons.money_off, color: Color(0xFF78909C)),
-      title: const Text('Não considerar no orçamento'),
-      subtitle: const Text(
-        'Não conta como gasto nem entra nos 100% da receita. Ex.: comprou '
-        'algo para alguém e a pessoa te devolveu por Pix: marque os dois.',
+      title: const InfoTitle(
+        'Não considerar no orçamento',
+        'Não conta como gasto nem entra nos 100% da receita.',
       ),
     );
   }
@@ -2147,6 +2122,14 @@ class EditRecordPageState extends State<EditRecordPage> {
       leading: BackButton(onPressed: () => Navigator.pop(context)),
       title: Text(readOnly ? 'View record' : 'Editar Item'),
       actions: <Widget>[
+        if (_isEditableOccurrence && _occurrenceLeavesRecurrence)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: InfoTip(
+              'Mudar algo aqui solta só esta ocorrência do recorrente.',
+              size: 22,
+            ),
+          ),
         Visibility(
           visible:
               ((widget.passedRecord != null ||
@@ -2251,8 +2234,9 @@ class EditRecordPageState extends State<EditRecordPage> {
               _createEstimateLinkTile(link),
               Divider(height: 1),
             ],
-            if (_isEditableOccurrence && _occurrenceLeavesRecurrence) ...[
-              _createOccurrenceNote(),
+            // Fork: money that came in may undo an expense (RefundLink).
+            if (!readOnly && record?.id != null && RefundLinkTile.shows(record)) ...[
+              RefundLinkTile(record: record!),
               Divider(height: 1),
             ],
             if ((_sourceLocked ||
