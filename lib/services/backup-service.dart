@@ -12,10 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database/database-interface.dart';
 
-
 import 'database/sqlite-database.dart';
+import 'database/sqlite-migration-service.dart';
 import 'logger.dart';
-import 'package:aupp/services/database/money-model-migration.dart';
 
 /// BackupService contains the methods to create/restore backup file
 class BackupService {
@@ -28,12 +27,10 @@ class BackupService {
 
   /// Generates a backup file name containing the app package name, version, and current time.
   static Future<String> generateBackupFileName() async {
-    // Get app information
     final packageInfo = await PackageInfo.fromPlatform();
     final appName = packageInfo.packageName.split(".").last; // The package name
     final version = packageInfo.version; // The app version
 
-    // Get current date and time
     final now = DateTime.now();
     final dateStr = now.toIso8601String().split(".")[0]; // Strip milliseconds
     final formattedDate = dateStr.replaceAll(
@@ -123,6 +120,11 @@ class BackupService {
 
       var jsonMap = jsonDecode(fileContent);
       Backup backup = Backup.fromMap(jsonMap);
+      final schema = int.tryParse(backup.databaseVersion ?? '');
+      if (schema == null || schema < SqliteMigrationService.oldestSupported) {
+        _logger.warning('Backup from an unsupported schema: $schema');
+        return false;
+      }
       _logger.info(
         'Importing: ${backup.records.length} records, ${backup.categories.length} categories, ${backup.wallets.length} wallets',
       );
@@ -134,8 +136,7 @@ class BackupService {
         try {
           restorePrefs = await SharedPreferences.getInstance();
         } catch (error, stackTrace) {
-          // Preferences are optional for legacy/database-only imports. A
-          // missing platform implementation must not prevent the actual data
+          // A missing platform implementation must not prevent the data
           // from being restored.
           _logger.handle(
             error,
@@ -151,9 +152,6 @@ class BackupService {
 
         }
       }
-
-      // Profiles of old backups (the app no longer has them) are ignored:
-      // everything is restored together.
 
       // Insert wallets and build backup_id → new_db_id mapping
       final walletIdMap = <int, int>{}; // backup wallet id → new db wallet id
@@ -173,7 +171,6 @@ class BackupService {
         if (backupWallet.isDefault && existingDefaultWalletId != null) {
           mappedWalletId = existingDefaultWalletId;
         } else {
-          // Check if a wallet with the same name exists
           final match = existingWallets.where(
             (w) => w.name.toLowerCase() == backupWallet.name.toLowerCase(),
           );
@@ -183,19 +180,16 @@ class BackupService {
         }
 
         if (mappedWalletId != null) {
-          // Reuse existing wallet
           if (backupId != null) {
             walletIdMap[backupId] = mappedWalletId;
           }
-          // Fork: a device default wallet still carrying the factory name
-          // takes the backup's name (e.g. "Conta corrente").
+          // A default wallet still carrying the factory name takes the
+          // backup's name (e.g. "Conta corrente").
           final existingDefault = existingDefaultWallet;
           if (backupWallet.isDefault &&
               existingDefault != null &&
               mappedWalletId == existingDefault.id &&
-              const {'Default Wallet', 'Carteira padrão'}
-                  .union({'Carteira padrão'})
-                  .contains(existingDefault.name) &&
+              existingDefault.name == SqliteMigrationService.defaultWalletName &&
               backupWallet.name.trim().isNotEmpty &&
               backupWallet.name != existingDefault.name) {
             existingDefault.name = backupWallet.name;
@@ -214,12 +208,11 @@ class BackupService {
         }
       }
 
-      // Records with no wallet mapping (old backups, missing wallet data, etc.)
-      // fall back to the Default Wallet, which always exists.
+      // Records with no wallet mapping fall back to the Default Wallet, which
+      // always exists.
       final defaultWallet = await database.getDefaultWallet();
       final fallbackWalletId = defaultWallet?.id;
 
-      // Add categories
       for (var backupCategory in backup.categories) {
         try {
           await database.addCategory(backupCategory);
@@ -263,10 +256,8 @@ class BackupService {
         }
       }
 
-      // Add records in batch — Phase 2 will correctly map tags to new IDs
       await database.addRecordsInBatch(backup.records);
 
-      // Add recurrent patterns
       for (var backupRecurrentPatterns in backup.recurrentRecordsPattern) {
         // Remap wallet_id — fall back to default wallet when the backup
         // wallet is missing (mirrors the record remapping logic above).
@@ -277,9 +268,6 @@ class BackupService {
         } else if (fallbackWalletId != null) {
           backupRecurrentPatterns.walletId = fallbackWalletId;
         }
-        // Remap transfer_wallet_id too (fork fix, 2026-10-13): upstream left
-        // the backup id, so recurring transfers pointed at whichever wallet
-        // took that id on this device (e.g. "Investir" → another wallet).
         if (backupRecurrentPatterns.transferWalletId != null) {
           if (walletIdMap.containsKey(backupRecurrentPatterns.transferWalletId)) {
             backupRecurrentPatterns.transferWalletId =
@@ -303,13 +291,6 @@ class BackupService {
       }
 
       _logger.info('Backup imported successfully');
-      // A backup from before the current way of keeping the money.
-      final sqlite = database is SqliteDatabase
-          ? await (database as SqliteDatabase).database
-          : null;
-      if (sqlite != null && await MoneyModelMigration.needed(sqlite)) {
-        await sqlite.transaction(MoneyModelMigration.run);
-      }
       return true;
     } catch (e, st) {
       _logger.handle(e, st, 'Failed to import backup');

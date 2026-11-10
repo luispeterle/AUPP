@@ -3,7 +3,6 @@ import 'package:aupp/demo/demo-mode.dart';
 import 'package:aupp/desktop/desktop-layout.dart';
 import 'package:aupp/desktop/asset-workspaces.dart';
 import 'package:aupp/disguise/calculator-gate.dart';
-import 'package:aupp/dinzo/fork-defaults.dart';
 import 'package:aupp/hybrid_sync/hybrid-sync.dart';
 import 'package:aupp/services/automatic-writes.dart';
 import 'package:aupp/services/category-hierarchy.dart';
@@ -21,14 +20,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:aupp/services/home-widget-service.dart';
-import 'package:aupp/services/legacy-data.dart';
 import 'package:aupp/services/locale-service.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/shell.dart';
 import 'package:aupp/style.dart';
-import 'package:aupp/services/total-wallets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:talker_flutter/talker_flutter.dart';
@@ -86,8 +83,6 @@ main() async {
 
   logger.info('App initialization started');
 
-  await LegacyData.migrate();
-
   try {
     tz_data.initializeTimeZones();
 
@@ -118,7 +113,7 @@ main() async {
     ServiceConfig.packageName = packageInfo.packageName;
     ServiceConfig.version = packageInfo.version;
 
-    // Fork: a demo start (code typed on the calculator) switches to its own
+    // A demo start (code typed on the calculator) switches to its own
     // preferences, so this must come before the first getInstance().
     await DemoMode.bootstrap();
     ServiceConfig.sharedPreferences = await SharedPreferences.getInstance();
@@ -126,7 +121,6 @@ main() async {
     logger.info(
       'Package: ${ServiceConfig.packageName} v${ServiceConfig.version}',
     );
-    ServiceConfig.initWalletsEnabled();
     // Every database write refreshes the home widgets (debounced) and marks
     // the data to send to the other devices.
     SqliteDatabase.onDatabaseChanged = () {
@@ -134,20 +128,18 @@ main() async {
       HybridSync.noteDatabaseWrite();
     };
     if (DemoMode.active) SqliteDatabase.onDatabaseChanged = null;
-    // Fork: a brand-new database starts with the Dinzo categories.
-    // Fork: the demo is rebuilt from scratch on every entry.
+    // A brand-new database starts with the Dinzo categories.
+    // The demo is rebuilt from scratch on every entry.
     if (DemoMode.active) {
       await DemoMode.prepare();
     } else {
-      // Fork: data arriving from the other device, also before anything reads
+      // Data arriving from the other device, also before anything reads
       // the database.
       await AutomaticWrites.run(HybridSync.startup);
     }
-    await AutomaticWrites.run(ForkDefaults.applyIfFresh);
-    await TotalWallets.migrateFromIds();
     if (!DemoMode.active) await AssetWorkspaces.instance.init();
     await CategoryHierarchy.init();
-    // Fork: estimates linked to the company's taxes get their amounts.
+    // Estimates linked to the company's taxes get their amounts.
     await FiscalEstimates.init();
 
     // Display mode is only available on Android
@@ -163,14 +155,14 @@ main() async {
     final themeMode = await MaterialThemeInstance.getThemeMode();
     logger.info('Theme loaded: $themeMode');
 
-    // Fork: with the disguise on, the launcher's long-press shortcuts ("Add
+    // With the disguise on, the launcher's long-press shortcuts ("Add
     // expense") would give the app away. Drop them.
     if (CalculatorGate.enabled) {
       const QuickActions().clearShortcutItems();
       CalculatorGate.install();
     }
     CalculatorGate.attach(() => AppCore.navigatorKey.currentState);
-    // Fork: no disguise, or the code was typed right before this restart.
+    // No disguise, or the code was typed right before this restart.
     if (!CalculatorGate.enabled || DemoMode.startUnlocked) {
       CalculatorGate.startUnlocked();
     }
@@ -275,7 +267,7 @@ class AppCore extends StatelessWidget {
       darkTheme: darkTheme,
       themeMode: themeMode,
       title: "AUPP",
-      // Fork: the disguise calculator sits above the real app from the
+      // The disguise calculator sits above the real app from the
       // first frame (lib/disguise/calculator-gate.dart). Flutter forbids
       // `home` together with onGenerateInitialRoutes (asserted in debug only).
       routes: {'/': (_) => Shell()},

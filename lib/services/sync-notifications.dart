@@ -13,8 +13,8 @@ import 'package:aupp/services/sync-extensions.dart';
 /// foreground service (`SyncForegroundService`, native) keeps the process
 /// alive with the phone locked or the app in the background, and its
 /// notification shows the progress. When nothing is running it stops and the
-/// notification goes away: no result notifications (fork, 2026-10-29; the
-/// outcome shows in the Extrato's sync pill).
+/// notification goes away: no result notifications (the outcome shows in the
+/// Extrato's sync pill).
 class SyncNotifications {
   static final _logger = Logger.withClass(SyncNotifications);
   static const _appChannel = MethodChannel('aupp/app');

@@ -75,7 +75,7 @@ class CryptoSeries {
   ];
 }
 
-/// Free price history (fork, 2026-10-12): Kraken's public OHLC in USD
+/// Free price history: Kraken's public OHLC in USD
 /// (CoinGecko's free tier stops at 365 days) and the Central Bank's daily
 /// dollar rate (SGS 1) to show it in reais. Cached on disk, refreshed every
 /// few hours.

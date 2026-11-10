@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 enum KnownTagKind { bank, method, origin }
 
-/// Tags shown as a logo or icon instead of text (fork-only): banks and
+/// Tags shown as a logo or icon instead of text: banks and
 /// brokers, payment methods, and the origin tags of hand-entered records.
 /// Also the single catalogue of banks used by the sync (account tags) and
 /// the Investments tab (institutions).

@@ -14,8 +14,7 @@ class Calculator {
       Uri.parse('https://investidorsardinha.r7.com/calculadoras/$path');
 }
 
-/// Fork: launcher of the Investidor Sardinha calculators (user's choice,
-/// 2026-10-13), laid out like an Android home screen: a 3×3 grid of app
+/// Launcher of the Investidor Sardinha calculators, laid out like an Android home screen: a 3×3 grid of app
 /// icons.
 class CalculatorsPage extends StatelessWidget {
   const CalculatorsPage({super.key, this.onOpen});

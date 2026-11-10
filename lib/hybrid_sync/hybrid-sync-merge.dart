@@ -79,17 +79,6 @@ String? _recordIdentity(Map<String, Object?> row) {
 /// In this order: what is referenced comes before what references it.
 const _tables = [
   _Table(
-    'profiles',
-    key: ['id'],
-    autoId: true,
-    natural: _byName,
-    references: [
-      ('wallets', 'profile_id'),
-      ('records', 'profile_id'),
-      ('recurrent_record_patterns', 'profile_id'),
-    ],
-  ),
-  _Table(
     'wallets',
     key: ['id'],
     autoId: true,
@@ -125,10 +114,8 @@ const _tables = [
   _Table('fork_tags', key: ['name']),
 ];
 
-String? _byName(Map<String, Object?> row) => row['name'] as String?;
-
 String? _walletIdentity(Map<String, Object?> row) =>
-    '${row['name']}|${row['kind']}|${row['profile_id']}';
+    '${row['name']}|${row['kind']}';
 
 /// Tables with no rows of their own to join.
 const _skipped = {
@@ -444,7 +431,7 @@ Future<void> _mergeChangeLog(
   }
 }
 
-/// A wallet, profile or category deleted on one side while the other still
+/// A wallet or category deleted on one side while the other still
 /// used it comes back, so that nothing points at what is gone.
 Future<void> _repairReferences(
   Transaction tx,
@@ -479,14 +466,6 @@ Future<void> _repairReferences(
       'AND $column NOT IN (SELECT id FROM wallets)',
     )) {
       await restore('wallets', 'id = ?', [row['id']], 'Carteira ${row['id']}');
-    }
-  }
-  for (final table in ['wallets', 'records', 'recurrent_record_patterns']) {
-    for (final row in await tx.rawQuery(
-      'SELECT DISTINCT profile_id AS id FROM $table WHERE profile_id IS NOT NULL '
-      'AND profile_id NOT IN (SELECT id FROM profiles)',
-    )) {
-      await restore('profiles', 'id = ?', [row['id']], 'Perfil ${row['id']}');
     }
   }
   for (final table in ['records', 'recurrent_record_patterns']) {

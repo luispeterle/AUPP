@@ -24,7 +24,7 @@ class Category extends Model {
     Colors.white,
   ];
 
-  /// Fork: what money becoming an investment is filed under. Created when first
+  /// What money becoming an investment is filed under. Created when first
   /// used, like [adjustment].
   static const investmentName = 'Aporte';
 
@@ -46,7 +46,7 @@ class Category extends Model {
     iconCodePoint: FontAwesomeIcons.handHoldingDollar.data.codePoint,
   );
 
-  /// Fork: what a record from the Dinzo gets while nobody chose its category
+  /// What a record from the Dinzo gets while nobody chose its category
   /// ([Record.needsCategory]).
   static const uncategorizedName = 'Sem categoria';
 
@@ -72,7 +72,7 @@ class Category extends Model {
   int? sortOrder; // New field to track the order of categories
 
   /// Name of the parent category (same type), for subcategories. Records of
-  /// a subcategory also count for its parent (budgets, statistics). Fork-only.
+  /// a subcategory also count for its parent (budgets, statistics).
   String? parentName;
 
   // Updated constructor to include the sortOrder field
@@ -86,7 +86,6 @@ class Category extends Model {
       this.isArchived = false,
       this.sortOrder = 0,
       this.parentName}) {
-    // Initialize sortOrder in constructor
     this.name = name;
     var categoryIcons = CategoryIcons.category_icons;
 
@@ -139,7 +138,6 @@ class Category extends Model {
 
   /// Creates a Category object from a Map
   static Category fromMap(Map<String, dynamic> map) {
-    // Deserialize color
     String? serializedColor = map["color"] as String?;
     Color? color;
     if (serializedColor != null) {
@@ -149,14 +147,12 @@ class Category extends Model {
           colorComponents[2], colorComponents[3]);
     }
 
-    // Deserialize last_used
     int? lastUsed = map["last_used"] as int?;
     DateTime? lastUsedFromMap;
     if (lastUsed != null) {
       lastUsedFromMap = DateTime.fromMillisecondsSinceEpoch(lastUsed);
     }
 
-    // Deserialize other fields
     bool isArchivedFromMap =
         (map['is_archived'] != null) ? (map['is_archived'] as int) == 1 : false;
     int recordCountFromMap =
@@ -165,7 +161,6 @@ class Category extends Model {
     int? icon = map['icon'] as int?;
     int sortOrder = (map['sort_order'] != null) ? map['sort_order'] as int : 0;
 
-    // Return the Category object
     return Category(
       map["name"],
       color: color,

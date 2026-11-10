@@ -21,7 +21,7 @@ class MaterialThemeInstance {
   static Future<ColorScheme> getColorScheme(Brightness brightness) async =>
       getDefaultColorScheme(brightness);
 
-  /// Fork: on the computer the dark theme is a dim gray instead of near black,
+  /// On the computer the dark theme is a dim gray instead of near black,
   /// easier to read for hours on a large screen. The phone keeps the darker one.
   static ColorScheme liftedDarkScheme(ColorScheme scheme) {
     Color lift(Color color, double amount) =>

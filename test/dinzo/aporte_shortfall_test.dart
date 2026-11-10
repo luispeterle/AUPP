@@ -78,7 +78,7 @@ void main() {
     final cover = (await AporteShortfall.coverOf(r))!;
     expect(cover.isTransfer, isTrue);
     expect(cover.transferWalletId, investir);
-    expect(cover.transferValue, 70);
+    expect(cover.value, -70);
 
     await AporteShortfall.mark([r]);
     expect(r.investShortfall, isNull);

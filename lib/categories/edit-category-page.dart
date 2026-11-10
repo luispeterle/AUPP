@@ -86,7 +86,6 @@ class EditCategoryPageState extends State<EditCategoryPage> {
               height: 70,
               child: category!.iconEmoji != null
                   ? Center(
-                      // Center the content
                       child: Text(
                       category!.iconEmoji!, // Display the emoji
                       style: TextStyle(
@@ -161,7 +160,6 @@ class EditCategoryPageState extends State<EditCategoryPage> {
                   ? 'Você realmente quer arquivar a categoria?'
                   : 'Você realmente quer desarquivar a categoria?';
 
-              // Prompt confirmation
               AlertDialogBuilder archiveDialog =
                   AlertDialogBuilder(dialogMessage)
                       .addTrueButtonName('Sim')
@@ -196,7 +194,6 @@ class EditCategoryPageState extends State<EditCategoryPage> {
           ),
           onSelected: (index) async {
             if (index == 1) {
-              // Prompt confirmation
               AlertDialogBuilder deleteDialog = AlertDialogBuilder(
                       'Deseja realmente excluir esta categoria?')
                   .addSubtitle(
@@ -275,13 +272,11 @@ class EditCategoryPageState extends State<EditCategoryPage> {
     if (_formKey.currentState!.validate()) {
       if (category!.name == null) {
         // Then it is a newly created category
-        // Call the method add category
         category!.name = categoryName;
         await database.addCategory(category);
       } else {
         // If category.name is already set
         // I'm editing an existing category
-        // Call the method updateCategory
         String? existingName = category!.name;
         var existingType = category!.categoryType;
         category!.name = categoryName;

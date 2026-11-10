@@ -25,7 +25,7 @@ void main() {
 
   setUp(() async {
     await TestDatabaseHelper.setupTestDatabase();
-    await db().addCategory(pedagio);
+    // A fresh database already has it, among the Dinzo categories.
   });
 
   List<Record> tolls() => [

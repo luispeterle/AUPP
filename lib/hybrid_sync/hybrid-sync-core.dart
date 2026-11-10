@@ -17,15 +17,14 @@ class SnapshotHeader {
   final int dbVersion;
 
   /// The data's compatibility level (HybridSync.dataCompat of the app that
-  /// wrote it). Files from before it existed are level 1.
+  /// wrote it).
   final int compat;
 
   /// Version of the app that wrote it ("1.15.14"), to tell the user which one
-  /// to install. Null in files from before it existed.
+  /// to install.
   final String? appVersion;
 
-  /// What the content is: [payloadDatabase], or null for the full backup JSON
-  /// of the files from before it existed.
+  /// What the content is: [payloadDatabase].
   final String? payload;
 
   const SnapshotHeader({
@@ -145,7 +144,7 @@ class DailyBackup {
   const DailyBackup(this.name, this.day, this.device);
 
   static final _pattern = RegExp(
-    r'^(?:aupp|oinkoin)_backup_(\d{4})-(\d{2})-(\d{2})_([a-z0-9-]+)\.enc$',
+    r'^aupp_backup_(\d{4})-(\d{2})-(\d{2})_([a-z0-9-]+)\.enc$',
   );
 
   static String nameFor(DateTime day, String device) {
@@ -193,8 +192,6 @@ List<String> backupsToDelete(
 
 const _format = 'aupp-sync-1';
 
-/// Snapshots written before the app was called AUPP.
-const _legacyFormat = 'oinkoin-sync-1';
 const _iterations = 210000;
 
 Uint8List randomBytes(int length) {
@@ -268,7 +265,7 @@ class SealedSnapshot {
   factory SealedSnapshot.parse(String text) {
     try {
       final json = jsonDecode(text) as Map<String, dynamic>;
-      if (json['format'] != _format && json['format'] != _legacyFormat) {
+      if (json['format'] != _format) {
         throw const FormatException('Unknown snapshot format');
       }
       final headerText = json['header'] as String;

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/statistics/statistics-models.dart';
 import 'package:aupp/statistics/record-filters.dart';
-import 'package:aupp/services/service-config.dart';
 
 /// A toggle widget that allows switching between Category, Tags, and Records views.
 ///
@@ -45,7 +44,6 @@ class GroupByDropdown extends StatelessWidget {
         recordsToCheck.expand<String>((r) => r?.tags ?? <String>[]).toSet();
     final tagCount = uniqueTags.length;
 
-    final walletsEnabled = ServiceConfig.walletsEnabled;
     final hasWalletRecords = recordsToCheck.any((r) => r?.walletId != null);
     final uniqueWalletIds = recordsToCheck
         .where((r) => r?.walletId != null)
@@ -107,7 +105,6 @@ class GroupByDropdown extends StatelessWidget {
     }
 
     void addWalletsToggle() {
-      if (!walletsEnabled) return;
       addSeparator();
       tokens.add(_buildWalletToggles(
         walletCount: walletCount,

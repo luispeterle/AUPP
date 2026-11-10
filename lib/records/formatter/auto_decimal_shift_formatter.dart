@@ -57,7 +57,6 @@ class AutoDecimalShiftFormatter extends TextInputFormatter {
       left = '0';
       right = digits.padLeft(decimalDigits, '0');
     } else {
-      // Split digits at the decimal position from the right
       final cut = digits.length - decimalDigits;
       left = digits.substring(0, cut);
       right = digits.substring(cut);
@@ -132,7 +131,6 @@ class AutoDecimalShiftFormatter extends TextInputFormatter {
     }
     if (cur.isNotEmpty) tokens.add(cur);
 
-    // Build the output string
     final out = StringBuffer();
     if (globalSign.isNotEmpty) out.write(globalSign);
 
@@ -211,7 +209,6 @@ class LeadingZeroIntegerTrimmerFormatter extends TextInputFormatter {
 
     final out = '$sign$intDigits$fracPart';
 
-    // Return unchanged if no modification needed
     if (out == t) return newValue;
 
     return TextEditingValue(

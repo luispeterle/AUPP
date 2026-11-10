@@ -15,7 +15,7 @@ import 'crypto-analytics.dart';
 import 'crypto-history.dart';
 import 'selic-comparison.dart';
 
-/// "Modo cripto" of the Investments tab (fork, 2026-10-12): the crypto
+/// "Modo cripto" of the Investments tab: the crypto
 /// wallets (entered by hand, buy and hold), their value at the CoinGecko
 /// quote, each purchase with its date, what the portfolio really did against
 /// the Selic, price charts with touch to inspect and the countdown to the

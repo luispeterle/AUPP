@@ -4,7 +4,7 @@ import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
 
-/// In-memory view of category parents (fork-only subcategories), so budgets
+/// In-memory view of category parents (subcategories), so budgets
 /// and statistics can roll a subcategory up into its parent without changing
 /// the queries that load records. Kept fresh on every database write.
 class CategoryHierarchy {
@@ -46,17 +46,4 @@ class CategoryHierarchy {
     return _byKey[_key(parentName, category.categoryType)];
   }
 
-  /// [category] itself when top-level, otherwise its parent.
-  static Category? topLevelOf(Category? category) =>
-      parentOf(category) ?? category;
-
-  /// Whether a record in [category] belongs to the category named [name]:
-  /// the category itself or its parent.
-  static bool belongsTo(Category? category, String name) =>
-      category?.name == name || parentOf(category)?.name == name;
-
-  static List<Category> childrenOf(Category parent) => _byKey.values
-      .where((c) =>
-          c.parentName == parent.name && c.categoryType == parent.categoryType)
-      .toList();
 }

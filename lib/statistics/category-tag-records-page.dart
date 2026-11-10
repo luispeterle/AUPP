@@ -3,7 +3,6 @@ import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/wallet.dart';
 import 'package:aupp/statistics/statistics-models.dart';
-import 'package:aupp/statistics/statistics-utils.dart';
 import 'package:aupp/statistics/statistics-tab-page.dart';
 import 'package:aupp/services/service-config.dart';
 
@@ -65,13 +64,6 @@ class _CategoryTagRecordsPageState extends State<CategoryTagRecordsPage> {
   @override
   Widget build(BuildContext context) {
     String title = _selectedIntervalTitle ?? widget.title;
-    // These may be used in future UI enhancements
-    // ignore: unused_local_variable
-    AggregationMethod currentViewAggregation =
-        getAggregationMethodGivenTheTimeRange(widget.from!, widget.to!);
-    // ignore: unused_local_variable
-    bool hasTags =
-        _currentRecords.any((r) => r?.tags != null && r!.tags.isNotEmpty);
 
     return Scaffold(
       appBar: AppBar(
@@ -91,11 +83,7 @@ class _CategoryTagRecordsPageState extends State<CategoryTagRecordsPage> {
         hideTagsSelection: widget.category == null && widget.walletName == null,
         hideWalletsSelection: widget.walletName != null,
         walletMap: _effectiveWalletMap,
-        onListBackCallback: () {
-          setState(() {
-            // No need to manually sort _currentRecords anymore if we rely on StatisticsTabPage
-          });
-        },
+        onListBackCallback: () => setState(() {}),
         onIntervalSelected: (newTitle, date, amount) {
           setState(() {
             _selectedIntervalTitle =

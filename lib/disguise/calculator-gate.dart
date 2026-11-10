@@ -10,7 +10,7 @@ import 'package:aupp/demo/demo-mode.dart';
 import 'package:aupp/disguise/calculator-page.dart';
 import 'package:aupp/services/sync-extensions.dart';
 
-/// Fork (2026-10-14): the app opens as a yellow calculator. Typing the code
+/// The app opens as a yellow calculator. Typing the code
 /// and "C" reveals the real app; anything else is just a calculation. After
 /// [relockAfter] in the background, or as soon as the phone is locked, the
 /// calculator covers everything again. While unlocked, a notification says

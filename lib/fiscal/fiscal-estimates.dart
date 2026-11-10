@@ -35,21 +35,9 @@ class FiscalEstimates {
   static bool _started = false;
   static bool _running = false;
 
-  /// Run once at startup before the first computation: the owner's private
-  /// extensions fill in what they know of their company (data that never
-  /// goes into the repository).
-  static final List<Future<void> Function()> startupSeeds = [];
-
   static Future<void> init() async {
     if (_started) return;
     _started = true;
-    for (final seed in startupSeeds) {
-      try {
-        await seed();
-      } catch (e, st) {
-        _logger.handle(e, st, 'Company seed failed');
-      }
-    }
     RecurrentRecordPattern.computedValue = valueFor;
     SqliteDatabase.dataChangeNotifier.addListener(_schedule);
     MoneyAccounts.changes.addListener(_schedule);

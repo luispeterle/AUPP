@@ -121,13 +121,3 @@ List<PortfolioPoint> combineSeries(List<List<PortfolioPoint>> series) {
   }
   return result;
 }
-
-/// Where a Dinzo position goes in the Carteira tab.
-PortfolioClass? portfolioClassOfPosition(
-  DinzoInvestment inv, {
-  required bool isMoney,
-  required DiagramClass? diagramClass,
-}) {
-  if (isMoney) return PortfolioClass.dailyFixedIncome;
-  return diagramClass == null ? null : PortfolioClass.of(diagramClass);
-}

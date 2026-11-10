@@ -31,7 +31,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ServiceConfig.sharedPreferences = await SharedPreferences.getInstance();
     await TestDatabaseHelper.setupTestDatabase();
-    await db().addCategory(compras);
+    // A fresh database already has it, among the Dinzo categories.
     saude = await db().addWallet(
       Wallet('Caixinha Saude', initialAmount: 1255.5),
     );
@@ -70,7 +70,7 @@ void main() {
     expect(part.isTransfer, isTrue);
     expect(part.walletId, saude);
     expect(part.transferWalletId, 1);
-    expect(part.transferValue, 600);
+    expect(part.value, -600);
     expect(part.splitParentDinzoId, 'tx-bike');
   });
 
@@ -84,7 +84,7 @@ void main() {
         .where((r) => r.isSplitPart)
         .toList();
     expect(parts, hasLength(1));
-    expect(parts.single.transferValue, 500);
+    expect(parts.single.value, -500);
 
     await SplitPayment.remove(purchase);
     expect(await SplitPayment.partOf(purchase), isNull);

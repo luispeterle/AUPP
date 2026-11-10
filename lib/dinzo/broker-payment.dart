@@ -1,7 +1,6 @@
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
-import 'package:aupp/services/database/money-model-migration.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
 
@@ -80,7 +79,7 @@ class BrokerPayment {
           '(${record.title}, registro ${record.id})';
       final id = existing[companion.dinzoId];
       if (id == null) {
-        await MoneyModelMigration.ensureCategory(sqlite, companion.category!);
+        await SqliteDatabase.ensureCategory(sqlite, companion.category!);
         await db.addRecord(companion);
         lines.add('+ $line');
         continue;
@@ -93,7 +92,7 @@ class BrokerPayment {
           current.title == companion.title) {
         continue;
       }
-      await MoneyModelMigration.ensureCategory(sqlite, companion.category!);
+      await SqliteDatabase.ensureCategory(sqlite, companion.category!);
       companion.id = id;
       await db.updateRecordById(id, companion);
       lines.add('~ $line');

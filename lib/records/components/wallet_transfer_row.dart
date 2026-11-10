@@ -14,7 +14,7 @@ class WalletTransferRow extends StatelessWidget {
   final bool requireDestination;
   final bool readOnly;
 
-  /// Fork: new records always start from the default wallet ("Conta
+  /// New records always start from the default wallet ("Conta
   /// corrente"); the source cannot be changed, the transfer target can.
   final bool sourceLocked;
   final AutoSizeGroup walletNameSizeGroup;

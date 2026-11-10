@@ -31,8 +31,6 @@ class PerformanceResult {
     this.cdiProfit,
   );
 
-  double get portfolioReturn => points.isEmpty ? 0 : points.last.portfolio;
-  double get selicReturn => points.isEmpty ? 0 : points.last.selic;
 }
 
 /// Portfolio performance against the Selic. Pure: no network, no database.

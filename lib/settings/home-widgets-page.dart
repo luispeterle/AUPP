@@ -107,7 +107,7 @@ class HomeWidgetsPageState extends State<HomeWidgetsPage> {
               title: 'Saldo',
               onPin: () => _pin(HomeWidgetService.balanceProvider),
             ),
-            // Fork: looks like a plain calendar; the colored days are the
+            // Looks like a plain calendar; the colored days are the
             // ones something is due (HomeWidgetService.saveDueDays).
             _PinRow(
               title: 'Calendário de vencimentos',

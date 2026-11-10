@@ -345,10 +345,4 @@ class AssetLots {
     return result;
   }
 
-  /// What the coins are worth in the main currency, at the last quotes.
-  static double get coinsValue => coins.entries.fold(
-    0.0,
-    (sum, coin) =>
-        sum + coin.value * (CryptoQuoteService.priceInMain(coin.key) ?? 0),
-  );
 }

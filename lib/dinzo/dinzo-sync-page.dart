@@ -15,7 +15,6 @@ import 'dinzo-sync-engine.dart';
 import 'dinzo-sync-service.dart';
 
 /// Pulls from Dinzo and shows what would change before anything is written.
-/// Strings are pt-BR on purpose: this screen exists only in the personal fork.
 class DinzoSyncPage extends StatefulWidget {
   /// A plan the automatic sync already fetched and left for review.
   final DinzoPreparedSync? prepared;

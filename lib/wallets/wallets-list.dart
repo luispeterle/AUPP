@@ -1,4 +1,3 @@
-import 'package:aupp/services/crypto-quote-service.dart';
 import 'package:flutter/material.dart';
 import 'package:aupp/components/wallet_icon_square.dart';
 import 'package:aupp/helpers/list-utility-functions.dart';
@@ -172,7 +171,6 @@ class _WalletsListState extends State<WalletsList> {
                         const SizedBox(width: 8),
                         WalletIconSquare(
                           iconEmoji: wallet.iconEmoji,
-                          imageAsset: cryptoLogoOf(wallet.currency),
                           iconDataFromDefaultIconSet: wallet.icon,
                           backgroundColor: wallet.color,
                           overlayIcon: wallet.isPredefined ? Icons.check : null,
@@ -181,7 +179,6 @@ class _WalletsListState extends State<WalletsList> {
                     )
                   : WalletIconSquare(
                       iconEmoji: wallet.iconEmoji,
-                      imageAsset: cryptoLogoOf(wallet.currency),
                       iconDataFromDefaultIconSet: wallet.icon,
                       backgroundColor: wallet.color,
                       overlayIcon: wallet.isPredefined ? Icons.check : null,

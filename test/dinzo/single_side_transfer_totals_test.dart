@@ -87,7 +87,6 @@ void main() {
       Record(-600, 'Carro · Caixinha', null, day,
           walletId: caixinha,
           transferWalletId: contaCorrente,
-          transferValue: 600,
           dinzoId: '${Record.splitPrefix}p'),
     ];
     double sum(Iterable<Record> rs) =>

@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database/database-interface.dart';
 import 'database/sqlite-database.dart';
-import '../settings/constants/preferences-keys.dart';
 
 class ServiceConfig {
   /// ServiceConfig is a class that contains all the services
@@ -25,31 +24,4 @@ class ServiceConfig {
   /// global format is invalidated.
   static final Map<int, NumberFormat> perCurrencyNumberFormatCache = {};
 
-  /// Notifies consumers (e.g. the shell bottom navigation) when the
-  /// "Use wallets" preference changes, so wallet UI can appear/disappear
-  /// without an app restart.
-  static final ValueNotifier<bool> walletsEnabledNotifier = ValueNotifier(true);
-
-  static bool get walletsEnabled =>
-      sharedPreferences?.getBool(PreferencesKeys.walletsEnabled) ?? true;
-
-  static bool get showWalletBarOnHomepage =>
-      sharedPreferences?.getBool(PreferencesKeys.showWalletBarOnHomepage) ??
-      true;
-
-  static Future<void> setWalletsEnabled(bool value) async {
-    final prefs = sharedPreferences;
-    if (prefs != null) {
-      await prefs.setBool(PreferencesKeys.walletsEnabled, value);
-    }
-    walletsEnabledNotifier.value = value;
-  }
-
-  /// Syncs [walletsEnabledNotifier] with the persisted "Use wallets"
-  /// preference. Call once during startup, after [sharedPreferences] has been
-  /// loaded, so the Wallets tab respects the saved state instead of the
-  /// hard-coded default (`true`).
-  static void initWalletsEnabled() {
-    walletsEnabledNotifier.value = walletsEnabled;
-  }
 }

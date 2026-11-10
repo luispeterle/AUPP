@@ -11,8 +11,7 @@ import 'package:aupp/services/service-config.dart';
 import 'package:aupp/services/total-wallets.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 
-/// One slice of the month's income (fork-only, replaces the upstream
-/// budgets since 2026-10-13). Goals (Liberdade Financeira, Custos Fixos,
+/// One slice of the month's income. Goals (Liberdade Financeira, Custos Fixos,
 /// Metas, Conhecimento) are amounts to reach each month; Conforto and
 /// Prazeres are limits that must not be passed (user's choice).
 class BudgetGroup {
@@ -467,7 +466,7 @@ class BudgetPlanUsage {
     DateTime? to,
   }) {
     bool isBase(int? walletId) {
-      // Legacy records without a wallet belong to the default one.
+      // A record without a wallet belongs to the default one.
       if (walletId == null) return true;
       final w = walletsById[walletId];
       return w != null && BudgetPlan.isBaseWallet(w, defaultWalletId);
@@ -529,7 +528,7 @@ class BudgetPlanUsage {
           isBase(purchase.walletId) &&
           isBase(r.transferWalletId) &&
           !isBase(r.walletId)) {
-        final amount = (r.transferValue ?? value).abs();
+        final amount = value.abs();
         add(
           plan.groupOfCategory(purchase.category?.name),
           -amount,
@@ -543,9 +542,7 @@ class BudgetPlanUsage {
         if (fromBase == toBase) continue;
         final other = walletsById[fromBase ? r.transferWalletId : r.walletId];
         final group = other == null ? null : plan.groupOfWallet(other.name);
-        final amount = fromBase
-            ? value.abs()
-            : (r.transferValue ?? value).abs();
+        final amount = value.abs();
         add(
           group,
           fromBase ? amount : -amount,

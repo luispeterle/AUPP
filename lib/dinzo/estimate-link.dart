@@ -15,8 +15,7 @@ import 'package:aupp/services/recurrent-record-service.dart';
 import 'package:aupp/services/service-config.dart';
 
 /// A real record linked to an estimate occurrence, kept in
-/// [Record.estimateLink]. Estimates no longer vanish when their day comes:
-/// an occurrence stays in the Extrato until it is linked to the real record
+/// [Record.estimateLink]. An estimate occurrence stays in the Extrato until it is linked to the real record
 /// it forecast. Linking consumes the occurrence (it stops showing, and the
 /// estimate is deleted once it ends with nothing left) and renames the real
 /// record after the estimate, in Dinzo too.

@@ -18,7 +18,6 @@ void main() {
     options: OpenDatabaseOptions(
       version: SqliteDatabase.version,
       onCreate: SqliteMigrationService.onCreate,
-      onOpen: SqliteMigrationService.ensureForkSchema,
       singleInstance: false,
     ),
   );

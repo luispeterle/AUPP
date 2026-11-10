@@ -57,7 +57,7 @@ class ShellState extends State<Shell> {
   /// Ensures the startup announcement dialog is checked only once per app run,
   /// after authentication has succeeded and the main UI is on screen.
 
-  /// Fork: quick Dinzo sync after unlocking and on every return to the app
+  /// Quick Dinzo sync after unlocking and on every return to the app
   /// (rate limited in [DinzoAutoSync]).
   bool _dinzoAutoSyncStarted = false;
   AppLifecycleListener? _lifecycleListener;
@@ -78,7 +78,7 @@ class ShellState extends State<Shell> {
   final GlobalKey<NavigatorState> _calculatorsNavigatorKey =
       GlobalKey<NavigatorState>();
 
-  /// Fork: logical tabs that exist only in the computer's side rail.
+  /// Logical tabs that exist only in the computer's side rail.
   static const int _assetsTab = 6;
   bool _railLayout = false;
 
@@ -86,7 +86,7 @@ class ShellState extends State<Shell> {
   void initState() {
     super.initState();
     _instance = this;
-    // Fork: nothing of the real app (syncs) starts while the disguise
+    // Nothing of the real app (syncs) starts while the disguise
     // calculator is showing.
     _unlocked = CalculatorGate.firstUnlock;
     _lifecycleListener = AppLifecycleListener(
@@ -115,7 +115,7 @@ class ShellState extends State<Shell> {
     if (mounted) setState(() {});
   }
 
-  /// Fork: the Ficha has its own place in the rail on the computer. False on
+  /// The Ficha has its own place in the rail on the computer. False on
   /// the phone, where the caller opens it on top of the page.
   bool _openAssetTab(String ticker) {
     if (!_railLayout) return false;
@@ -124,7 +124,7 @@ class ShellState extends State<Shell> {
     return true;
   }
 
-  /// Fork: another device's data was joined in while the app runs.
+  /// Another device's data was joined in while the app runs.
   void _onHybridDataArrived() {
     _dashboardKey.currentState?.onTabChange();
     _tabRecordsKey.currentState?.onTabChange();
@@ -134,7 +134,7 @@ class ShellState extends State<Shell> {
     if (mounted) setState(() {});
   }
 
-  /// Fork: data from a newer app on another device: this one only reads until
+  /// Data from a newer app on another device: this one only reads until
   /// updated, and says so above every page.
   PreferredSizeWidget? _readOnlyBar(BuildContext context) {
     final remote = HybridSync.readOnly.value;
@@ -173,7 +173,7 @@ class ShellState extends State<Shell> {
     );
   }
 
-  /// Fork: changes on both devices; asked once per conflict seen.
+  /// Changes on both devices; asked once per conflict seen.
   void _showHybridConflict() {
     final remote = HybridSync.conflict.value;
     if (remote == null || remote.rev == _hybridConflictShown) return;
@@ -183,7 +183,7 @@ class ShellState extends State<Shell> {
     });
   }
 
-  /// Fork: newer data from another device; asked once per snapshot seen.
+  /// Newer data from another device; asked once per snapshot seen.
   void _showHybridIncoming() {
     final remote = HybridSync.incoming.value;
     if (remote == null || remote.rev == _hybridConflictShown) return;
@@ -292,44 +292,23 @@ class ShellState extends State<Shell> {
     _tabRecordsKey.currentState?.onTabChange();
   }
 
-  /// Returns the fixed logical indexes currently represented in the
-  /// NavigationBar, preserving the indexes used by the tab navigators.
-  List<int> _visibleLogicalIndexes({
-    required bool walletsEnabled,
-  }) {
-    // Fork: 0 = Início (dashboard), 3 = Extrato (records list, formerly
-    // the upstream Budgets' slot), 2 = Investimentos. The wallets (1) open
-    // from the Início instead of the bar. 5 = Calculadoras. On the computer
-    // the rail also has 6 = Ativos and the tools, below its separator.
-    return [0, 3, 2, 5, 4];
-  }
+  /// The logical tab of each NavigationBar item, in order: 0 = Início, 3 =
+  /// Extrato, 2 = Investimentos, 5 = Calculadoras, 4 = Ajustes. The wallets
+  /// (1) open from the Início instead of the bar. On the computer the rail
+  /// also has 6 = Ativos and the tools, below its separator.
+  static const _visibleLogicalIndexes = [0, 3, 2, 5, 4];
 
   /// Maps a logical tab index to the visual NavigationBar index.
-  int _visualIndex(
-    int logicalIndex,
-    bool walletsEnabled,
-  ) {
-    final index = _visibleLogicalIndexes(
-      walletsEnabled: walletsEnabled,
-    ).indexOf(logicalIndex);
+  int _visualIndex(int logicalIndex) {
+    final index = _visibleLogicalIndexes.indexOf(logicalIndex);
     return index < 0 ? 0 : index;
   }
 
   /// Maps a visual NavigationBar index to the logical tab index.
-  int _logicalIndex(
-    int visualIndex,
-    bool walletsEnabled,
-  ) {
-    final indexes = _visibleLogicalIndexes(
-      walletsEnabled: walletsEnabled,
-    );
-    final safeVisualIndex =
-        visualIndex.clamp(0, indexes.length - 1).toInt();
-    return indexes[safeVisualIndex];
-  }
+  int _logicalIndex(int visualIndex) => _visibleLogicalIndexes[
+      visualIndex.clamp(0, _visibleLogicalIndexes.length - 1).toInt()];
 
-  List<Widget> _buildDestinations(
-    bool walletsEnabled) {
+  List<Widget> _buildDestinations() {
     Widget navigationIcon({
       required int logicalIndex,
       required String semanticsIdentifier,
@@ -375,7 +354,7 @@ class ShellState extends State<Shell> {
       ),
     ];
     destinations.addAll([
-      // Fork: Categories moved to Settings; this slot is Investments.
+      // Categories moved to Settings; this slot is Investments.
       NavigationDestination(
         label: 'Investimentos',
         icon: navigationIcon(
@@ -449,7 +428,7 @@ class ShellState extends State<Shell> {
     );
   }
 
-  /// Fork: on the computer the tab content has a limited width, so rows don't
+  /// On the computer the tab content has a limited width, so rows don't
   /// stretch across the whole window.
   Widget _tabContent(bool wide, double maxWidth, Widget navigator) => wide
       ? Center(
@@ -476,7 +455,7 @@ class ShellState extends State<Shell> {
     _tabRecordsKey.currentState?.onTabChange();
   }
 
-  /// Fork: keyboard on the computer. Ctrl+N new record, Ctrl+F search in the
+  /// Keyboard on the computer. Ctrl+N new record, Ctrl+F search in the
   /// Extrato, F5 sync, Esc back.
   Map<ShortcutActivator, VoidCallback> get _shortcuts => {
     const SingleActivator(LogicalKeyboardKey.keyN, control: true): () {
@@ -497,16 +476,14 @@ class ShellState extends State<Shell> {
   };
 
   Widget _buildRail() {
-    final walletsEnabled = ServiceConfig.walletsEnabledNotifier.value;
     return NavigationRail(
       labelType: NavigationRailLabelType.all,
       // What is below the separator is highlighted in its own item.
       selectedIndex: _currentIndex >= _assetsTab
           ? null
-          : _visualIndex(_currentIndex, walletsEnabled),
-      onDestinationSelected: (visualIndex) =>
-          _onDestinationSelected(visualIndex, walletsEnabled),
-      // Fork: the assets in standby, below Ajustes.
+          : _visualIndex(_currentIndex),
+      onDestinationSelected: _onDestinationSelected,
+      // The assets in standby, below Ajustes.
       trailing: Expanded(
         child: ListenableBuilder(
           listenable: AssetWorkspaces.instance,
@@ -536,8 +513,7 @@ class ShellState extends State<Shell> {
       ),
       destinations: [
         for (final destination
-            in _buildDestinations(walletsEnabled)
-                .cast<NavigationDestination>())
+            in _buildDestinations().cast<NavigationDestination>())
           NavigationRailDestination(
             icon: destination.icon,
             label: Text(destination.label),
@@ -554,12 +530,9 @@ class ShellState extends State<Shell> {
     }
   }
 
-  Future<void> _onDestinationSelected(
-    int visualIndex,
-    bool walletsEnabled,
-  ) async {
+  Future<void> _onDestinationSelected(int visualIndex) async {
     setState(() {
-      _currentIndex = _logicalIndex(visualIndex, walletsEnabled);
+      _currentIndex = _logicalIndex(visualIndex);
     });
     // refresh data whenever changing the tab
     if (_currentIndex == 0) {
@@ -578,7 +551,7 @@ class ShellState extends State<Shell> {
     MaterialThemeInstance.currentTheme = themeData;
     final wide = isWideLayout(context);
     _railLayout = wide;
-    // Fork: narrowed the window on a tab the phone layout does not have.
+    // Narrowed the window on a tab the phone layout does not have.
     if (!wide && _currentIndex >= _assetsTab) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _currentIndex = 0);
@@ -592,10 +565,8 @@ class ShellState extends State<Shell> {
           return;
         }
 
-        // Get the current tab's navigator
         final currentNavigator = _currentNavigator;
 
-        // Check if the current tab's navigator can pop.
         // Use maybePop so inner PopScopes (e.g., in-app keyboard) can intercept first.
         if (currentNavigator != null && currentNavigator.canPop()) {
           await currentNavigator.maybePop();
@@ -754,35 +725,22 @@ class ShellState extends State<Shell> {
             ),
           ),
         ),
-        bottomNavigationBar: wide ? null : ValueListenableBuilder<bool>(
-          valueListenable: ServiceConfig.walletsEnabledNotifier,
-          builder: (context, walletsEnabled, _) {
-            // Defensively reset to the Home tab if the currently selected
-            // tab no longer exists after a feature is disabled.
-            if (!walletsEnabled && _currentIndex == 1) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) setState(() => _currentIndex = 0);
-              });
-            }
-            return NavigationBar(
+        bottomNavigationBar: wide
+            ? null
+            : NavigationBar(
                 animationDuration: const Duration(milliseconds: 220),
-                selectedIndex: _visualIndex(
-                    _currentIndex, walletsEnabled),
-                labelBehavior:
-                    NavigationDestinationLabelBehavior.alwaysShow,
-                // One point smaller than labelSmall (11sp) for extra
-                // margin so longer localized labels don't wrap.
+                selectedIndex: _visualIndex(_currentIndex),
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                // One point smaller than labelSmall (11sp) so the labels
+                // don't wrap.
                 labelTextStyle: WidgetStatePropertyAll<TextStyle?>(
                   Theme.of(context).textTheme.labelSmall?.copyWith(
                     fontSize: 10,
                   ),
                 ),
-                onDestinationSelected: (int visualIndex) =>
-                    _onDestinationSelected(visualIndex, walletsEnabled),
-                destinations: _buildDestinations(walletsEnabled),
-            );
-          },
-        ),
+                onDestinationSelected: _onDestinationSelected,
+                destinations: _buildDestinations(),
+              ),
       ),
     );
   }

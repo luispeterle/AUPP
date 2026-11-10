@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:aupp/services/service-config.dart';
 
 class TabRecordsSelectionAppBar extends StatelessWidget
     implements PreferredSizeWidget {
@@ -10,11 +9,11 @@ class TabRecordsSelectionAppBar extends StatelessWidget
   final VoidCallback onDuplicate;
   final VoidCallback? onMoveToWallet;
 
-  /// Title-cases the selected records' names (fork-only).
+  /// Title-cases the selected records' names.
   final VoidCallback onTitleCase;
 
   /// Hides the selected records from the Extrato, or shows them again when
-  /// [selectionAllHidden] (fork-only).
+  /// [selectionAllHidden].
   final VoidCallback onToggleHidden;
   final bool selectionAllHidden;
 
@@ -84,11 +83,10 @@ class TabRecordsSelectionAppBar extends StatelessWidget
               value: 'title_case',
               child: Text('Primeira Letra Maiúscula'),
             ),
-            if (ServiceConfig.walletsEnabled)
-              PopupMenuItem(
-                value: 'move_wallet',
-                child: Text('Mover para carteira'),
-              ),
+            PopupMenuItem(
+              value: 'move_wallet',
+              child: Text('Mover para carteira'),
+            ),
           ],
         ),
       ],

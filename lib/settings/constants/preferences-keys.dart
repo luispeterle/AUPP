@@ -20,19 +20,16 @@ class PreferencesKeys {
   // Wallets
   static const walletListSortOption = 'defaultWalletListSortOption';
 
-  static const walletsEnabled = 'walletsEnabled';
-  static const showWalletBarOnHomepage = 'showWalletBarOnHomepage';
 
 
   // Wallet filter defaults (stored as StringList of wallet IDs; empty = all
-  // accounts). The "_1" is the id of the profile the app used to have: the
-  // saved choice carries over, and the sync still clears it by prefix.
+  // accounts). The sync clears them by prefix.
   static const homePageWalletFilter = 'homePageWalletFilter_1';
 
-  // Fork: the Extrato also lists records hidden with the "Oculto" tag.
+  // The Extrato also lists records hidden with the "Oculto" tag.
   static const extratoShowHidden = 'extratoShowHidden';
 
-  // Fork: the user's companies and which bank accounts are theirs (JSON,
+  // The user's companies and which bank accounts are theirs (JSON,
   // portable), and the accounts this device leaves out of the Extrato.
   static const companies = 'empresas';
   static const hiddenAccounts = 'contasOcultas';
@@ -43,7 +40,7 @@ class PreferencesKeys {
 
 
 
-  // Dinzo integration (fork-only)
+  // Dinzo integration
   static const dinzoApiKey = 'dinzoApiKey'; // never exported to backups
   static const brapiApiKey = 'brapiApiKey'; // never exported to backups
   static const dinzoConfig = 'dinzoConfig';
@@ -70,7 +67,6 @@ class PreferencesKeys {
   static const dinzoBlockedUntil = 'dinzoQuotaBlockedUntil';
   static const dinzoRequestDaily = 'dinzoRequestDaily'; // minute -> count, 24 h
   static const dinzoServerRemaining = 'dinzoServerRemaining'; // last RateLimit r=
-
 
   // Disguise calculator tape (lib/disguise), device-only.
   static const calcTape = 'calcTape';

@@ -1,4 +1,4 @@
-// Fork: payment code (Pix / boleto) of each estimate occurrence.
+// Payment code (Pix / boleto) of each estimate occurrence.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/recurrent-period.dart';

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:aupp/services/service-config.dart';
 
 import '../../helpers/records-utility-functions.dart';
 import '../controllers/tab_records_controller.dart';
@@ -15,14 +14,14 @@ class TabRecordsAppBar extends StatelessWidget {
   /// Some account is switched off: the person button shows a dot.
   final bool accountsFiltered;
 
-  /// Fork: sync state pill next to the person button (see RecordsPage).
+  /// Sync state pill next to the person button (see RecordsPage).
   final Widget? syncPill;
 
-  /// Shows or hides the upcoming occurrences in the list (fork-only).
+  /// Shows or hides the upcoming occurrences in the list.
   final VoidCallback? onUpcomingPressed;
   final VoidCallback onDatePickerPressed;
 
-  /// Tapping the period text opens the month/year picker (fork-only).
+  /// Tapping the period text opens the month/year picker.
   final VoidCallback? onPeriodTapped;
   final VoidCallback onStatisticsPressed;
 
@@ -41,11 +40,11 @@ class TabRecordsAppBar extends StatelessWidget {
   final VoidCallback? onDuplicate;
   final VoidCallback? onMoveToWallet;
 
-  /// Title-cases the selected records' names (fork-only).
+  /// Title-cases the selected records' names.
   final VoidCallback? onTitleCase;
 
   /// Hides the selected records from the Extrato, or shows them again when
-  /// [selectionAllHidden] (fork-only).
+  /// [selectionAllHidden].
   final VoidCallback? onToggleHidden;
   final bool selectionAllHidden;
 
@@ -80,9 +79,6 @@ class TabRecordsAppBar extends StatelessWidget {
     final height = MediaQuery.of(context).size.height * 0.20;
     return height < 180.0 ? 180.0 : height;
   }
-
-  /// Height of the bar without its picture (toolbar + period row).
-  static const double simplifiedHeight = kToolbarHeight + 48;
 
   @override
   Widget build(BuildContext context) {
@@ -272,11 +268,10 @@ class TabRecordsAppBar extends StatelessWidget {
             value: 'title_case',
             child: Text('Primeira Letra Maiúscula'),
           ),
-          if (ServiceConfig.walletsEnabled)
-            PopupMenuItem(
-              value: 'move_wallet',
-              child: Text('Mover para carteira'),
-            ),
+          PopupMenuItem(
+            value: 'move_wallet',
+            child: Text('Mover para carteira'),
+          ),
         ],
       ),
     ];
@@ -313,7 +308,7 @@ class TabRecordsAppBar extends StatelessWidget {
     );
   }
 
-  /// Fork: switches the period on screen between its month and its year.
+  /// Switches the period on screen between its month and its year.
   Widget _buildMonthYearToggle() {
     return SizedBox(
       height: 30,

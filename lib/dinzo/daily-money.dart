@@ -8,7 +8,6 @@ import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/wallet.dart';
 import 'package:aupp/services/automatic-writes.dart';
-import 'package:aupp/services/database/money-model-migration.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
@@ -195,7 +194,7 @@ class DailyMoney {
     DateTime today,
   ) async {
     final sqlite = (await SqliteDatabase.instance.database)!;
-    await MoneyModelMigration.ensureCategory(sqlite, Category.adjustment());
+    await SqliteDatabase.ensureCategory(sqlite, Category.adjustment());
     final db = ServiceConfig.database;
     final month =
         '${today.year}-${today.month.toString().padLeft(2, '0')}';

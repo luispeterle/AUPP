@@ -108,7 +108,6 @@ class _StatisticsSummaryCardState extends State<StatisticsSummaryCard> {
   /// Builds the categories summary list with Income and Expense sections.
   Widget _buildCategoriesSummaryList() {
     final filteredRecords = _getFilteredRecords();
-    // Determine common currency: if mixed, use default currency so all amounts are comparable
     final categoriesByType =
         _aggregateCategoriesByType(filteredRecords);
     final sectionCount = _countNonEmptySections(categoriesByType);
@@ -198,7 +197,6 @@ class _StatisticsSummaryCardState extends State<StatisticsSummaryCard> {
       categoriesByType[tuple.key.categoryType]!.add(tuple);
     }
 
-    // Sort by absolute value (descending)
     categoriesByType[CategoryType.expense]!
         .sort((a, b) => b.value.abs().compareTo(a.value.abs()));
     categoriesByType[CategoryType.income]!

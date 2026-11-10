@@ -17,7 +17,7 @@ String? cryptoLogoOf(String? code) {
       : null;
 }
 
-/// Market quotes for the coins held (fork). Prices come from CoinGecko's public
+/// Market quotes for the coins held. Prices come from CoinGecko's public
 /// API (free, no key).
 class CryptoQuoteService {
   static final _logger = Logger.withClass(CryptoQuoteService);
@@ -58,8 +58,8 @@ class CryptoQuoteService {
     final codes = AssetLots.coins.keys.toList();
     if (codes.isEmpty) return false;
     final last = lastUpdate;
-    // A coin without a price in reais (bought just now, or quotes left by an
-    // older app, which kept them elsewhere) is worth nothing until fetched.
+    // A coin without a price in reais (bought just now) is worth nothing
+    // until fetched.
     final missing = codes.any((code) => priceInMain(code) == null);
     if (!force &&
         !missing &&

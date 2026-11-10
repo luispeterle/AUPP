@@ -39,7 +39,7 @@ class DinzoAutoSyncStatus {
   });
 }
 
-/// Quick sync on app open (fork, decided 2026-10-12): applied on its own
+/// Quick sync on app open: applied on its own
 /// when there is nothing to decide, otherwise left for review on the
 /// Extrato. Never runs before the first (full, manual) sync, nor while the
 /// sync screen is open.

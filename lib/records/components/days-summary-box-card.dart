@@ -22,10 +22,10 @@ class DaysSummaryBox extends StatefulWidget {
   final String walletBalanceString;
   final double? walletBalance;
 
-  /// Fork: wallets by id, to tell invested from set-aside money.
+  /// Wallets by id, to tell invested from set-aside money.
   final Map<int, Wallet> walletMap;
 
-  /// Fork: the Investido / Guardado / Retirado row (there are wallets
+  /// The Investido / Guardado / Retirado row (there are wallets
   /// outside the counted ones). Shown even when zero, so it doesn't jump.
   final bool showSetAside;
   final VoidCallback? onWalletRowTap;
@@ -36,10 +36,6 @@ class DaysSummaryBox extends StatefulWidget {
   /// Tapping Investido / Guardado / Retirado: the records behind it.
   final void Function(String label, List<Record> records)? onSetAsideTap;
 
-  /// When false, the wallet header row (and its divider) is hidden, showing
-  /// only the Income / Expenses / Balance stats. Used when the wallets feature
-  /// is disabled or the "Show wallet bar on the homepage" toggle is off.
-  final bool showWalletRow;
 
   DaysSummaryBox(
     this.records, {
@@ -52,7 +48,6 @@ class DaysSummaryBox extends StatefulWidget {
     this.onWalletRowTap,
     this.onStatTap,
     this.onSetAsideTap,
-    this.showWalletRow = true,
   });
 
   @override
@@ -79,7 +74,7 @@ class DaysSummaryBoxState extends State<DaysSummaryBox> {
   Iterable<Record?> get _balanceRecords =>
       widget.records.where((record) => record?.countsTowardTotals ?? false);
 
-  /// Fork: money set aside in / taken back from other wallets, shown under
+  /// Money set aside in / taken back from other wallets, shown under
   /// the row (it moves the balance but is neither income nor expense).
   /// Second row, under income / expenses / balance and in the same columns:
   /// money invested, set aside and taken back ([SetAsideSplit]; invested =
@@ -245,7 +240,7 @@ class DaysSummaryBoxState extends State<DaysSummaryBox> {
     final incomeColor = getAmountColor(
         recordsTotal(_incomeRecords),
         brightness);
-    // Fork: the big number is what the month really paid; below it, when it
+    // The big number is what the month really paid; below it, when it
     // differs (something was paid with a caixinha), the total of everything
     // spent (purchases at full value; never transfers).
     final realExpenseRecords = realExpenses(widget.records);
@@ -263,7 +258,7 @@ class DaysSummaryBoxState extends State<DaysSummaryBox> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Wallet header row
-            if (widget.showWalletRow) ...[
+            ...[
               InkWell(
                 onTap: widget.onWalletRowTap,
                 child: Padding(

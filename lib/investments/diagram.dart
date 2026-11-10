@@ -524,13 +524,11 @@ enum CerradoRoot {
   static const diversified = 7;
 }
 
-/// Which roots have money. What the app cannot see (an own company, gold at
-/// home, a broker abroad) the user marks by hand.
+/// Which roots have money.
 Map<CerradoRoot, bool> cerradoRoots({
   required List<DiagramAsset> assets,
   required double emergencyReserve,
   required double fixedIncomeHeld,
-  Set<CerradoRoot> marked = const {},
 }) {
   bool holds(bool Function(DiagramAsset) test) =>
       assets.any((a) => a.value > 0 && test(a));
@@ -556,7 +554,7 @@ Map<CerradoRoot, bool> cerradoRoots({
   };
   return {
     for (final root in CerradoRoot.values)
-      root: (seen[root] ?? false) || marked.contains(root),
+      root: seen[root] ?? false,
   };
 }
 
@@ -912,10 +910,6 @@ class DiagramState {
   /// The emergency reserve to have before investing.
   double emergencyTarget;
 
-  /// Roots of the tree marked by hand in older versions. The tree now follows
-  /// only what is held; kept so that the data stays the same for every app.
-  final Set<CerradoRoot> treeMarks;
-
   /// Where each stock or fund sits in the triangle.
   final Map<String, PortfolioTier> tiers;
 
@@ -945,7 +939,6 @@ class DiagramState {
     List<String>? etfQuestions,
     this.lastContribution = 0,
     this.emergencyTarget = 20000,
-    Set<CerradoRoot>? treeMarks,
     Map<String, PortfolioTier>? tiers,
     Map<String, String>? sectors,
     Map<String, double>? abroad,
@@ -970,8 +963,7 @@ class DiagramState {
        statusNotes = statusNotes ?? {},
        stockQuestions = stockQuestions ?? List.of(defaultStockQuestions),
        fiiQuestions = fiiQuestions ?? List.of(defaultFiiQuestions),
-       etfQuestions = etfQuestions ?? List.of(defaultEtfQuestions),
-       treeMarks = treeMarks ?? {};
+       etfQuestions = etfQuestions ?? List.of(defaultEtfQuestions);
 
   List<String> questionsOf(QuestionSet set) => switch (set) {
     QuestionSet.stock => stockQuestions,
@@ -1107,11 +1099,6 @@ class DiagramState {
         etfQuestions: (json['etfQuestions'] as List?)?.cast<String>(),
         lastContribution: (json['lastContribution'] as num?)?.toDouble() ?? 0,
         emergencyTarget: (json['emergencyTarget'] as num?)?.toDouble() ?? 20000,
-        treeMarks: {
-          for (final name in (json['treeMarks'] as List? ?? const []))
-            if (CerradoRoot.values.any((r) => r.name == name))
-              CerradoRoot.values.byName(name as String),
-        },
         tiers: {
           for (final e in (json['tiers'] as Map? ?? const {}).entries)
             if (PortfolioTier.values.any((t) => t.name == e.value))
@@ -1154,7 +1141,6 @@ class DiagramState {
     'etfQuestions': etfQuestions,
     'lastContribution': lastContribution,
     'emergencyTarget': emergencyTarget,
-    'treeMarks': [for (final root in treeMarks) root.name],
     'tiers': {for (final e in tiers.entries) e.key: e.value.name},
     'sectors': sectors,
     'abroad': abroad,

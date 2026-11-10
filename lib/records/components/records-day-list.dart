@@ -12,7 +12,7 @@ class RecordsDayList extends StatefulWidget {
 
   final List<Record?> records;
 
-  /// Fork: card bills shown as reminders on their days (see
+  /// Card bills shown as reminders on their days (see
   /// [RecordsPerDay.reminders]); a day with nothing else shows for them.
   final List<UpcomingBill> reminders;
   final Function? onListBackCallback;

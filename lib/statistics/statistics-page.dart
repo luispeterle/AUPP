@@ -18,17 +18,17 @@ class StatisticsPage extends StatefulWidget {
   final DateTime? to;
   final Map<int, Wallet> walletMap;
 
-  /// Fork: shown before the interval in the title (e.g. a budget group).
+  /// Shown before the interval in the title (e.g. a budget group).
   final String? label;
 
-  /// Fork: initial grouping of the expense/income tabs.
+  /// Initial grouping of the expense/income tabs.
   final GroupByType? groupByType;
 
-  /// Fork: first tab "Orçamento" with the budget plan over the interval
+  /// First tab "Orçamento" with the budget plan over the interval
   /// (opened from the Extrato).
   final bool showBudget;
 
-  /// Fork: the Extrato's controller. When set, the title gets the Extrato's
+  /// The Extrato's controller. When set, the title gets the Extrato's
   /// arrows and month ↔ year switch, moving both screens together.
   final TabRecordsController? navigation;
 

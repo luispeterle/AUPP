@@ -8,7 +8,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:aupp/demo/demo-mode.dart';
-import 'package:aupp/dinzo/fork-defaults.dart';
 import 'package:aupp/disguise/calculator-gate.dart';
 import 'package:aupp/fiscal/fiscal-estimates.dart';
 import 'package:aupp/investments/asset-sheet-page.dart';
@@ -19,7 +18,6 @@ import 'package:aupp/services/backup-service.dart';
 import 'package:aupp/services/category-hierarchy.dart';
 import 'package:aupp/services/locale-service.dart';
 import 'package:aupp/services/service-config.dart';
-import 'package:aupp/services/total-wallets.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:aupp/style.dart';
 import 'package:flutter/material.dart';
@@ -157,7 +155,6 @@ void main() {
       ServiceConfig.localTimezone = 'America/Sao_Paulo';
       SharedPreferences.setMockInitialValues({});
       ServiceConfig.sharedPreferences = await SharedPreferences.getInstance();
-      ServiceConfig.initWalletsEnabled();
       await TestDatabaseHelper.setupTestDatabase();
       BackupService.database = ServiceConfig.database;
       await _loadFonts();
@@ -179,8 +176,6 @@ void main() {
             ? await prefs.setInt(key, value)
             : await prefs.setString(key, value as String);
       }
-      await ForkDefaults.applyIfFresh();
-      await TotalWallets.migrateFromIds();
       await CategoryHierarchy.init();
       await FiscalEstimates.init();
       CalculatorGate.startUnlocked();

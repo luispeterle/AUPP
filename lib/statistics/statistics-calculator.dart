@@ -64,7 +64,6 @@ class StatisticsCalculator {
   }) {
     if (records.isEmpty || from == null || to == null) return 0.0;
 
-    // Get daily values
     final dailyValues = _getPeriodValues(
       records,
       AggregationMethod.DAY,
@@ -73,7 +72,6 @@ class StatisticsCalculator {
       isBalance: isBalance,
     );
 
-    // Filter out zero values
     final nonZeroValues = dailyValues.where((v) => v != 0.0).toList();
 
     if (nonZeroValues.isEmpty) return 0.0;

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../models/record.dart';
 
-/// Fork: pays an estimate's Pix copia-e-cola / boleto digitable line by
+/// Pays an estimate's Pix copia-e-cola / boleto digitable line by
 /// copying it: bank apps detect a copied Pix/boleto when opened.
 class PaymentLauncher {
   static Future<void> open(BuildContext context, String code) async {

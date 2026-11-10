@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:aupp/services/crypto-quote-service.dart';
 import 'package:intl/intl.dart';
 import 'package:aupp/components/wallet_icon_square.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
@@ -31,16 +30,16 @@ class WalletPickerPage extends StatefulWidget {
   /// the user of this.
   final DateTime? asOfDate;
 
-  /// Fork (Extrato): balances already computed by the caller (wallet id →
+  /// In the Extrato, balances already computed by the caller (wallet id →
   /// balance, planned records included), shown instead of reading them.
   final Map<int, double>? balances;
 
-  /// Fork (Extrato): when set, each wallet gets a second checkbox, "Total",
+  /// In the Extrato, when set, each wallet gets a second checkbox, "Total",
   /// for the wallets counted in the totals and balance; the page then pops a
   /// [WalletPickerResult].
   final List<Wallet>? initiallyCounted;
 
-  /// Fork (Extrato, with [initiallyCounted]): the "Exibir ocultos" switch
+  /// In the Extrato, with [initiallyCounted]: the "Exibir ocultos" switch
   /// and how many hidden records the period has.
   final bool initiallyShowHidden;
   final int hiddenCount;
@@ -264,7 +263,6 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                             return ListTile(
                               leading: WalletIconSquare(
                                 iconEmoji: wallet.iconEmoji,
-                                imageAsset: cryptoLogoOf(wallet.currency),
                                 iconDataFromDefaultIconSet: wallet.icon,
                                 backgroundColor: wallet.color,
                               ),
@@ -307,7 +305,6 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                           return ListTile(
                             leading: WalletIconSquare(
                               iconEmoji: wallet.iconEmoji,
-                              imageAsset: cryptoLogoOf(wallet.currency),
                               iconDataFromDefaultIconSet: wallet.icon,
                               backgroundColor: wallet.color,
                             ),

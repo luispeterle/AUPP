@@ -6,17 +6,12 @@ import 'package:aupp/statistics/statistics-models.dart';
 import 'package:aupp/utils/constants.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-
-
 DateTime addDuration(DateTime start, Duration duration) {
-  // Convert to UTC
   DateTime utcDateTime = new DateTime.utc(start.year, start.month, start.day,
       start.hour, start.minute, start.second);
 
-  // Add Duration
   DateTime endTime = utcDateTime.add(duration);
 
-  // Convert back
   return new DateTime(endTime.year, endTime.month, endTime.day, endTime.hour,
       endTime.minute, endTime.second);
 }
@@ -118,7 +113,6 @@ DateTime getEndOfWeek(DateTime date) {
   return DateTime(date.year, date.month, date.day + daysToAdd, 23, 59);
 }
 
-
 String getDateStr(DateTime? dateTime, {AggregationMethod? aggregationMethod, bool shortYear = false}) {
   final localeTag = LocaleService.tag;
   if (aggregationMethod != null) {
@@ -165,26 +159,12 @@ String extractWeekdayString(DateTime dateTime) {
       .format(dateTime);
 }
 
-bool isFullMonth(DateTime from, DateTime to) {
-  return from.day == 1 &&
-      getEndOfMonth(from.year, from.month).isAtSameMomentAs(to);
-}
-
 bool isFullYear(DateTime from, DateTime to) {
   // The year picker ends at 23:59, calculateInterval at 23:59:59.
   return from.month == 1 &&
       from.day == 1 &&
       !to.isBefore(new DateTime(from.year, 12, 31, 23, 59)) &&
       to.isBefore(new DateTime(from.year + 1, 1, 1));
-}
-
-bool isFullWeek(DateTime intervalFrom, DateTime intervalTo) {
-  int firstDayOfWeek = getFirstDayOfWeekIndex();
-  int lastDayOfWeek = _getLastDayOfWeek(firstDayOfWeek);
-  
-  return intervalTo.difference(intervalFrom).inDays == 6 &&
-         intervalFrom.weekday == firstDayOfWeek &&
-         intervalTo.weekday == lastDayOfWeek;
 }
 
 tz.TZDateTime createTzDateTime(DateTime utcDateTime, String timeZoneName) {
@@ -194,7 +174,6 @@ tz.TZDateTime createTzDateTime(DateTime utcDateTime, String timeZoneName) {
 
 tz.Location getLocation(String timeZoneName) {
   try {
-    // Use the stored timezone name
     return tz.getLocation(timeZoneName);
   } catch (e) {
     // Fallback if the stored name is invalid or the timezone database isn't loaded
@@ -232,7 +211,6 @@ List<DateTime> calculateMonthCycle(DateTime referenceDate, int startDay) {
     month -= 1;
   }
 
-  // Start Date
   int safeStartDay = startDay.clamp(1, lastDayOf(year, month));
   DateTime from = DateTime(year, month, safeStartDay);
 
@@ -281,4 +259,3 @@ List<DateTime> calculateInterval(
       return [referenceDate, referenceDate];
   }
 }
-

@@ -91,7 +91,7 @@ class AporteShortfall {
     final to = aporte.walletId;
     if (from?.id == null || to == null || from!.id == to) return;
     final existing = await coverOf(aporte);
-    final total = _round(amount + (existing?.transferValue ?? 0));
+    final total = _round(amount + (existing?.value?.abs() ?? 0));
     final transfer = Record(
       -total,
       'Para o aporte: ${aporte.title}',
@@ -103,7 +103,6 @@ class AporteShortfall {
           '${from.name}.',
       walletId: from.id,
       transferWalletId: to,
-      transferValue: total,
       dinzoId: keyFor(aporte.dinzoId!),
     );
     if (existing == null) {

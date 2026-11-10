@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,7 +16,7 @@ import 'package:aupp/services/sync-extensions.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Demo mode (fork, 2026-10-14): typing [code] and "C" on the disguise
+/// Demo mode: typing [code] and "C" on the disguise
 /// calculator restarts the app on made-up data ([DemoData]), to show the app
 /// without the real balances.
 ///
@@ -79,9 +78,6 @@ class DemoMode {
 
   /// Look-and-feel preferences of the real app that the demo copies, so it
   /// looks like the user's own app. Data-bearing ones stay out.
-  @visibleForTesting
-  static const notCarriedForTesting = _notCarried;
-
   static const _notCarried = {
     PreferencesKeys.dinzoConfig,
     PreferencesKeys.assetLots,
@@ -227,7 +223,6 @@ class DemoMode {
         PreferencesKeys.dinzoLastSync,
         DateTime.now().toIso8601String(),
       );
-      await prefs.setBool('forkDefaultsApplied', true);
 
       await DashboardCache.store(seed.dashboard);
       await InvestmentsCache.save(seed.investments);

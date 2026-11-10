@@ -40,7 +40,7 @@ class TabRecordsDatePicker extends StatelessWidget {
     required this.onDateSelected,
   }) : super(key: key);
 
-  /// Tapping the period on the Extrato (fork): the month view opens the month
+  /// Tapping the period on the Extrato: the month view opens the month
   /// picker and the year view the year picker, straight away. Any other view
   /// (date range, all, week) opens the full dialog.
   static Future<void> pickSamePeriod(
@@ -198,7 +198,6 @@ class TabRecordsDatePicker extends StatelessWidget {
       end: currentDate,
     );
 
-    // Get user's first day of week preference
     int firstDayOfWeek = getFirstDayOfWeekIndex();
 
     DateTimeRange? dateTimeRange = await showDateRangePicker(

@@ -29,13 +29,13 @@ void main() {
   }
 
   Future<void> _insertTransfer(dynamic rawDb, int srcWalletId, int destWalletId,
-      double value, double? transferValue) async {
+      double value) async {
     await rawDb.rawInsert(
       """
-      INSERT INTO records (title, value, datetime, timezone, category_name, category_type, wallet_id, transfer_wallet_id, transfer_value)
-      VALUES ('Transfer', ?, 1000000, 'UTC', 'House', 0, ?, ?, ?)
+      INSERT INTO records (title, value, datetime, timezone, category_name, category_type, wallet_id, transfer_wallet_id)
+      VALUES ('Transfer', ?, 1000000, 'UTC', 'House', 0, ?, ?)
     """,
-      [value, srcWalletId, destWalletId, transferValue],
+      [value, srcWalletId, destWalletId],
     );
   }
 
@@ -98,88 +98,16 @@ void main() {
     expect(w2.balance, closeTo(300.0, 0.001)); // 300 + 0
   });
 
-  group('cross-currency transfer balance', () {
-    test('destination wallet balance uses transfer_value when set', () async {
-      DatabaseInterface db = ServiceConfig.database;
-      SqliteDatabase sqliteDb = ServiceConfig.database as SqliteDatabase;
-      final rawDb = (await sqliteDb.database)!;
+  test('a transfer moves its amount to the destination', () async {
+    DatabaseInterface db = ServiceConfig.database;
+    SqliteDatabase sqliteDb = ServiceConfig.database as SqliteDatabase;
+    final rawDb = (await sqliteDb.database)!;
 
-      final usdWallet =
-          await db.addWallet(Wallet('USD', currency: 'USD', initialAmount: 0));
-      final eurWallet =
-          await db.addWallet(Wallet('EUR', currency: 'EUR', initialAmount: 0));
+    final w1 = await db.addWallet(Wallet('W1', initialAmount: 0));
+    final w2 = await db.addWallet(Wallet('W2', initialAmount: 0));
+    await _insertTransfer(rawDb, w1, w2, -50.0);
 
-      // Transfer -100 from USD wallet, destination receives 92 EUR
-      await _insertTransfer(rawDb, usdWallet, eurWallet, -100.0, 92.0);
-
-      final usd = await db.getWalletById(usdWallet);
-      final eur = await db.getWalletById(eurWallet);
-
-      // Source: value is -100
-      expect(usd!.balance, closeTo(-100.0, 0.001));
-      // Destination: uses ABS(transfer_value) = 92
-      expect(eur!.balance, closeTo(92.0, 0.001));
-    });
-
-    test('destination wallet falls back to value when transfer_value is null',
-        () async {
-      DatabaseInterface db = ServiceConfig.database;
-      SqliteDatabase sqliteDb = ServiceConfig.database as SqliteDatabase;
-      final rawDb = (await sqliteDb.database)!;
-
-      final w1 =
-          await db.addWallet(Wallet('W1', currency: 'USD', initialAmount: 0));
-      final w2 =
-          await db.addWallet(Wallet('W2', currency: 'USD', initialAmount: 0));
-
-      // Same-currency transfer: transfer_value is null
-      await _insertTransfer(rawDb, w1, w2, -50.0, null);
-
-      final wallet1 = await db.getWalletById(w1);
-      final wallet2 = await db.getWalletById(w2);
-
-      expect(wallet1!.balance, closeTo(-50.0, 0.001));
-      // Falls back to ABS(value) = 50
-      expect(wallet2!.balance, closeTo(50.0, 0.001));
-    });
-
-    test('source wallet balance is unaffected by transfer_value', () async {
-      DatabaseInterface db = ServiceConfig.database;
-      SqliteDatabase sqliteDb = ServiceConfig.database as SqliteDatabase;
-      final rawDb = (await sqliteDb.database)!;
-
-      final usdWallet = await db
-          .addWallet(Wallet('USD', currency: 'USD', initialAmount: 1000));
-      final eurWallet =
-          await db.addWallet(Wallet('EUR', currency: 'EUR', initialAmount: 0));
-
-      await _insertTransfer(rawDb, usdWallet, eurWallet, -200.0, 184.0);
-
-      final usd = await db.getWalletById(usdWallet);
-
-      // Source balance: initial(1000) + value(-200) = 800
-      expect(usd!.balance, closeTo(800.0, 0.001));
-    });
-
-    test('multiple cross-currency transfers accumulate correctly', () async {
-      DatabaseInterface db = ServiceConfig.database;
-      SqliteDatabase sqliteDb = ServiceConfig.database as SqliteDatabase;
-      final rawDb = (await sqliteDb.database)!;
-
-      final usdWallet =
-          await db.addWallet(Wallet('USD', currency: 'USD', initialAmount: 0));
-      final eurWallet =
-          await db.addWallet(Wallet('EUR', currency: 'EUR', initialAmount: 0));
-
-      // Two transfers from USD to EUR
-      await _insertTransfer(rawDb, usdWallet, eurWallet, -100.0, 92.0);
-      await _insertTransfer(rawDb, usdWallet, eurWallet, -50.0, 46.0);
-
-      final usd = await db.getWalletById(usdWallet);
-      final eur = await db.getWalletById(eurWallet);
-
-      expect(usd!.balance, closeTo(-150.0, 0.001)); // -100 + -50
-      expect(eur!.balance, closeTo(138.0, 0.001)); // 92 + 46
-    });
+    expect((await db.getWalletById(w1))!.balance, closeTo(-50.0, 0.001));
+    expect((await db.getWalletById(w2))!.balance, closeTo(50.0, 0.001));
   });
 }

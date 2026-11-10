@@ -163,7 +163,6 @@ class BalanceTabPageState extends State<BalanceTabPage> {
       } else {
         List<Record?> recordsForList = widget.records;
 
-        // Filter by selected date if any
         if (selectedDate != null) {
           recordsForList = recordsForList.where((r) {
             return truncateDateTime(r!.dateTime, aggregationMethod) ==

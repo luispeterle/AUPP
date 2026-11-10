@@ -2,10 +2,7 @@ import 'package:aupp/models/record.dart';
 import 'package:aupp/statistics/statistics-models.dart';
 import 'package:aupp/statistics/statistics-utils.dart';
 
-/// Utility class for filtering records based on various criteria.
-///
-/// This class centralizes record filtering logic that was previously
-/// duplicated across multiple statistics widgets.
+/// Filters of records shared by the statistics widgets.
 class RecordFilters {
   RecordFilters._(); // Private constructor to prevent instantiation
 
@@ -95,11 +92,6 @@ class RecordFilters {
     }
   }
 
-  /// Filters records that have at least one tag.
-  static List<Record?> withTags(List<Record?> records) {
-    return records.where((r) => r?.tags.isNotEmpty ?? false).toList();
-  }
-
   /// Filters records by wallet.
   ///
   /// If [walletId] is null, returns all records.
@@ -150,22 +142,18 @@ class RecordFilters {
   }) {
     var result = List<Record?>.from(records);
 
-    // Apply date filter
     if (date != null && aggregationMethod != null) {
       result = byDate(result, date, aggregationMethod);
     }
 
-    // Apply category filter
     if (category != null) {
       result = byCategory(result, category, topCategories);
     }
 
-    // Apply tag filter
     if (tag != null) {
       result = byTag(result, tag, topCategories);
     }
 
-    // Apply wallet filter
     if (walletId != null) {
       result = byWallet(result, walletId, topCategories);
     }
@@ -186,12 +174,10 @@ class RecordFilters {
   ) {
     var result = List<Record?>.from(records);
 
-    // Apply date filter
     if (date != null && method != null) {
       result = byDate(result, date, method);
     }
 
-    // Apply tag filter for selected tag
     if (selectedTag != null) {
       result = byTag(result, selectedTag, topCategories);
     }
@@ -212,12 +198,10 @@ class RecordFilters {
   ) {
     var result = List<Record?>.from(records);
 
-    // Apply date filter
     if (date != null && method != null) {
       result = byDate(result, date, method);
     }
 
-    // Apply wallet filter for selected wallet
     if (selectedWallet != null) {
       result = byWallet(result, selectedWallet, topWallets);
     }

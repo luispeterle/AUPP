@@ -448,7 +448,7 @@ class TabRecordsState extends State<TabRecords> {
     );
   }
 
-  /// Fork: the Extrato on the computer, in the idea of the Início: the picture
+  /// The Extrato on the computer, in the idea of the Início: the picture
   /// on top with a sheet rising over it, the summaries on the left and the list
   /// on the right. The summaries stay put while the list scrolls.
   static const double _sheetOverlap = 24;
@@ -657,7 +657,7 @@ class TabRecordsState extends State<TabRecords> {
       onDelete: _batchDelete,
       onSelectAll: _selectAll,
       onDuplicate: _batchDuplicate,
-      onMoveToWallet: ServiceConfig.walletsEnabled ? _batchMoveToWallet : null,
+      onMoveToWallet: _batchMoveToWallet,
       onTitleCase: _batchTitleCase,
       onToggleHidden: _batchToggleHidden,
       selectionAllHidden: _selectionAllHidden,
@@ -682,7 +682,7 @@ class TabRecordsState extends State<TabRecords> {
         onDelete: _batchDelete,
         onSelectAll: _selectAll,
         onDuplicate: _batchDuplicate,
-        onMoveToWallet: ServiceConfig.walletsEnabled ? _batchMoveToWallet : null,
+        onMoveToWallet: _batchMoveToWallet,
         onTitleCase: _batchTitleCase,
         onToggleHidden: _batchToggleHidden,
         selectionAllHidden: _selectionAllHidden,
@@ -701,8 +701,7 @@ class TabRecordsState extends State<TabRecords> {
 
   /// Automatic sync (Dinzo or an extension): running, applied, waiting for
   /// review or failed.
-  /// Fork: sync state as a pill next to the person button, instead of a
-  /// banner over the list (2026-10-29): spinning while Dinzo / an
+  /// Sync state as a pill next to the person button: spinning while Dinzo / an
   /// extension sync, "⚠ Dinzo" when something needs a look (review, failure).
   /// Nothing when all went fine.
   /// Tapping opens the review or the history and clears it.
@@ -825,11 +824,6 @@ class TabRecordsState extends State<TabRecords> {
   Widget _buildSummarySection() => SliverToBoxAdapter(child: _buildSummaryBox());
 
   Widget _buildSummaryBox() {
-    // Hide the wallet/accounts bar when the wallets feature is disabled or the
-    // "Show wallet bar on the homepage" toggle is off. The Income/Expenses/
-    // Balance stats are always shown.
-    final showWalletBar =
-        ServiceConfig.walletsEnabled && ServiceConfig.showWalletBarOnHomepage;
     return Container(
       margin: const EdgeInsets.only(bottom: 5),
       child: DaysSummaryBox(
@@ -852,7 +846,6 @@ class TabRecordsState extends State<TabRecords> {
             ),
           ),
         ),
-        showWalletRow: showWalletBar,
       ),
     );
   }

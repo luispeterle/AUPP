@@ -7,7 +7,6 @@ import 'package:aupp/statistics/statistics-page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../categories/categories-tab-page-view.dart';
-import '../../helpers/alert-dialog-builder.dart';
 import '../../helpers/datetime-utility-functions.dart';
 import '../../helpers/records-utility-functions.dart';
 import '../../models/category.dart';
@@ -34,7 +33,6 @@ class TabRecordsController {
   final GlobalKey<CategoryTabPageViewState> _categoryTabPageViewStateKey =
       GlobalKey();
 
-  // State variables
   List<Record?> records = [];
   List<Record?>? overviewRecords;
   List<Record?> filteredRecords = [];
@@ -43,7 +41,7 @@ class TabRecordsController {
   /// occurrences unless [showUpcoming].
   List<Record?> listedRecords = [];
 
-  /// Fork: the Dinzo's card bills of the period still to come (today's
+  /// The Dinzo's card bills of the period still to come (today's
   /// included), shown on their days as reminders ([RecordsPerDay.reminders]),
   /// even with [showUpcoming] off: they are there to be seen. Never in a
   /// total.
@@ -52,17 +50,15 @@ class TabRecordsController {
   List<Category?> categories = [];
   List<String> tags = [];
 
-  // Filters state variable
   List<Category?> selectedCategories = [];
   List<String> selectedTags = [];
   bool categoryTagOrLogic = true;
   bool tagORLogic = false;
 
-  // Wallet filter state
   List<Wallet> allWallets = [];
   List<Wallet> selectedWallets = [];
 
-  /// Fork: wallets counted in the top totals and balance; empty = the
+  /// Wallets counted in the top totals and balance; empty = the
   /// listed ones ([selectedWallets]).
   List<Wallet> totalWallets = [];
 
@@ -71,12 +67,12 @@ class TabRecordsController {
   /// [totalWallets].
   List<Record?> _beforeWalletFilter = [];
 
-  /// Fork: whether the list also shows records tagged [Record.hiddenTag].
+  /// Whether the list also shows records tagged [Record.hiddenTag].
   bool showHidden = ServiceConfig.sharedPreferences
           ?.getBool(PreferencesKeys.extratoShowHidden) ??
       false;
 
-  /// Fork: whether the list shows the occurrences not stored yet
+  /// Whether the list shows the occurrences not stored yet
   /// (recurrences, estimates); those of today always show. Off at every
   /// start of the app. Only the list: totals and statistics count them.
   static bool showUpcoming = false;
@@ -127,7 +123,6 @@ class TabRecordsController {
     _searchController.dispose();
   }
 
-  // Search functionality
   void _onSearchChanged() => filterRecords();
 
   void startSearch() {
@@ -169,13 +164,11 @@ class TabRecordsController {
               matchesSmartSearch(record?.tags.join(" "), query);
         }
 
-        // Categories
         bool matchesCategories = !hasCategories;
         if (hasCategories) {
           matchesCategories = selectedCategories.contains(record?.category);
         }
 
-        // Tags
         bool matchesTags = !hasTags;
         if (hasTags && record?.tags != null) {
           if (tagORLogic) {
@@ -209,7 +202,6 @@ class TabRecordsController {
     }
 
     _beforeWalletFilter = tempRecords;
-    // Wallet filter
     if (selectedWallets.isNotEmpty) {
       final selectedIds = selectedWallets.map((w) => w.id).toSet();
       tempRecords = applyTransferAwareWalletFilter(tempRecords, selectedIds);
@@ -277,9 +269,7 @@ class TabRecordsController {
   ///
   /// - Source match: include the record unchanged (negative value, money out).
   /// - Destination-only match: include a copy with [value] set to the received
-  ///   amount ([transferValue] for cross-currency, otherwise `value.abs()`).
-  ///   [isDestinationTransferView] is set to true so the UI resolves the
-  ///   display currency from [transferWalletId] instead of [walletId].
+  ///   amount, with [isDestinationTransferView] set.
   /// - Both wallets selected: include once via the source match (no duplicate).
   ///
   /// For a transfer, [isSingleSideTransferView] is set to true exactly when
@@ -287,7 +277,7 @@ class TabRecordsController {
   /// match above did NOT also match the destination, or vice versa. The UI
   /// uses this to color the amount by sign (this side's perspective) instead
   /// of the neutral color a fully-visible (or unfiltered) transfer gets.
-  /// Also used by the home screen's month totals (fork).
+  /// Also used by the home screen's month totals.
   static List<Record?> applyTransferAwareWalletFilter(
     List<Record?> records,
     Set<int?> selectedWalletIds,
@@ -303,14 +293,8 @@ class TabRecordsController {
             ? r!.copyWith(isSingleSideTransferView: !matchesDest)
             : r);
       } else if (matchesDest) {
-        // Show from destination perspective: use the received amount as value.
-        // transferValue holds the destination-currency amount for cross-currency
-        // transfers; fall back to value.abs() for same-currency ones.
-        final receivedAmount =
-            r!.transferValue ?? (r.value != null ? r.value!.abs() : null);
-        result.add(r.copyWith(
-          value: receivedAmount,
-          sourceTransferValue: r.value,
+        result.add(r!.copyWith(
+          value: r.value?.abs(),
           isDestinationTransferView: true,
           // matchesDest-only (this branch) means the source wallet was not
           // selected, so by construction only one side is visible here.
@@ -356,7 +340,6 @@ class TabRecordsController {
         .every((term) => words.any((word) => word.startsWith(term)));
   }
 
-  // Data fetching
   Future<void> updateRecurrentRecordsAndFetchRecords() async {
     var recurrentRecordService =
         RecurrentRecordService();
@@ -386,17 +369,14 @@ class TabRecordsController {
       header = getHeaderFromHomepageTimeInterval(hti);
     }
 
-    // Fork: wallet balances are always the balance at the end of the shown
-    // period (the upstream "Wallet balance" option is ignored): past periods
-    // are a snapshot, current and future ones add every scheduled occurrence
+    // Wallet balances are the balance at the end of the shown period: past
+    // periods are a snapshot, current and future ones add every scheduled occurrence
     // up to the period end (see _loadWallets).
-    _balanceAsOfDate = ServiceConfig.walletsEnabled ? intervalTo : null;
+    _balanceAsOfDate = intervalTo;
 
-    // Update recurrent records and get future records
     List<Record> futureRecords =
         await recurrentRecordService.updateRecurrentRecords(intervalTo);
 
-    // Fetch records from database
     List<Record?> newRecords;
     newRecords = await getRecordsByInterval(_database, intervalFrom, intervalTo);
     backgroundImageIndex = isFullYear(intervalFrom, intervalTo)
@@ -437,7 +417,7 @@ class TabRecordsController {
     await AporteShortfall.mark(newRecords);
 
     // Merge future records with database records.
-    // Fork: only the accounts switched on (person button).
+    // Only the accounts switched on (person button).
     List<Record?> allRecords =
         MoneyAccounts.shown([...newRecords, ...filteredFutureRecords]);
 
@@ -448,7 +428,6 @@ class TabRecordsController {
     _extractCategories(allRecords);
     filterRecords();
 
-    // Handle overview records
     OverviewTimeInterval overviewTimeIntervalEnum =
         getHomepageOverviewWidgetTimeIntervalEnumSetting();
     if (overviewTimeIntervalEnum == OverviewTimeInterval.DisplayedRecords) {
@@ -520,16 +499,6 @@ class TabRecordsController {
   }
 
   Future<void> _loadWallets() async {
-    if (!ServiceConfig.walletsEnabled) {
-      // Wallets feature is disabled: clear wallet state so the homepage shows
-      // no wallet-related UI and no wallet-based record filtering.
-      allWallets = [];
-      selectedWallets = [];
-      _walletPrefsLoaded = false;
-      onStateChanged();
-      return;
-    }
-
     final wallets = await _database.getAllWallets();
     allWallets = wallets.where((w) => !w.isArchived).toList();
 
@@ -604,11 +573,9 @@ class TabRecordsController {
           ifAbsent: () => (record.value ?? 0.0),
         );
       }
-      // For transfers, also credit the destination wallet. Same-currency
-      // transfers store no transferValue: fall back to abs(value), like the
-      // persisted-balance query (ABS(COALESCE(transfer_value, value))).
+      // For transfers, also credit the destination wallet.
       if (record.transferWalletId != null) {
-        final received = record.transferValue ?? record.value;
+        final received = record.value;
         if (received != null) {
           futureSumByWallet.update(
             record.transferWalletId!,
@@ -660,32 +627,23 @@ class TabRecordsController {
     }
   }
 
-  // Navigation methods
   Future<void> navigateToAddNewRecord(BuildContext context,
       {DateTime? initialDate}) async {
     if (_isNavigating) return;
     _isNavigating = true;
     try {
-      var categoryIsSet = await _isThereSomeCategory();
-      // Transfers do not require a category, but they do require the wallets
-      // feature to be available. Let the add flow open when wallets exist even
-      // if the user has not created any categories yet.
-      if (categoryIsSet || ServiceConfig.walletsEnabled) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CategoryTabPageView(
-              goToEditMovementPage: true,
-              key: _categoryTabPageViewStateKey,
-              initialDate: initialDate,
-            ),
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CategoryTabPageView(
+            goToEditMovementPage: true,
+            key: _categoryTabPageViewStateKey,
+            initialDate: initialDate,
           ),
-        );
-        await updateRecurrentRecordsAndFetchRecords();
-        await _loadWallets();
-      } else {
-        await _showNoCategoryDialog(context);
-      }
+        ),
+      );
+      await updateRecurrentRecordsAndFetchRecords();
+      await _loadWallets();
     } finally {
       _isNavigating = false;
     }
@@ -766,37 +724,10 @@ class TabRecordsController {
     );
   }
 
-  // Helper methods
-  Future<bool> _isThereSomeCategory() async {
-    var categories = await _database.getAllCategories();
-    return categories.isNotEmpty;
-  }
-
-  Future<void> _showNoCategoryDialog(BuildContext context) async {
-    AlertDialogBuilder noCategoryDialog = AlertDialogBuilder(
-            'Nenhuma Categoria foi definida ainda.')
-        .addTrueButtonName("OK")
-        .addSubtitle(
-            'Você precisa definir uma categoria primeiro. Vá para a aba Categoria e adicione uma nova categoria.');
-
-    await showDialog(
-      context: context,
-      builder: (context) => noCategoryDialog.build(context),
-    );
-  }
-
-  // Date manipulation methods
   void updateCustomInterval(DateTime from, DateTime to, String newHeader) {
     customIntervalFrom = from;
     customIntervalTo = to;
     header = newHeader;
-  }
-
-  /// TODO Resets the homepage navigation to the default "Current" view.
-  /// Call this whenever preferences (like Start Day or Interval) are changed.
-  void resetHomepageInterval() {
-    customIntervalFrom = null;
-    customIntervalTo = null;
   }
 
   /// Navigates the homepage view forward or backward by a specific number of intervals.
@@ -833,7 +764,7 @@ class TabRecordsController {
     await _showPeriod(hti, targetRef);
   }
 
-  /// Fork: the switch next to the arrows. Month → the year containing it;
+  /// The switch next to the arrows. Month → the year containing it;
   /// year → the month seen before switching (if in that year), else the
   /// current month (this year) or January.
   Future<void> toggleMonthYear() async {
@@ -861,15 +792,15 @@ class TabRecordsController {
 
   DateTime? _monthBeforeYear;
 
-  /// Fork: whether the switch month ↔ year is shown (month or year on screen).
+  /// Whether the switch month ↔ year is shown (month or year on screen).
   bool get canToggleMonthYear =>
       _navPeriod == HomepageTimeInterval.CurrentMonth ||
       _navPeriod == HomepageTimeInterval.CurrentYear;
 
   bool get showsYear => _navPeriod == HomepageTimeInterval.CurrentYear;
 
-  /// The period the arrows move by: the one on screen (fork: a year picked
-  /// while the setting is "month" moves by year), else the setting. Null =
+  /// The period the arrows move by: the one on screen (a year picked while
+  /// the setting is "month" moves by year), else the setting. Null =
   /// not navigable ("All" or a picked range under the "All" setting).
   HomepageTimeInterval? get _navPeriod {
     final setting = getHomepageTimeIntervalEnumSetting();
@@ -889,7 +820,6 @@ class TabRecordsController {
       monthStartDay: startDay,
     );
 
-    // Update the state
     customIntervalFrom = newInterval[0];
     customIntervalTo = newInterval[1];
 
@@ -912,7 +842,6 @@ class TabRecordsController {
     await updateRecurrentRecordsAndFetchRecords();
   }
 
-  // Computed properties
   double getHeaderFontSize() => header.length > 13 ? 18.0 : 22.0;
   double getHeaderPaddingBottom() => header.length > 13 ? 15.0 : 13.0;
 
@@ -927,11 +856,9 @@ class TabRecordsController {
 
   DatabaseInterface get database => _database;
 
-
   get hasActiveFilters =>
       selectedTags.isNotEmpty || selectedCategories.isNotEmpty;
 
-  // Wallet computed properties
   double get totalWalletsBalance =>
       allWallets.fold(0.0, (sum, w) => sum + (w.balance ?? 0.0));
 
@@ -940,7 +867,7 @@ class TabRecordsController {
   List<Wallet> get _countedWallets =>
       totalWallets.isNotEmpty ? totalWallets : selectedWallets;
 
-  /// Fork: whether some wallet is outside the ones behind the totals (money
+  /// Whether some wallet is outside the ones behind the totals (money
   /// can be invested / set aside / taken back from it).
   bool get hasWalletsOutsideTotal {
     final counted = {for (final w in _countedWallets) w.id};

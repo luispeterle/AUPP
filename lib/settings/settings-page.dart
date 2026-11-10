@@ -21,14 +21,9 @@ import 'package:aupp/tags/tags-page-view.dart';
 import 'integrations-item.dart';
 
 // look here for how to store settings
-//https://flutter.dev/docs/cookbook/persistence/key-value
-//https://pub.dev/packages/shared_preferences
 
 class TabSettings extends StatelessWidget {
 
-  static const double kSettingsItemsExtent = 75.0;
-  static const double kSettingsItemsIconPadding = 8.0;
-  static const double kSettingsItemsIconElevation = 2.0;
   final DatabaseInterface database = ServiceConfig.database;
 
   goToRecurrentRecordPage(BuildContext context) async {

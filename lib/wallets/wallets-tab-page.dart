@@ -356,7 +356,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
     return filtered;
   }
 
-  /// Fork: dia a dia, caixinhas, reservas, then the investments, which only
+  /// Dia a dia, caixinhas, reservas, then the investments, which only
   /// show what the positions hold. Dragging reorders inside a section.
   List<Widget> _sections() {
     final sections = WalletSection.split(_walletsByArchiveStatusSorted);
@@ -399,8 +399,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                     }),
                   )
                 : null,
-        // Fork: opened from the Início (no longer a tab), so it gets a back
-        // arrow.
+        // Opened from the Início, so it has a back arrow.
         automaticallyImplyLeading: true,
         actions: [
           if (_inCustomOrderMode)
@@ -416,7 +415,7 @@ class WalletsTabPageState extends State<WalletsTabPage> {
               ),
             )
           else ...[
-            // Fork: what Dinzo says is at each bank.
+            // What Dinzo says is at each bank.
             if (!_showArchived && DinzoSyncService.apiKey != null)
               IconButton(
                 icon: const Icon(Icons.account_balance),

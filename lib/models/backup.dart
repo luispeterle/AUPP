@@ -19,8 +19,6 @@ class Backup extends Model {
   String? version;
   String? databaseVersion;
 
-  /// Raw JSON string of user-defined currencies from SharedPreferences.
-
   /// Portable application preferences captured from SharedPreferences.
   Map<String, dynamic> preferences;
 
@@ -54,9 +52,6 @@ class Backup extends Model {
   }
 
   static Backup fromMap(Map<String, dynamic> map) {
-    // Old backups may carry the profiles the app used to have: ignored.
-
-    // Step 0b: load wallets
     List<Wallet> wallets = [];
     if (map.containsKey('wallets') && map['wallets'] != null) {
       wallets = List.generate(map['wallets'].length, (i) {
@@ -64,15 +59,12 @@ class Backup extends Model {
       });
     }
 
-    // Step 1: load categories. Older backup formats always used this key,
-    // but treating it as optional makes partially exported legacy files safe
-    // to import as well.
-    final categoryMaps = map["categories"] as List? ?? const [];
+    final categoryMaps = map["categories"] as List;
     var categories = List.generate(categoryMaps.length, (i) {
       return Category.fromMap(categoryMaps[i]);
     });
 
-    // Step 2: load records (wallet_id is kept as-is for now; remapping happens in BackupService)
+    // wallet_id is kept as in the backup: BackupService maps it.
     final recordMaps = map["records"] as List? ?? const [];
     var records = List.generate(recordMaps.length, (i) {
       Map<String, dynamic> currentRowMap =
@@ -93,10 +85,7 @@ class Backup extends Model {
       return Record.fromMap(currentRowMap);
     });
 
-    // Step 3: load recurrent record patterns. This key was introduced after
-    // the original backup format, so it may be absent in old backups.
-    final recurrentPatternMaps =
-        map["recurrent_record_patterns"] as List? ?? const [];
+    final recurrentPatternMaps = map["recurrent_record_patterns"] as List;
     var recurrentRecordsPattern =
         List.generate(recurrentPatternMaps.length, (i) {
       Map<String, dynamic> currentRowMap =
@@ -117,7 +106,6 @@ class Backup extends Model {
       return RecurrentRecordPattern.fromMap(currentRowMap);
     });
 
-    // Step 4: load record tag associations
     List<RecordTagAssociation> recordTagAssociations = [];
     if (map.containsKey("record_tag_associations") &&
         map["record_tag_associations"] != null) {
@@ -127,10 +115,6 @@ class Backup extends Model {
       });
     }
 
-    // Older backups may carry a 'budgets' key: budgets were removed from
-    // the fork (2026-10-13), so it is ignored.
-
-    // Extract optional packageName and version
     String? packageName = nonEmptyStringValue(map, 'package_name');
     String? version = nonEmptyStringValue(map, 'version');
     String? databaseVersion = nonEmptyStringValue(map, 'database_version');

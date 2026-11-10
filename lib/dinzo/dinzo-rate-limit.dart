@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 
-/// Client-side budget for the Dinzo API (fork, 2026-10-12). Dinzo allows 120
+/// Client-side budget for the Dinzo API. Dinzo allows 120
 /// requests a minute; the app keeps to [perMinute] so a big investment
 /// portfolio (one request per position) never hits the wall. Requests over
 /// the budget wait in line. The recent requests are kept in preferences, so

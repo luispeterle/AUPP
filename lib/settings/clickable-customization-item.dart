@@ -14,18 +14,6 @@ class ClickableCustomizationItem<T> extends StatelessWidget {
       required this.enabled,
       this.onTap});
 
-  Widget buildHeader() {
-    return Column(
-      children: [
-        ListTile(
-          title: Text(title),
-          subtitle: Text(subtitle),
-        ),
-        Divider()
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListTile(

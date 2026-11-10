@@ -1,7 +1,7 @@
 import 'package:aupp/models/record.dart';
 import 'package:aupp/services/service-config.dart';
 
-/// Fork: the boletos and Pix to pay, for the Início ("Próximas faturas",
+/// The boletos and Pix to pay, for the Início ("Próximas faturas",
 /// the red alert) and the calendar widget.
 class DueBills {
   /// What is paid by boleto or Pix among the stored [records] and the

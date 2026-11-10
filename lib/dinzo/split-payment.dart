@@ -7,7 +7,7 @@ import 'package:aupp/models/wallet.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
 
-/// A purchase paid partly with a caixinha (fork-only, 2026-10-13). The
+/// A purchase paid partly with a caixinha. The
 /// purchase stays one record, linked to Dinzo, in its wallet; the caixinha's
 /// part is a transfer caixinha → that wallet on the same day, keyed
 /// `livre:split:<dinzo_id>` ([Record.splitPrefix]). Balances come out right
@@ -39,18 +39,16 @@ class SplitPayment {
     return ServiceConfig.database.getRecordById(rows.first['id'] as int);
   }
 
-  /// Caixinhas that can pay: every other wallet in the purchase's currency.
+  /// Caixinhas that can pay: every other wallet.
   static Future<List<Wallet>> payers(Record purchase) async {
     final db = ServiceConfig.database;
     final wallets = await db.getAllWallets();
     final defaultId = (await db.getDefaultWallet())?.id;
-    final own = wallets.where((w) => w.id == purchase.walletId).firstOrNull;
     return [
       for (final w in wallets)
         if (!w.isArchived &&
             w.id != purchase.walletId &&
-            !BudgetPlan.isBaseWallet(w, defaultId) &&
-            (w.currency ?? 'BRL') == (own?.currency ?? 'BRL'))
+            !BudgetPlan.isBaseWallet(w, defaultId))
           w,
     ];
   }
@@ -66,7 +64,6 @@ class SplitPayment {
       description: 'Parte paga com a caixinha',
       walletId: from.id,
       transferWalletId: purchase.walletId,
-      transferValue: amount,
       dinzoId: keyFor(purchase.dinzoId!),
       tags: {'Virtual'},
     );
@@ -133,7 +130,7 @@ class _SplitPaymentTileState extends State<SplitPaymentTile> {
       subtitle: Text(
         part == null
             ? 'Toque se parte desta compra saiu de uma caixinha'
-            : '${getCurrencyValueString(part.transferValue ?? 0)} de '
+            : '${getCurrencyValueString(part.value?.abs() ?? 0)} de '
                   '${_payerName ?? 'outra carteira'} · só o resto conta '
                   'no orçamento',
       ),
@@ -150,7 +147,7 @@ class _SplitPaymentTileState extends State<SplitPaymentTile> {
     final controller = TextEditingController(
       text: _part == null
           ? ''
-          : (_part!.transferValue ?? 0).toStringAsFixed(2).replaceAll('.', ','),
+          : (_part!.value?.abs() ?? 0).toStringAsFixed(2).replaceAll('.', ','),
     );
     String? error;
     final result = await showModalBottomSheet<String>(

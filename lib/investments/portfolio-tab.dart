@@ -69,7 +69,7 @@ class PortfolioContext {
   });
 }
 
-/// Fork: everything invested in one page, class by class. Every class starts
+/// Everything invested in one page, class by class. Every class starts
 /// switched on (but the everyday banks' fixed income, which is the wallets'
 /// money); switching one off takes it out of the total, the charts, the
 /// Divisão, the positions and its own cards at the end. Nothing is

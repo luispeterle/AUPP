@@ -35,13 +35,13 @@ void main() {
   }
 
   Future<void> _insertTransfer(dynamic rawDb, int srcWalletId,
-      int destWalletId, double value, double? transferValue, DateTime datetime) async {
+      int destWalletId, double value, DateTime datetime) async {
     await rawDb.rawInsert(
       """
-      INSERT INTO records (title, value, datetime, timezone, category_name, category_type, wallet_id, transfer_wallet_id, transfer_value)
-      VALUES ('Transfer', ?, ?, 'UTC', 'House', 0, ?, ?, ?)
+      INSERT INTO records (title, value, datetime, timezone, category_name, category_type, wallet_id, transfer_wallet_id)
+      VALUES ('Transfer', ?, ?, 'UTC', 'House', 0, ?, ?)
     """,
-      [value, datetime.millisecondsSinceEpoch, srcWalletId, destWalletId, transferValue],
+      [value, datetime.millisecondsSinceEpoch, srcWalletId, destWalletId],
     );
   }
 
@@ -120,7 +120,7 @@ void main() {
           await db.addWallet(Wallet('Src', initialAmount: 1000.0));
       final destId = await db.addWallet(Wallet('Dest', initialAmount: 0.0));
 
-      await _insertTransfer(rawDb, srcId, destId, -200.0, null, after);
+      await _insertTransfer(rawDb, srcId, destId, -200.0, after);
 
       final wallets = await db.getWalletsBalanceAsOf(cutoff);
       final src = wallets.firstWhere((w) => w.id == srcId);
@@ -140,7 +140,7 @@ void main() {
           await db.addWallet(Wallet('Src', initialAmount: 1000.0));
       final destId = await db.addWallet(Wallet('Dest', initialAmount: 0.0));
 
-      await _insertTransfer(rawDb, srcId, destId, -200.0, null, before);
+      await _insertTransfer(rawDb, srcId, destId, -200.0, before);
 
       final wallets = await db.getWalletsBalanceAsOf(cutoff);
       final src = wallets.firstWhere((w) => w.id == srcId);
@@ -148,31 +148,6 @@ void main() {
 
       expect(src.balance, closeTo(800.0, 0.001)); // 1000 - 200
       expect(dest.balance, closeTo(200.0, 0.001)); // falls back to abs(value)
-    });
-
-    test(
-        'cross-currency transfer_value is respected on the destination side, still bounded by cutoff',
-        () async {
-      DatabaseInterface db = ServiceConfig.database;
-      SqliteDatabase sqliteDb = ServiceConfig.database as SqliteDatabase;
-      final rawDb = (await sqliteDb.database)!;
-
-      final usdWallet = await db
-          .addWallet(Wallet('USD', currency: 'USD', initialAmount: 0));
-      final eurWallet = await db
-          .addWallet(Wallet('EUR', currency: 'EUR', initialAmount: 0));
-
-      // Before the cutoff: should count.
-      await _insertTransfer(rawDb, usdWallet, eurWallet, -100.0, 92.0, before);
-      // After the cutoff: should not count.
-      await _insertTransfer(rawDb, usdWallet, eurWallet, -50.0, 46.0, after);
-
-      final wallets = await db.getWalletsBalanceAsOf(cutoff);
-      final usd = wallets.firstWhere((w) => w.id == usdWallet);
-      final eur = wallets.firstWhere((w) => w.id == eurWallet);
-
-      expect(usd.balance, closeTo(-100.0, 0.001));
-      expect(eur.balance, closeTo(92.0, 0.001));
     });
   });
 }

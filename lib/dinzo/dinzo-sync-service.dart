@@ -7,7 +7,6 @@ import 'package:aupp/investments/investments-cache.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
-import 'package:aupp/services/database/money-model-migration.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
@@ -448,7 +447,7 @@ class DinzoSyncService {
     final sqlite = (await SqliteDatabase.instance.database)!;
     for (final item in prepared.plan.items) {
       if (item.categoryType != CategoryType.investment) continue;
-      await MoneyModelMigration.ensureCategory(
+      await SqliteDatabase.ensureCategory(
         sqlite,
         item.desired?.categoryName == Category.withdrawalName
             ? Category.withdrawal()
@@ -792,9 +791,6 @@ class DinzoSyncService {
 
   /// Dinzo dates are calendar days; store them at local noon so no timezone
   /// shift can move a record to the previous or next day.
-  /// Noon of [day] in the local timezone, in UTC (how imports are dated).
-  static DateTime utcNoon(String day) => _utcNoon(day);
-
   static DateTime _utcNoon(String day) {
     final d = DateTime.parse(day);
     final location = getLocation(ServiceConfig.localTimezone);

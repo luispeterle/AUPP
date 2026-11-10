@@ -1,6 +1,6 @@
 // GENERATED from the Dinzo category tree (private/samples/categories.json).
-// Fork-only: the categories a fresh install starts with, instead of the
-// upstream defaults, so a new database already matches Dinzo.
+// The categories a fresh install starts with, so a new database already
+// matches Dinzo.
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 

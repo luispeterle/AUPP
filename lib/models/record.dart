@@ -20,9 +20,8 @@ class Record extends Model {
   String? recurrencePatternId;
   int? walletId;
   int? transferWalletId;
-  double? transferValue;
 
-  /// Dinzo transaction id this record was imported from (fork-only).
+  /// Dinzo transaction id this record was imported from.
   String? dinzoId;
 
   /// JSON snapshot of the fields as last written by the Dinzo sync. Lets the
@@ -30,16 +29,16 @@ class Record extends Model {
   String? dinzoSnapshot;
 
   /// Estimate occurrence this real record was linked to (JSON, see
-  /// EstimateLink; fork-only). Linking consumes the occurrence.
+  /// EstimateLink). Linking consumes the occurrence.
   String? estimateLink;
 
-  /// Fork: a refund and the expense it undoes, linked by the user (JSON on
+  /// A refund and the expense it undoes, linked by the user (JSON on
   /// both, see RefundLink). All of it came back: neither counts. Part of it
   /// (a partial refund): the refund is in the expense's category and takes
   /// that part off it.
   String? refundLink;
 
-  /// Fork, transient: on an income that looks like a refund, an expense of
+  /// Transient: on an income that looks like a refund, an expense of
   /// the same amount it may undo ([RefundLink.markSuggestions]).
   Record? refundSuggestion;
   int aggregatedValues =
@@ -48,15 +47,15 @@ class Record extends Model {
   // Flag to indicate if this is a future record (not persisted to database)
   bool isFutureRecord = false;
 
-  /// Fork, transient: on an aporte from the Dinzo, what the wallet to invest
+  /// Transient: on an aporte from the Dinzo, what the wallet to invest
   /// did not have, so it came from the Conta corrente ([AporteShortfall]).
   double? investShortfall;
 
-  /// Fork, transient: on an estimate occurrence, the real record of the same
+  /// Transient: on an estimate occurrence, the real record of the same
   /// day and amount ([EstimateLink.markMatches]). Then only the real one counts.
   Record? estimateMatch;
 
-  /// Fork, transient: the payment code (Pix or boleto) of an estimate
+  /// Transient: the payment code (Pix or boleto) of an estimate
   /// occurrence, from [RecurrentRecordPattern.paymentCodes].
   String? paymentCode;
 
@@ -72,24 +71,24 @@ class Record extends Model {
     return null;
   }
 
-  /// Fork, transient: on a generated occurrence, its date on the recurrence
+  /// Transient: on a generated occurrence, its date on the recurrence
   /// (before a due date moved it, see [RecurrentRecordPattern.dueDateFor]).
   /// What identifies the occurrence: codes, marks and estimate links.
   DateTime? occurrenceUtc;
 
   DateTime get occurrenceIdUtc => occurrenceUtc ?? utcDateTime;
 
-  /// Fork, transient: its code came without a due date, so the day was not
+  /// Transient: its code came without a due date, so the day was not
   /// checked ([RecurrentRecordPattern.dueDateMissing]): a small calendar.
   bool dueDateUnknown = false;
 
-  /// Fork, transient: the occurrence was marked "Já paguei"
+  /// Transient: the occurrence was marked "Já paguei"
   /// ([RecurrentRecordPattern.isMarkedPaid]).
   bool markedPaid = false;
 
   /// Upcoming occurrence of a boleto / Pix recurrence still without its code
   /// (and not already paid or matched to the real record).
-  /// Fork: real, and nobody chose what it was (the bank sent only "Pix"): the
+  /// Real, and nobody chose what it was (the bank sent only "Pix"): the
   /// Extrato asks for a category.
   bool get needsCategory =>
       !isFutureRecord && category?.name == Category.uncategorizedName;
@@ -115,10 +114,6 @@ class Record extends Model {
   // a transfer (value = received amount, walletId = destination). Not persisted.
   bool isDestinationTransferView = false;
 
-  // Transient: preserves the sent amount when value is replaced by the
-  // received amount in a destination-only wallet view. Not persisted.
-  double? sourceTransferValue;
-
   // Transient: true when a transfer record is shown in a wallet-filtered
   // view that includes only one of its two wallets (source or destination),
   // not both. In that case the amount should be colored by sign like a
@@ -138,7 +133,6 @@ class Record extends Model {
     this.timeZoneName,
     this.walletId,
     this.transferWalletId,
-    this.transferValue,
     Set<String>? tags,
     this.isFutureRecord = false,
     this.dinzoId,
@@ -176,7 +170,6 @@ class Record extends Model {
       recurrencePatternId: map['recurrence_id'],
       walletId: map['wallet_id'] as int?,
       transferWalletId: map['transfer_wallet_id'] as int?,
-      transferValue: (map['transfer_value'] as num?)?.toDouble(),
       dinzoId: map['dinzo_id'] as String?,
       dinzoSnapshot: map['dinzo_snapshot'] as String?,
       estimateLink: map['estimate_link'] as String?,
@@ -201,7 +194,6 @@ class Record extends Model {
       'recurrence_id': recurrencePatternId,
       'wallet_id': walletId,
       'transfer_wallet_id': transferWalletId,
-      'transfer_value': transferValue,
       'dinzo_id': dinzoId,
       'dinzo_snapshot': dinzoSnapshot,
       'estimate_link': estimateLink,
@@ -211,12 +203,12 @@ class Record extends Model {
 
   bool get isTransfer => transferWalletId != null;
 
-  /// Fork: one side of a refund that undid all of its expense
+  /// One side of a refund that undid all of its expense
   /// ([refundLink]): neither counts.
   bool get isRefundPair =>
       refundLink != null && !refundLink!.contains('"partial":true');
 
-  /// Fork: tag that keeps a record out of the Extrato's list (not deleted,
+  /// Tag that keeps a record out of the Extrato's list (not deleted,
   /// still counted in the totals) unless "Exibir ocultos" is on. A tag, not a
   /// column: it goes in the backup and the Dinzo sync keeps tags it didn't
   /// write.
@@ -226,14 +218,14 @@ class Record extends Model {
 
   /// Whether this record counts in the balance. A transfer between the
   /// user's own wallets nets to zero, so it only counts when a wallet filter
-  /// shows just one of its sides (fork, [countsAsSetAside]).
+  /// shows just one of its sides ([countsAsSetAside]).
   bool get countsTowardTotals =>
       !isAdjustment &&
       estimateMatch == null &&
       !isRefundPair &&
       (!isTransfer || isSingleSideTransferView);
 
-  /// Fork: income and expenses are only money that came from outside or is
+  /// Income and expenses are only money that came from outside or is
   /// gone, at full value (a purchase paid partly with a caixinha too). A
   /// transfer is never one of them: see [countsAsSetAside].
   bool get countsAsExpense =>
@@ -248,20 +240,20 @@ class Record extends Model {
       !isTransfer &&
       category?.categoryType == CategoryType.income;
 
-  /// Fork: a transfer between the shown (counted) wallets and another one:
+  /// A transfer between the shown (counted) wallets and another one:
   /// negative = money set aside, positive = taken back (e.g. the caixinha's
   /// part of a purchase). Shown apart from income/expenses; it still moves
   /// the balance. Between two shown wallets, or two others, it doesn't count.
   bool get countsAsSetAside => isTransfer && isSingleSideTransferView;
 
-  /// Fork: money that left the wallet to become an investment: it moves the
+  /// Money that left the wallet to become an investment: it moves the
   /// balance and shows as invested, but it was neither spent nor earned.
   bool get isInvestmentBuy =>
       !isTransfer &&
       category?.categoryType == CategoryType.investment &&
       category?.name == Category.investmentName;
 
-  /// Fork: money that came back from an investment: the opposite of
+  /// Money that came back from an investment: the opposite of
   /// [isInvestmentBuy]. Into the wallet to invest it already counts there;
   /// into another wallet ([BrokerPayment]) it lowers what was invested.
   bool get isInvestmentSell =>
@@ -273,7 +265,7 @@ class Record extends Model {
   /// went to (negative) or came from (positive) the investments.
   bool get isInvestmentFlow => isInvestmentBuy || isInvestmentSell;
 
-  /// Fork: what the wallet to invest gained or lost in a month without an entry
+  /// What the wallet to invest gained or lost in a month without an entry
   /// saying why: interest, and what was not entered.
   bool get isAdjustment =>
       category?.categoryType == CategoryType.investment &&
@@ -287,7 +279,7 @@ class Record extends Model {
       isRefundPair ||
       category?.categoryType == CategoryType.investment;
 
-  /// Fork: part of a purchase paid with a caixinha ([SplitPayment]): a
+  /// Part of a purchase paid with a caixinha ([SplitPayment]): a
   /// transfer caixinha → the purchase's wallet, keyed by the purchase's
   /// dinzo_id. Deleted together with the purchase (see SqliteDatabase).
   static const splitPrefix = 'livre:split:';
@@ -297,24 +289,6 @@ class Record extends Model {
   /// dinzo_id of the purchase this part belongs to.
   String? get splitParentDinzoId =>
       isSplitPart ? dinzoId!.substring(splitPrefix.length) : null;
-
-  /// Destination currency units received per source currency unit sent.
-  /// Derived from the stored amounts so historical transfers keep their rate.
-  double? get transferExchangeRate {
-    final sent = (sourceTransferValue ?? value)?.abs();
-    final received = transferValue;
-    if (!isTransfer ||
-        sent == null ||
-        received == null ||
-        !sent.isFinite ||
-        !received.isFinite ||
-        sent <= 0 ||
-        received <= 0) {
-      return null;
-    }
-    final rate = received / sent;
-    return rate.isFinite && rate > 0 ? rate : null;
-  }
 
   Record copyWith({
     int? id,
@@ -328,11 +302,9 @@ class Record extends Model {
     String? recurrencePatternId,
     int? walletId,
     int? transferWalletId,
-    double? transferValue,
     bool? isFutureRecord,
     bool? isDestinationTransferView,
     bool? isSingleSideTransferView,
-    double? sourceTransferValue,
   }) {
     final copy = Record(
       value ?? this.value,
@@ -345,7 +317,6 @@ class Record extends Model {
       timeZoneName: timeZoneName ?? this.timeZoneName,
       walletId: walletId ?? this.walletId,
       transferWalletId: transferWalletId ?? this.transferWalletId,
-      transferValue: transferValue ?? this.transferValue,
       tags: tags ?? this.tags,
       isFutureRecord: isFutureRecord ?? this.isFutureRecord,
       dinzoId: this.dinzoId,
@@ -358,31 +329,11 @@ class Record extends Model {
         isDestinationTransferView ?? this.isDestinationTransferView;
     copy.isSingleSideTransferView =
         isSingleSideTransferView ?? this.isSingleSideTransferView;
-    copy.sourceTransferValue = sourceTransferValue ?? this.sourceTransferValue;
     copy.paymentCode = paymentCode;
     copy.markedPaid = markedPaid;
     copy.occurrenceUtc = occurrenceUtc;
     copy.dueDateUnknown = dueDateUnknown;
     return copy;
-  }
-
-  Map<String, dynamic> toCsvMap({Map<int, String>? walletNames}) {
-    final walletName =
-        walletId != null ? (walletNames?[walletId] ?? '') : '';
-    return {
-      'title': title,
-      'value': value,
-      'datetime': localDateTime.toIso8601String(),
-      'category_name': category?.name,
-      'category_type': switch (category?.categoryType) {
-        CategoryType.income => "Income",
-        CategoryType.investment => "Investment",
-        _ => "Expense",
-      },
-      'description': description,
-      'tags': tags.join(":"),
-      'wallet': walletName,
-    };
   }
 
   tz.TZDateTime get localDateTime {

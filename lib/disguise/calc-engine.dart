@@ -1,6 +1,6 @@
 import 'package:intl/intl.dart';
 
-/// Pure logic of the disguise calculator (fork, 2026-10-14): typing,
+/// Pure logic of the disguise calculator: typing,
 /// evaluation (with phone-calculator percent rules) and pt-BR formatting.
 /// The expression is kept as typed: digits, ',' and the operators below.
 class CalcEngine {

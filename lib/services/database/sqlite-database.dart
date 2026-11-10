@@ -2,7 +2,6 @@ import 'package:aupp/records/refund-link.dart';
 import 'dart:async';
 import 'dart:io';
 
-
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -37,7 +36,7 @@ class SqliteDatabase implements DatabaseInterface {
 
   SqliteDatabase._privateConstructor();
   static final SqliteDatabase instance = SqliteDatabase._privateConstructor();
-  static int get version => 34;
+  static int get version => 35;
   static Database? _db;
 
   static const String databaseFileName = 'movements.db';
@@ -120,7 +119,6 @@ class SqliteDatabase implements DatabaseInterface {
       // This ensures we write to a writable location, not inside AppImage mount
       final appDocDir = await getApplicationDocumentsDirectory();
       final databasePath = join(appDocDir.path, 'aupp');
-      // Create directory if it doesn't exist
       final dir = Directory(databasePath);
       if (!await dir.exists()) {
         await dir.create(recursive: true);
@@ -209,8 +207,10 @@ class SqliteDatabase implements DatabaseInterface {
       final schema = Sqflite.firstIntValue(
         await db.rawQuery('PRAGMA user_version'),
       );
-      if (schema == null || schema > version) {
-        _logger.warning('Database file has a newer schema: $schema');
+      if (schema == null ||
+          schema > version ||
+          schema < SqliteMigrationService.oldestSupported) {
+        _logger.warning('Database file has an unsupported schema: $schema');
         return null;
       }
       for (final table in ['wallets', 'categories']) {
@@ -244,11 +244,24 @@ class SqliteDatabase implements DatabaseInterface {
     await instance.database;
   }
 
+  /// A category only exists once used.
+  static Future<void> ensureCategory(
+    DatabaseExecutor db,
+    Category category,
+  ) async {
+    final found = await db.query(
+      'categories',
+      where: 'name = ? AND category_type = ?',
+      whereArgs: [category.name, category.categoryType!.index],
+      limit: 1,
+    );
+    if (found.isEmpty) await db.insert('categories', category.toMap());
+  }
+
   Future<Database> init() async {
     try {
       _logger.info('Initializing database...');
 
-      // Initialize FFI for desktop platforms (Linux, Windows, macOS)
       if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
         _logger.debug('Initializing sqflite FFI for desktop platform');
         sqfliteFfiInit();
@@ -274,10 +287,7 @@ class SqliteDatabase implements DatabaseInterface {
           onCreate: SqliteMigrationService.onCreate,
           onUpgrade: SqliteMigrationService.onUpgrade,
           onDowngrade: SqliteMigrationService.onUpgrade,
-          onOpen: (db) async {
-            await SqliteMigrationService.ensureForkSchema(db);
-            await ChangeLog.prune(db);
-          },
+          onOpen: ChangeLog.prune,
         ),
       );
       _logger.info('Database initialized successfully (version: $version)');
@@ -445,7 +455,6 @@ class SqliteDatabase implements DatabaseInterface {
       }
       int recordId = await db.insert("records", record.toMap());
 
-      // Insert tags into records_tags table
       for (String? tag in record.tags) {
         if (tag != null && tag.trim().isNotEmpty) {
           await db.insert("records_tags", {
@@ -473,8 +482,8 @@ class SqliteDatabase implements DatabaseInterface {
 
   static const _insertColumns =
       'title, value, datetime, timezone, category_name, category_type, '
-      'description, recurrence_id, wallet_id, transfer_wallet_id, '
-      'transfer_value, dinzo_id, dinzo_snapshot, estimate_link, refund_link';
+      'description, recurrence_id, wallet_id, transfer_wallet_id, dinzo_id, '
+      'dinzo_snapshot, estimate_link, refund_link';
 
   /// One "?" per column of [_insertColumns].
   static final _insertPlaceholders = List.filled(
@@ -493,7 +502,6 @@ class SqliteDatabase implements DatabaseInterface {
     record.recurrencePatternId,
     record.walletId,
     record.transferWalletId,
-    record.transferValue,
     record.dinzoId,
     record.dinzoSnapshot,
     record.estimateLink,
@@ -506,9 +514,8 @@ class SqliteDatabase implements DatabaseInterface {
       ) ??
       0;
 
-  /// Attaches each record's tags to the row inserted for it. Fork fix
-  /// (2026-10-13): rows are searched only among those inserted after
-  /// [insertedAfter], told apart by dinzo_id, and each row is used once, so
+  /// Attaches each record's tags to the row inserted for it. Rows are
+  /// searched only among those inserted after [insertedAfter], told apart by dinzo_id, and each row is used once, so
   /// identical records (three equal tolls on the same day) each get their
   /// own tags instead of all landing on the first one.
   Future<void> _attachTags(
@@ -579,8 +586,8 @@ class SqliteDatabase implements DatabaseInterface {
         // Skip a record already stored before this batch (restoring the same
         // backup twice). Records from Dinzo are matched by their dinzo_id
         // only; the others by their fields. Rows of this same batch never
-        // count, so identical records inside a backup are all kept (fork fix,
-        // 2026-10-13: three equal tolls on one day became one).
+        // count, so identical records inside a backup are all kept (three
+        // equal tolls on one day).
         batch.rawInsert(
           """
       INSERT INTO records ($_insertColumns)
@@ -739,52 +746,6 @@ class SqliteDatabase implements DatabaseInterface {
     return result.first["cnt"] as int;
   }
 
-  @override
-  Future<Map<String, double>> getLatestMainCurrencyTransferRates(
-      String mainCurrency, DateTime asOf) async {
-    final db = (await database)!;
-    final rows = await db.rawQuery('''
-      SELECT r.value, r.transfer_value,
-             source.currency AS source_currency,
-             destination.currency AS destination_currency
-      FROM records r
-      JOIN wallets source ON source.id = r.wallet_id
-      JOIN wallets destination ON destination.id = r.transfer_wallet_id
-      WHERE r.datetime <= ? AND ABS(r.value) > 0 AND r.transfer_value > 0
-        AND COALESCE(source.currency, '') != COALESCE(destination.currency, '')
-      ORDER BY r.datetime DESC, r.id DESC
-    ''', [asOf.toUtc().millisecondsSinceEpoch]);
-    final rates = <String, double>{};
-    for (final row in rows) {
-      // A wallet without a currency is treated as the main currency.
-      final sourceRaw = row['source_currency'] as String?;
-      final destinationRaw = row['destination_currency'] as String?;
-      final source = (sourceRaw != null && sourceRaw.isNotEmpty)
-          ? sourceRaw
-          : mainCurrency;
-      final destination = (destinationRaw != null && destinationRaw.isNotEmpty)
-          ? destinationRaw
-          : mainCurrency;
-      if (source == destination) continue;
-      final String other;
-      if (source == mainCurrency) {
-        other = destination;
-      } else if (destination == mainCurrency) {
-        other = source;
-      } else {
-        continue;
-      }
-      if (rates.containsKey(other)) continue;
-      final sent = (row['value'] as num).toDouble().abs();
-      final received = (row['transfer_value'] as num).toDouble();
-      if (!sent.isFinite || !received.isFinite) continue;
-      final rate = source == mainCurrency ? received / sent : sent / received;
-      if (!rate.isFinite || rate <= 0 || !(1 / rate).isFinite) continue;
-      rates[other] = rate;
-    }
-    return rates;
-  }
-
   Future<List<String>> suggestedRecordTitles(
     String search,
     String categoryName,
@@ -823,7 +784,7 @@ class SqliteDatabase implements DatabaseInterface {
       columns: ['tag_name'],
       distinct: true,
     );
-    // Fork: plus the tags created before any record uses them.
+    // Plus the tags created before any record uses them.
     final standalone = await db.query('fork_tags', columns: ['name']);
     return {
       ...maps.map((m) => m['tag_name'] as String),
@@ -831,7 +792,7 @@ class SqliteDatabase implements DatabaseInterface {
     };
   }
 
-  /// Fork: makes [tags] exist even with no record using them (bank tags of
+  /// Makes [tags] exist even with no record using them (bank tags of
   /// the connected accounts, see the Dinzo sync).
   Future<void> addStandaloneTags(Iterable<String> tags) async {
     final db = (await database)!;
@@ -984,31 +945,25 @@ class SqliteDatabase implements DatabaseInterface {
     final db = (await database)!;
     _logger.info('Deleting all database data');
 
-    // Step 1: delete everything
     await db.execute("DELETE FROM records");
     await db.execute("DELETE FROM records_tags");
     await db.execute("DELETE FROM recurrent_record_patterns");
     await db.execute("DELETE FROM categories");
     await db.execute("DELETE FROM wallets");
-    // The profiles the app used to have: kept in the schema, left empty.
-    await db.execute("DELETE FROM profiles");
 
-    // Reset all auto-increment sequences to 0
     for (final table in [
       'records',
       'records_tags',
       'recurrent_record_patterns',
       'categories',
       'wallets',
-      'profiles',
     ]) {
       await db.execute("UPDATE SQLITE_SEQUENCE SET SEQ=0 WHERE NAME='$table'");
     }
 
-    // Step 2: recreate the default wallet
     await db.rawInsert(
       "INSERT INTO wallets (name, is_default, is_predefined, sort_order) VALUES (?, 1, 1, 0)",
-      ['Carteira padrão'],
+      [SqliteMigrationService.defaultWalletName],
     );
 
     _db = null;
@@ -1026,7 +981,7 @@ class SqliteDatabase implements DatabaseInterface {
     return """
     SELECT w.*,
            COALESCE(SUM(r.value), 0) +
-           COALESCE((SELECT SUM(ABS(COALESCE(t.transfer_value, t.value))) FROM records t WHERE t.transfer_wallet_id = w.id $asOfTransferFilter), 0) +
+           COALESCE((SELECT SUM(ABS(t.value)) FROM records t WHERE t.transfer_wallet_id = w.id $asOfTransferFilter), 0) +
            w.initial_amount AS balance
     FROM wallets w
     LEFT JOIN records r ON r.wallet_id = w.id $asOfRecordFilter
@@ -1067,7 +1022,7 @@ class SqliteDatabase implements DatabaseInterface {
       """
       SELECT w.*,
              COALESCE(SUM(r.value), 0) +
-             COALESCE((SELECT SUM(ABS(COALESCE(t.transfer_value, t.value))) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
+             COALESCE((SELECT SUM(ABS(t.value)) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
              w.initial_amount AS balance
       FROM wallets w
       LEFT JOIN records r ON r.wallet_id = w.id
@@ -1087,7 +1042,7 @@ class SqliteDatabase implements DatabaseInterface {
       """
       SELECT w.*,
              COALESCE(SUM(r.value), 0) +
-             COALESCE((SELECT SUM(ABS(COALESCE(t.transfer_value, t.value))) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
+             COALESCE((SELECT SUM(ABS(t.value)) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
              w.initial_amount AS balance
       FROM wallets w
       LEFT JOIN records r ON r.wallet_id = w.id
@@ -1153,9 +1108,8 @@ class SqliteDatabase implements DatabaseInterface {
         ) ==
         1;
 
-    // Collect recurrence_ids from patterns being deleted so we can also
-    // clean up records that may have been generated with a mismatched
-    // wallet_id (e.g. NULL wallet due to a past import bug).
+    // Records generated by the patterns being deleted go too, whatever
+    // their wallet.
     final patternRows = await db.query(
       'recurrent_record_patterns',
       columns: ['id'],
@@ -1331,7 +1285,7 @@ class SqliteDatabase implements DatabaseInterface {
     final maps = await db.rawQuery("""
       SELECT w.*,
              COALESCE(SUM(r.value), 0) +
-             COALESCE((SELECT SUM(ABS(COALESCE(t.transfer_value, t.value))) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
+             COALESCE((SELECT SUM(ABS(t.value)) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
              w.initial_amount AS balance
       FROM wallets w
       LEFT JOIN records r ON r.wallet_id = w.id
@@ -1366,7 +1320,7 @@ class SqliteDatabase implements DatabaseInterface {
     final maps = await db.rawQuery("""
       SELECT w.*,
              COALESCE(SUM(r.value), 0) +
-             COALESCE((SELECT SUM(ABS(COALESCE(t.transfer_value, t.value))) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
+             COALESCE((SELECT SUM(ABS(t.value)) FROM records t WHERE t.transfer_wallet_id = w.id), 0) +
              w.initial_amount AS balance
       FROM wallets w
       LEFT JOIN records r ON r.wallet_id = w.id
@@ -1439,14 +1393,12 @@ class SqliteDatabase implements DatabaseInterface {
       whereArgs: [movementId],
     );
 
-    // Delete existing tags for the record
     await db.delete(
       "records_tags",
       where: "record_id = ?",
       whereArgs: [movementId],
     );
 
-    // Insert new tags into records_tags table
     for (String tag in newMovement.tags) {
       if (movementId != null && tag.trim().isNotEmpty) {
         await db.insert("records_tags", {
@@ -1462,7 +1414,7 @@ class SqliteDatabase implements DatabaseInterface {
     return updatedRows;
   }
 
-  /// Fork: deleting a purchase also deletes the part paid with a caixinha
+  /// Deleting a purchase also deletes the part paid with a caixinha
   /// (`livre:split:<dinzo_id>`, see Record.splitPrefix), and deleting an
   /// aporte the transfer that covered it (`livre:cobre:<dinzo_id>`, see
   /// AporteShortfall), and deleting a payment straight from a broker its
@@ -1485,7 +1437,7 @@ class SqliteDatabase implements DatabaseInterface {
     }
   }
 
-  /// Fork: deleting a refund takes it off its expense, and deleting an
+  /// Deleting a refund takes it off its expense, and deleting an
   /// expense lets its refunds go ([RefundLink]).
   Future<void> _releaseRefundPartnersOf(Database db, List<Object?> ids) async {
     if (ids.isEmpty) return;
@@ -1576,7 +1528,6 @@ class SqliteDatabase implements DatabaseInterface {
         tags: Set.from(record.tags),
         walletId: record.walletId,
         transferWalletId: record.transferWalletId,
-        transferValue: record.transferValue,
         recurrencePatternId: record.recurrencePatternId,
         timeZoneName: record.timeZoneName,
       );
@@ -1755,7 +1706,6 @@ class SqliteDatabase implements DatabaseInterface {
       [categoryName, categoryType.index],
     );
 
-    // Update the category in the database
     await db.update(
       "categories",
       {"is_archived": isArchivedInt},
@@ -1826,7 +1776,7 @@ class SqliteDatabase implements DatabaseInterface {
         where: 'tag_name = ?',
         whereArgs: [oldTagName],
       );
-      // Fork: a standalone tag follows the rename.
+      // A standalone tag follows the rename.
       final renamedStandalone = await txn.delete(
         'fork_tags',
         where: 'name = ?',

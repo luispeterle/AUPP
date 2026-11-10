@@ -14,8 +14,6 @@ fi
 
 chmod +x "$app/aupp"
 mkdir -p "$apps" "$icons"
-# Left by the app's old name.
-rm -f "$apps/com.github.emavgl.oinkoin.desktop" "$icons/oinkoin.png"
 cp "$app/aupp.png" "$icons/aupp.png"
 # The launcher points at the file itself: a panel already running does not see
 # icons added to the theme after it started, and shows a blank one.

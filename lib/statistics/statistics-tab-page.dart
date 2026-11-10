@@ -394,7 +394,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
             constraints.maxWidth < AdaptiveColumns.minTwoColumnWidth) {
           return CustomScrollView(slivers: slivers);
         }
-        // Fork: on the computer the overview and chart stay beside the list.
+        // On the computer the overview and chart stay beside the list.
         // The first four slivers are overview, gap, chart, gap.
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,

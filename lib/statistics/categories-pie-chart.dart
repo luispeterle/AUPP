@@ -4,7 +4,6 @@ import 'package:aupp/models/record.dart';
 import 'package:community_charts_flutter/community_charts_flutter.dart'
     as charts;
 
-
 class LinearRecord {
   final String? category;
   final double value;
@@ -118,7 +117,6 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
     final totalSum = aggregatedCategoriesValuesTemporaryMap.values
         .fold<double>(0.0, (sum, value) => sum + value.abs());
 
-
     // Step 1: Sort by magnitude descending (ignoring color)
     var aggregatedCategoriesAndValues =
     aggregatedCategoriesValuesTemporaryMap.entries.toList();
@@ -133,8 +131,6 @@ class _CategoriesPieChartState extends State<CategoriesPieChart> {
 
     var topCategoriesAndValue = aggregatedCategoriesAndValues.sublist(0, limit);
 
-
-    // Store data and colors
     List<LinearRecord> data = [];
     List<Color> linearRecordsColors = [];
 

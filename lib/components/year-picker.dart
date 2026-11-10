@@ -235,8 +235,6 @@ class _DatePickerDialog extends StatefulWidget {
 class _DatePickerDialogState extends State<_DatePickerDialog> {
   DatePickerEntryMode? _entryMode;
   DateTime? _selectedDate;
-  // ignore: unused_field
-  bool? _autoValidate;
   final GlobalKey _calendarPickerKey = GlobalKey();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -245,16 +243,12 @@ class _DatePickerDialogState extends State<_DatePickerDialog> {
     super.initState();
     _entryMode = widget.initialEntryMode;
     _selectedDate = widget.initialDate;
-    _autoValidate = false;
   }
 
   void _handleOk() {
     if (_entryMode == DatePickerEntryMode.input) {
       final FormState form = _formKey.currentState!;
-      if (!form.validate()) {
-        setState(() => _autoValidate = true);
-        return;
-      }
+      if (!form.validate()) return;
       form.save();
     }
     Navigator.pop(context, _selectedDate);
@@ -286,10 +280,7 @@ class _DatePickerDialogState extends State<_DatePickerDialog> {
             return _inputLandscapeDialogSize;
         }
       case DatePickerEntryMode.calendarOnly:
-        // TODO: Handle this case.
-        break;
       case DatePickerEntryMode.inputOnly:
-        // TODO: Handle this case.
         break;
       case null:
         return null;

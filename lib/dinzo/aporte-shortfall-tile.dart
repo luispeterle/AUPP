@@ -62,7 +62,7 @@ class _AporteShortfallTileState extends State<AporteShortfallTile> {
   @override
   Widget build(BuildContext context) {
     final missing = _missing;
-    final covered = _cover?.transferValue;
+    final covered = _cover?.value?.abs();
     if (missing == null && covered == null) return const SizedBox.shrink();
     if (missing == null) {
       return ListTile(

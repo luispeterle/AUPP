@@ -23,7 +23,7 @@ import 'dinzo-sync-page.dart';
 import 'dinzo-sync-service.dart';
 import 'daily-banks-page.dart';
 
-/// Dinzo integration settings (pt-BR only: fork-only screen).
+/// Dinzo integration settings.
 class DinzoSettingsPage extends StatefulWidget {
   const DinzoSettingsPage({Key? key}) : super(key: key);
 

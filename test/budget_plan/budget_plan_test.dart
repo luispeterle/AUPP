@@ -50,7 +50,6 @@ void main() {
     int day, {
     int wallet = 1,
     int? to,
-    double? transferValue,
     String? dinzoId,
     int month = 10,
   }) => Record(
@@ -60,7 +59,6 @@ void main() {
     DateTime.utc(2026, month, day, 12),
     walletId: wallet,
     transferWalletId: to,
-    transferValue: transferValue,
     dinzoId: dinzoId,
   );
 
@@ -136,11 +134,11 @@ void main() {
       record(-80, expense('Restaurante'), 10, wallet: 2), // Vale alimentação
       record(-30, expense('Restaurante'), 10, wallet: 7), // cash
       record(-50, expense('Coisa nova'), 10),
-      record(-2000, null, 1, to: 3, transferValue: 2000), // → Investir
-      record(-500, null, 1, to: 4, transferValue: 500), // → Caixinha Carro
-      record(-200, null, 11, wallet: 4, to: 1, transferValue: 200), // back
-      record(-100, null, 11, wallet: 3, to: 4, transferValue: 100), // ignored
-      record(-1300, null, 2, wallet: 1, to: 2, transferValue: 1300), // base↔base
+      record(-2000, null, 1, to: 3), // → Investir
+      record(-500, null, 1, to: 4), // → Caixinha Carro
+      record(-200, null, 11, wallet: 4, to: 1), // back
+      record(-100, null, 11, wallet: 3, to: 4), // ignored
+      record(-1300, null, 2, wallet: 1, to: 2), // base↔base
       record(-999, expense('Luz'), 12, wallet: 3), // other wallet
       record(-400, expense('Luz'), 20, month: 9), // other month
       record(-700, expense('Luz'), 25), // future
@@ -173,7 +171,7 @@ void main() {
       // Bought for the girlfriend, who paid it back by Pix.
       record(-200, presente, 10)..tags = {outOfBudgetTag},
       record(200, pix, 11)..tags = {outOfBudgetTag},
-      record(-300, null, 11, to: 3, transferValue: 300)..tags = {outOfBudgetTag},
+      record(-300, null, 11, to: 3)..tags = {outOfBudgetTag},
     ];
     final usage = BudgetPlanUsage.compute(
       plan: plan,
@@ -226,7 +224,7 @@ void main() {
         upcoming(record(-1000, expense('Aluguel'), 20)..tags = est),
         upcoming(record(11000, salario, 28)..tags = est),
         // Monthly transfer to a caixinha (not an estimate).
-        upcoming(record(-500, null, 25, to: 4, transferValue: 500)),
+        upcoming(record(-500, null, 25, to: 4)),
         record(-80, expense('Restaurante'), 30), // stored, still ahead
       ],
       walletsById: wallets,
@@ -306,8 +304,8 @@ void main() {
         luz,
         moveis,
         moradia,
-        record(-500, null, 1, to: 4, transferValue: 500, dinzoId: null),
-        record(-200, null, 11, wallet: 4, to: 1, transferValue: 200),
+        record(-500, null, 1, to: 4, dinzoId: null),
+        record(-200, null, 11, wallet: 4, to: 1),
       ],
       walletsById: wallets,
       defaultWalletId: 1,
@@ -388,7 +386,7 @@ void main() {
     // group of the destination; coming back: taken.
     final day = DateTime.utc(2026, 10, 10, 12);
     Record move(double v, int from, int to) => Record(v, 't', null, day,
-        walletId: from, transferWalletId: to, transferValue: v.abs());
+        walletId: from, transferWalletId: to);
     final split = SetAsideSplit(
       TabRecordsController.applyTransferAwareWalletFilter([
         move(-2000, 1, 3), // → Investir

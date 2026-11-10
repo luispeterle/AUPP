@@ -22,14 +22,13 @@ class RecurrentRecordPattern {
   DateTime? utcLastUpdate;
   Set<String> tags = {};
 
-  /// Fork: payment code (Pix copia-e-cola or boleto digitable line) of each
+  /// Payment code (Pix copia-e-cola or boleto digitable line) of each
   /// estimate occurrence, by its local date ([occurrenceKey]): this month's
   /// boleto is not next month's. Column `payment_codes` (JSON), in backups.
   Map<String, String> paymentCodes = {};
 
   /// Entries of [paymentCodes] that are not dates: the recurrence's default
-  /// Pix (a key, or a whole copia-e-cola) and the name for a key's code. An
-  /// older app only looks up dates, so it ignores them.
+  /// Pix (a key, or a whole copia-e-cola) and the name for a key's code.
   static const defaultPixKey = 'pix:padrao';
   static const pixNameKey = 'pix:nome';
 
@@ -38,8 +37,7 @@ class RecurrentRecordPattern {
   /// "Já paguei" on one occurrence, while its real record has not come from
   /// the Dinzo yet: no more alerts. Linking it later works as always. Its
   /// value is the day it was paid, where the occurrence shows; undone, it
-  /// goes back to its day. "1" (an older app, or a day set by hand) leaves
-  /// it on its day.
+  /// goes back to its day. "1" (a day set by hand) leaves it on its day.
   static String paidKey(DateTime local) => 'pago:${occurrenceKey(local)}';
 
   bool isMarkedPaid(DateTime local) => paymentCodes.containsKey(paidKey(local));
@@ -194,7 +192,6 @@ class RecurrentRecordPattern {
       '${local.day.toString().padLeft(2, '0')}';
   int? walletId;
   int? transferWalletId;
-  double? transferValue;
   // Only meaningful when recurrentPeriod == RecurrentPeriod.Custom.
   int? customIntervalValue;
   CustomIntervalUnit? customIntervalUnit;
@@ -208,7 +205,6 @@ class RecurrentRecordPattern {
       this.timeZoneName,
       this.walletId,
       this.transferWalletId,
-      this.transferValue,
       this.customIntervalValue,
       this.customIntervalUnit,
       Set<String>? tags}) {
@@ -235,7 +231,6 @@ class RecurrentRecordPattern {
         timeZoneName = record.timeZoneName,
         walletId = record.walletId,
         transferWalletId = record.transferWalletId,
-        transferValue = record.transferValue,
         tags = record.tags;
 
   /// Serialize to database
@@ -254,7 +249,6 @@ class RecurrentRecordPattern {
       'end_date': utcEndDate?.millisecondsSinceEpoch,
       'wallet_id': walletId,
       'transfer_wallet_id': transferWalletId,
-      'transfer_value': transferValue,
       'custom_interval_value': customIntervalValue,
       'custom_interval_unit': customIntervalUnit?.index,
       'payment_codes': paymentCodes.isEmpty ? null : jsonEncode(paymentCodes),
@@ -310,7 +304,6 @@ class RecurrentRecordPattern {
       timeZoneName: timezone,
       walletId: map['wallet_id'] as int?,
       transferWalletId: map['transfer_wallet_id'] as int?,
-      transferValue: (map['transfer_value'] as num?)?.toDouble(),
       customIntervalValue: map['custom_interval_value'] as int?,
       customIntervalUnit: customIntervalUnitIndex != null
           ? CustomIntervalUnit.values[customIntervalUnitIndex]

@@ -6,9 +6,7 @@ import '../../services/service-config.dart';
 class PreferencesDefaultValues {
   static final defaultValues = <String, dynamic>{
     PreferencesKeys.databaseFolderPath: '', // Empty means the default location
-    PreferencesKeys.walletsEnabled: true, // Default to enabled
-    PreferencesKeys.showWalletBarOnHomepage: true, // Default to enabled
-    // Fork: manual one-off records allowed on a fresh install (the
+    // Manual one-off records allowed on a fresh install (the
     // Dinzo is optional); "Dinzo only" users switch it off.
     PreferencesKeys.allowManualRecords: true,
   };

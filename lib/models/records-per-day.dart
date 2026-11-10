@@ -10,7 +10,7 @@ class RecordsPerDay {
   List<Record?>? records;
   DateTime? dateTime;
 
-  /// Fork: card bills due this day, shown only as reminders: never in the
+  /// Card bills due this day, shown only as reminders: never in the
   /// totals.
   List<UpcomingBill> reminders = [];
 
@@ -44,7 +44,7 @@ class RecordsPerDay {
     return total;
   }
 
-  /// Fork: money set aside (negative) or taken back (positive), see
+  /// Money set aside (negative) or taken back (positive), see
   /// [Record.countsAsSetAside].
   double get setAside => records!
       .where((e) => (e?.countsAsSetAside ?? false) || (e?.isInvestmentFlow ?? false))
@@ -54,7 +54,4 @@ class RecordsPerDay {
     return income - (expenses * -1) + setAside;
   }
 
-  void addMovement(Record movement) {
-    records!.add(movement);
-  }
 }

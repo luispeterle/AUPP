@@ -82,7 +82,7 @@ class BankHoldings {
   }
 }
 
-/// Fork: the balance at each bank Dinzo syncs, as it last came, and how it
+/// The balance at each bank Dinzo syncs, as it last came, and how it
 /// makes up the money the wallets divide.
 class BankBalancesPage extends StatefulWidget {
   const BankBalancesPage({super.key});

@@ -12,7 +12,6 @@ import 'package:aupp/records/controllers/tab_records_controller.dart';
 import 'package:aupp/services/database/database-interface.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
-import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -270,7 +269,6 @@ void main() {
       required int sourceWalletId,
       required int destWalletId,
       required double value,
-      double? transferValue,
     }) => Record(
       value,
       'Transfer',
@@ -278,7 +276,6 @@ void main() {
       DateTime(2026, 6, 1).toUtc(),
       walletId: sourceWalletId,
       transferWalletId: destWalletId,
-      transferValue: transferValue,
     );
 
     test('empty wallet set returns nothing', () {
@@ -351,30 +348,7 @@ void main() {
       expect(records[2].isSingleSideTransferView, false);
     });
 
-    test('cross-currency transfer: destination view uses transferValue, wallet IDs unchanged', () {
-      // 100 USD leaving wallet 1, 90 EUR arriving at wallet 2
-      final records = [
-        transfer(
-          sourceWalletId: 1,
-          destWalletId: 2,
-          value: -100,
-          transferValue: 90,
-        ),
-      ];
-      final result = TabRecordsController.applyTransferAwareWalletFilter(
-        records,
-        {2},
-      );
-      expect(result, hasLength(1));
-      final t = result.first!;
-      expect(t.value, 90); // transferValue, not negated source value
-      // wallet IDs unchanged — currency widget uses transferWalletId for dest currency
-      expect(t.walletId, 1);
-      expect(t.transferWalletId, 2);
-      expect(t.isDestinationTransferView, true);
-    });
-
-    test('same-currency transfer: destination view uses value.abs() when transferValue is null', () {
+    test('destination view shows the amount received', () {
       final records = [
         transfer(sourceWalletId: 1, destWalletId: 2, value: -75),
       ];
@@ -599,38 +573,6 @@ void main() {
       expect(await balanceOf(1), closeTo(900.0, 0.001));
       // Three occurrences (next month, +2, +3), not only the one of +3.
       expect(await balanceOf(3), closeTo(700.0, 0.001));
-    });
-
-    test('when wallets are disabled, no wallets are loaded and the balance stays live', () async {
-      final walletId = await database.addWallet(
-        Wallet('Test Wallet', initialAmount: 100.0),
-      );
-
-      final now = DateTime.now();
-      final periodMonthDate = DateTime(now.year, now.month - 3, 1);
-      final periodFrom = DateTime(
-        periodMonthDate.year,
-        periodMonthDate.month,
-        1,
-      );
-      final periodTo = getEndOfMonth(
-        periodMonthDate.year,
-        periodMonthDate.month,
-      );
-
-      await _insertRecord(
-        walletId,
-        -30.0,
-        periodFrom.add(const Duration(days: 5)),
-      );
-
-      await sharedPreferences.setBool(PreferencesKeys.walletsEnabled, false);
-      controller.updateCustomInterval(periodFrom, periodTo, 'Test Period');
-      await controller.updateRecurrentRecordsAndFetchRecords();
-
-      expect(controller.balanceAsOfDate, isNull);
-      expect(controller.allWallets, isEmpty);
-      expect(controller.selectedWallets, isEmpty);
     });
   });
 }

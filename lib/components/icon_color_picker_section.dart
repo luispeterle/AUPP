@@ -7,7 +7,6 @@ import 'package:aupp/models/category-icons.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/style.dart';
 
-
 /// Shared icon + color picker used by EditCategoryPage and EditWalletPage.
 ///
 /// Displays a grid of FontAwesome icons (with an emoji option at the front) and
@@ -54,7 +53,6 @@ class _IconColorPickerSectionState extends State<IconColorPickerSection> {
   final TextEditingController _emojiController = TextEditingController();
   final ScrollController _colorScrollController = ScrollController();
 
-  // Current tracked selection
   IconData? _currentIcon;
   int? _currentIconCodePoint;
   String? _currentIconEmoji;

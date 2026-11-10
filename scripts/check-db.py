@@ -29,7 +29,6 @@ MONEY_EPS = 0.005
 # The syncs rewrite recent records by themselves: only older ones must be stable.
 SETTLED_DAYS = 45
 # See CryptoQuoteService.coinIds and CategoryType.investment.
-COINS = {'BTC', 'ETH', 'XMR', 'SOL', 'USDT', 'LTC'}
 INVESTMENT_TYPE = 2
 
 
@@ -72,18 +71,15 @@ def check_structure(db, report):
     if result != ['ok']:
         report.error(f'SQLite integrity check: {result[:3]}')
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    for table in ('records', 'wallets', 'categories', 'profiles', 'records_tags'):
+    for table in ('records', 'wallets', 'categories', 'records_tags'):
         if table not in tables:
             report.error(f'Missing table: {table}')
-    if 'change_log' not in tables:
-        report.warn('No change_log table: this database has not run on the current app')
     return tables
 
 
 def check_records(db, report):
     wallets = {r['id']: r for r in db.execute('SELECT * FROM wallets')}
     categories = {(r['name'], r['category_type']) for r in db.execute('SELECT name, category_type FROM categories')}
-    profiles = {r['id'] for r in db.execute('SELECT id FROM profiles')}
     records = db.execute('SELECT * FROM records').fetchall()
     if not records:
         report.error('No records at all')
@@ -103,16 +99,8 @@ def check_records(db, report):
                 report.error(f'{describe(row)}: destination wallet {target} does not exist')
             elif target == row['wallet_id']:
                 report.error(f'{describe(row)}: transfer to its own wallet')
-            elif row['wallet_id'] in wallets:
-                source_currency = wallets[row['wallet_id']]['currency']
-                target_currency = wallets[target]['currency']
-                if source_currency and target_currency and source_currency != target_currency:
-                    if not row['transfer_value']:
-                        report.error(f'{describe(row)}: {source_currency} to {target_currency} without the amount received')
         elif row['category_name'] is not None and (row['category_name'], row['category_type']) not in categories:
             report.warn(f"{describe(row)}: category {row['category_name']!r} does not exist")
-        if row['profile_id'] is not None and row['profile_id'] not in profiles:
-            report.error(f"{describe(row)}: profile {row['profile_id']} does not exist")
     for row in db.execute(
         'SELECT dinzo_id, COUNT(*) n FROM records WHERE dinzo_id IS NOT NULL GROUP BY dinzo_id HAVING n > 1'
     ):
@@ -130,7 +118,7 @@ def balances(db, wallets, until_ms=None):
     for wallet_id, wallet in wallets.items():
         out = db.execute(f'SELECT COALESCE(SUM(value), 0) FROM records WHERE wallet_id = ?{limit}', (wallet_id,)).fetchone()[0]
         into = db.execute(
-            f'SELECT COALESCE(SUM(ABS(COALESCE(transfer_value, value))), 0) FROM records WHERE transfer_wallet_id = ?{limit}',
+            f'SELECT COALESCE(SUM(ABS(value)), 0) FROM records WHERE transfer_wallet_id = ?{limit}',
             (wallet_id,),
         ).fetchone()[0]
         result[wallet_id] = (wallet['initial_amount'] or 0) + out + into
@@ -169,28 +157,18 @@ def check_lots(db, prefs, report):
 def check_money_model(db, wallets, report):
     """Wallets hold what was decided; yield and tax have no entries, and what
     follows a market has no wallet. See lib/dinzo/daily-money.dart."""
-    columns = {r[1] for r in db.execute('PRAGMA table_info(wallets)')}
-    if 'kind' not in columns:
-        report.note('Old model: the app moves it the next time it opens')
-        return
     old = db.execute(
         "SELECT COUNT(*) FROM records WHERE dinzo_id LIKE 'livre:rend:%' OR dinzo_id LIKE 'livre:ir:%' "
         "OR dinzo_id = 'livre:inicial' OR dinzo_id GLOB 'livre:[0-9][0-9][0-9][0-9]-[0-9][0-9]'"
     ).fetchone()[0]
     if old:
         report.error(f'{old} yield, tax or adjustment records: they should not exist')
-    schema = db.execute('PRAGMA user_version').fetchone()[0]
     to_invest = [w for w in wallets.values() if w['kind'] == 'toInvest' and not w['is_archived']]
     if len(to_invest) > 1:
         report.error(f'{len(to_invest)} wallets to invest: there is one')
     for wallet in wallets.values():
-        # Until schema 34 the free wallet is right: the app moves it when it opens.
-        if wallet['kind'] == 'free' and schema >= 34:
+        if wallet['kind'] == 'free':
             report.error(f"Wallet {wallet['name']!r} of the free kind: it became the wallet to invest")
-    for wallet in wallets.values():
-        currency = (wallet['currency'] or '').upper()
-        if currency in COINS and not wallet['is_archived']:
-            report.error(f"Wallet {wallet['name']!r} in {currency}: coins live in their purchases")
     for row in db.execute(
         f'SELECT * FROM records WHERE category_type = {INVESTMENT_TYPE} AND transfer_wallet_id IS NOT NULL'
     ):
@@ -211,7 +189,7 @@ def default_wallet(wallets, current, report):
 
 
 def fingerprint(row):
-    return [row['datetime'], row['value'], row['transfer_value'], row['wallet_id'], row['transfer_wallet_id']]
+    return [row['datetime'], row['value'], row['wallet_id'], row['transfer_wallet_id']]
 
 
 def compare_baseline(db, tables, records, wallets, current, support, report):
@@ -221,12 +199,7 @@ def compare_baseline(db, tables, records, wallets, current, support, report):
         'at': int(dt.datetime.now().timestamp() * 1000),
         'wallets': {w['name']: current[i] for i, w in wallets.items()},
         'records': len(records),
-        # In reais: those of a coin follow its purchases, by themselves.
-        'initial': {
-            w['name']: w['initial_amount'] or 0
-            for w in wallets.values()
-            if (w['currency'] or 'BRL').upper() == 'BRL'
-        },
+        'initial': {w['name']: w['initial_amount'] or 0 for w in wallets.values()},
         # Without a bank's id: those the sync may rewrite, and rightly.
         'settled': sorted(
             json.dumps(fingerprint(r))

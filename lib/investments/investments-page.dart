@@ -17,7 +17,7 @@ import 'portfolio-tab.dart';
 import 'portfolio.dart';
 import 'package:aupp/dinzo/daily-money.dart';
 
-/// Investments tab (fork-only, pt-BR): positions, split, flows, history and
+/// Investments tab (pt-BR): positions, split, flows, history and
 /// income tax, from the Dinzo data cached by the last sync or refresh.
 class InvestmentsPage extends StatefulWidget {
   const InvestmentsPage({Key? key}) : super(key: key);
@@ -202,7 +202,7 @@ class InvestmentsPageState extends State<InvestmentsPage> {
     );
   }
 
-  /// Fork: what is only of the positions here, for the classes shown in the
+  /// What is only of the positions here, for the classes shown in the
   /// Carteira tab.
   List<Widget> _brazilExtras(Set<PortfolioClass> shown) {
     final o = _overview;

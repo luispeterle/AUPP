@@ -91,23 +91,6 @@ String productOf(DinzoInvestment inv) {
   return 'Outros';
 }
 
-/// Icon of a product family (ready for stocks, REITs, ETFs, crypto...).
-IconData productIcon(String product) => switch (product) {
-  'CDB' => Icons.receipt_long,
-  'LCI' || 'LCA' => Icons.home_work,
-  'Cofrinho' => Icons.savings,
-  'Fundo' => Icons.pie_chart,
-  'Ações' => Icons.candlestick_chart,
-  'ETF' => Icons.stacked_line_chart,
-  'FII' => Icons.apartment,
-  'Tesouro' => Icons.account_balance,
-  'Previdência' => Icons.elderly,
-  'Cripto' => Icons.currency_bitcoin,
-  'COE' => Icons.shield,
-  'Renda fixa' => Icons.trending_flat,
-  _ => Icons.category,
-};
-
 /// "120% CDI", "12% a.a.", "12,09% em 12 meses" or null.
 String? rateLabelOf(DinzoInvestment inv) {
   String pct(double v) => '${NumberFormat('#,##0.##', 'pt_BR').format(v)}%';

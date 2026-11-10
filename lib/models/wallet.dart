@@ -6,7 +6,7 @@ import 'package:aupp/models/model.dart';
 import '../helpers/color-utils.dart';
 import 'category.dart';
 
-/// Fork: what a wallet is for. The user chooses it, so a wallet can have any
+/// What a wallet is for. The user chooses it, so a wallet can have any
 /// name.
 enum WalletKind {
   /// A goal or any other money set aside.
@@ -54,14 +54,13 @@ class Wallet extends Model {
 
   static const toInvestName = 'Investir';
 
-  /// Fork: what this wallet is for, see [WalletKind].
+  /// What this wallet is for, see [WalletKind].
   WalletKind kind;
 
   bool get isInvestmentReserve => kind == WalletKind.toInvest;
   bool get isEmergencyReserve => kind == WalletKind.emergency;
   bool get isOpportunityReserve => kind == WalletKind.opportunity;
 
-  String? currency; // ISO 4217 code, e.g. "USD", optional
 
   Wallet(
     this.name, {
@@ -75,7 +74,6 @@ class Wallet extends Model {
     this.isPredefined = false,
     this.sortOrder = 0,
     this.balance,
-    this.currency,
     this.kind = WalletKind.normal,
   }) {
     var categoryIcons = CategoryIcons.category_icons;
@@ -105,7 +103,6 @@ class Wallet extends Model {
       'is_default': isDefault ? 1 : 0,
       'is_predefined': isPredefined ? 1 : 0,
       'sort_order': sortOrder,
-      'currency': currency,
       'kind': kind.name,
     };
     if (color != null) {
@@ -148,7 +145,6 @@ class Wallet extends Model {
       isPredefined: isPredefined,
       sortOrder: sortOrder,
       balance: balance,
-      currency: map['currency'] as String?,
       kind: WalletKind.of(map['kind']),
     );
   }

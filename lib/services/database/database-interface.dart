@@ -37,10 +37,6 @@ abstract class DatabaseInterface {
   Future<DateTime?> getDateTimeFirstRecord();
   Future<List<Record?>> getAllRecords();
 
-  /// Main→other rates from the latest completed cross-currency transfers,
-  /// Ties use record ID.
-  Future<Map<String, double>> getLatestMainCurrencyTransferRates(
-      String mainCurrency, DateTime asOf);
   Future<int> getCountRecords();
   Future<List<Record?>> getAllRecordsInInterval(DateTime? from, DateTime? to);
   Future<Record?> getMatchingRecord(Record? record);
@@ -68,7 +64,7 @@ abstract class DatabaseInterface {
   Future<void> addRecurrentRecordPattern(RecurrentRecordPattern recordPattern);
   Future<void> deleteRecurrentRecordPatternById(String? recurrentPatternId);
 
-  /// Fork: the estimate_link of every record linked to an estimate.
+  /// The estimate_link of every record linked to an estimate.
   Future<List<String>> getEstimateLinks();
   Future<void> updateRecordPatternById(
       String? recurrentPatternId, RecurrentRecordPattern pattern);

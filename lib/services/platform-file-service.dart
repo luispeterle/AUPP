@@ -42,18 +42,15 @@ class PlatformFileService {
     try {
       final fileName = suggestedName ?? sourceFile.path.split('/').last;
 
-      // Determine file extension and type group
       final extension = fileName.split('.').last.toLowerCase();
       final XTypeGroup typeGroup = _getTypeGroup(extension);
 
-      // Show save file dialog
       final FileSaveLocation? result = await getSaveLocation(
         suggestedName: fileName,
         acceptedTypeGroups: [typeGroup],
       );
 
       if (result == null) {
-        // User cancelled
         return false;
       }
 
@@ -119,4 +116,3 @@ class PlatformFileService {
     }
   }
 }
-

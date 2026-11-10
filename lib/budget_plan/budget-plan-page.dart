@@ -10,7 +10,7 @@ import 'package:aupp/models/wallet.dart';
 import 'budget-plan-service.dart';
 import 'budget-plan.dart';
 
-/// Settings → Orçamento (fork-only): how the month's income is split
+/// Settings → Orçamento: how the month's income is split
 /// between the six groups and which categories/wallets feed each one.
 class BudgetPlanPage extends StatefulWidget {
   const BudgetPlanPage({super.key});

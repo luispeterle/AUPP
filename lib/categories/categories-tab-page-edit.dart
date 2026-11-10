@@ -70,7 +70,6 @@ class TabCategoriesState extends State<TabCategories>
     });
   }
 
-  // Load the user's preferred sorting order from shared preferences
   Future<void> _initializeSortPreference() async {
     _selectedSortOption = SortOption.original;
     String key = PreferencesKeys.categoryListSortOption;
@@ -86,7 +85,6 @@ class TabCategoriesState extends State<TabCategories>
     }
   }
 
-  // Store the user's selected sort option in shared preferences
   Future<void> storeOnUserPreferences() async {
     if (_isDefaultOrder) {
       await ServiceConfig.sharedPreferences
@@ -98,7 +96,6 @@ class TabCategoriesState extends State<TabCategories>
     _isDefaultOrder = false;
   }
 
-  // Apply the sort based on the selected option
   void _applySort(SortOption sortOption) {
     switch (sortOption) {
       case SortOption.lastUsed:
@@ -340,8 +337,7 @@ class TabCategoriesState extends State<TabCategories>
                     }),
                   )
                 : null,
-            // Shows a back arrow when opened from Settings (fork: no longer a
-            // bottom-bar tab); a root tab route has nothing to pop.
+            // Opened from Settings, so it has a back arrow.
             automaticallyImplyLeading: true,
             actions: [
               IconButton(
@@ -424,7 +420,6 @@ class TabCategoriesState extends State<TabCategories>
                       : Colors.green[300],
                   onPressed: () async {
                     if (_tabController?.index == 0) {
-                      // Expenses tab
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -435,7 +430,6 @@ class TabCategoriesState extends State<TabCategories>
                       );
                       await refreshCategoriesAndHighlightsTab(0);
                     } else {
-                      // Income tab
                       await Navigator.push(
                         context,
                         MaterialPageRoute(

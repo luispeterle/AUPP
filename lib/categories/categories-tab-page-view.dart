@@ -77,7 +77,6 @@ class CategoryTabPageViewState extends State<CategoryTabPageView> {
     });
   }
 
-  // Load the user's preferred sorting order from shared preferences
   Future<void> _initializeSortPreference() async {
     _selectedSortOption = SortOption.original;
     String key = 'defaultCategorySortOption';
@@ -93,7 +92,6 @@ class CategoryTabPageViewState extends State<CategoryTabPageView> {
     }
   }
 
-  // Store the user's selected sort option in shared preferences
   Future<void> storeOnUserPreferences() async {
     if (_isDefaultOrder) {
       await ServiceConfig.sharedPreferences?.setInt(
@@ -107,7 +105,6 @@ class CategoryTabPageViewState extends State<CategoryTabPageView> {
     _isDefaultOrder = false;
   }
 
-  // Apply the sort based on the selected option
   void _applySort(SortOption sortOption) {
     switch (sortOption) {
       case SortOption.lastUsed:
@@ -268,7 +265,7 @@ class CategoryTabPageViewState extends State<CategoryTabPageView> {
                   },
                 ),
                 Divider(),
-                // Fork: filter the expenses by budget group.
+                // Filter the expenses by budget group.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                   child: Column(
@@ -387,8 +384,7 @@ class CategoryTabPageViewState extends State<CategoryTabPageView> {
 
   @override
   Widget build(BuildContext context) {
-    final showTransferTab =
-        widget.goToEditMovementPage == true && ServiceConfig.walletsEnabled;
+    final showTransferTab = widget.goToEditMovementPage == true;
     return DefaultTabController(
       length: showTransferTab ? 3 : 2,
       initialIndex: widget.initialTabIndex,

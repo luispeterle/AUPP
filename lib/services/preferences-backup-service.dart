@@ -13,25 +13,11 @@ class PreferencesBackupService {
   static final _logger = Logger.withContext('PreferencesBackupService');
 
   static final Set<String> _portableKeys = {
-    // Number and currency formatting
-
-    // Homepage and records
-
-    // Categories and wallets
     PreferencesKeys.categoryListSortOption,
-    // Kept because this legacy key is still written by the category tab.
+    // The order of the categories tab.
     'defaultCategorySortOption',
     PreferencesKeys.walletListSortOption,
-    PreferencesKeys.walletsEnabled,
-    PreferencesKeys.showWalletBarOnHomepage,
-
-    // Statistics
-
-    // In-app keyboard
-
-    // Portable saved data that lives in SharedPreferences
-
-    // Dinzo integration (fork-only). The API key is deliberately absent.
+    // The Dinzo API key is deliberately absent.
     PreferencesKeys.dinzoConfig,
     PreferencesKeys.assetLots,
     PreferencesKeys.dailyBanks,
@@ -52,21 +38,9 @@ class PreferencesBackupService {
   }
 
   static final Map<String, bool Function(Object)> _validators = {
-    // Booleans
-    for (final key in [
-      PreferencesKeys.walletsEnabled,
-      PreferencesKeys.showWalletBarOnHomepage,
-    ])
-      key: (value) => value is bool,
-
-    // Integer options
     PreferencesKeys.categoryListSortOption: _intIn({0, 1, 2, 3}),
     'defaultCategorySortOption': _intIn({0, 1, 2, 3}),
     PreferencesKeys.walletListSortOption: _intIn({0, 1, 2, 3}),
-
-    // Strings with finite option sets.
-
-    // Free-form but typed strings
     PreferencesKeys.dinzoConfig: _isJsonObject,
     PreferencesKeys.assetLots: _isJsonObject,
     PreferencesKeys.dailyBanks: _isJsonObject,

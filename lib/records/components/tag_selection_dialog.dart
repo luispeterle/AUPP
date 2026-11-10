@@ -320,7 +320,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
     );
   }
 
-  /// Fork: banks and payment methods that are not tags yet, ready to add
+  /// Banks and payment methods that are not tags yet, ready to add
   /// with their logo/icon (tags only exist once used, so nothing is created
   /// up front; once used they join the tags above). The banks never used
   /// stay collapsed, unless a search looks for one.
@@ -409,7 +409,6 @@ class _TagSelectionDialogState extends State<TagSelectionDialog>
   }
 
   Widget _buildTagsGrid(ColorScheme colorScheme) {
-    // Removed SingleChildScrollView here (already inside global scroll)
     return Wrap(
       spacing: 8,
       runSpacing: 8,

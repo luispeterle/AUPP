@@ -45,7 +45,6 @@ dependencies:
   flutter_typeahead: ^6.0.0
   file_selector: ^1.1.0
   emoji_picker_flutter: ^4.5.3
-  reorderable_grid: ^1.0.13
   timezone: ^0.11.1
   flutter_timezone: ^5.1.0
   auto_size_text: ^3.0.0

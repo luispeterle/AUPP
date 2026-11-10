@@ -4,7 +4,7 @@ import 'package:aupp/disguise/calculator-gate.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 
-/// Fork: Configurações → "Disfarce e demonstração". The calculator disguise
+/// Configurações → "Disfarce e demonstração". The calculator disguise
 /// is optional (off on a fresh install); the demo can be opened from here
 /// too, so it doesn't depend on the calculator.
 class DisguiseSettingsPage extends StatefulWidget {

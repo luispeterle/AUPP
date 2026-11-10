@@ -14,7 +14,6 @@ import 'package:aupp/hybrid_sync/hybrid-sync-core.dart';
 import 'package:aupp/hybrid_sync/hybrid-sync-merge.dart';
 import 'package:aupp/services/automatic-writes.dart';
 import 'package:aupp/services/backup-directory-service.dart';
-import 'package:aupp/services/backup-service.dart';
 import 'package:aupp/services/category-hierarchy.dart';
 import 'package:aupp/services/database/change-log.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
@@ -34,8 +33,7 @@ import 'package:uuid/uuid.dart';
 /// copy of the last data both had (the base, one per revision, kept in
 /// [_baseDir]): only what the other device changed arrives, and nothing
 /// changed here is lost. Before each join this device's data stays as `.old`.
-/// Without a base (the first sync, or the first one after updating the app
-/// from before the join) it still asks ([incoming], [conflict]), and taking
+/// Without a base (the first sync) it still asks ([incoming], [conflict]), and taking
 /// the other side replaces everything at startup. What the app does by itself
 /// ([AutomaticWrites]) is not sent: each device redoes it.
 /// Arguments of [_sealDatabase].
@@ -59,9 +57,6 @@ class HybridSync {
 
   static const fileName = 'aupp_sync.enc';
 
-  /// Read until this name exists, so that the data still written under the
-  /// app's old name reaches the first device that updates.
-  static const legacyFileName = 'oinkoin_sync.enc';
   static const remoteOldName = '$fileName.old';
   static const _oldSuffix = '.old';
   static const _oldPrefsSuffix = '.old.prefs.json';
@@ -72,37 +67,6 @@ class HybridSync {
   /// would read or write wrong (a breaking change). A device on an older app
   /// that finds a higher level stays read-only until updated ([readOnly]); a
   /// newer database schema does the same by itself.
-  /// 3 (2026-11-02): an occurrence's own Pix / boleto code sets its amount
-  /// (RecurrentRecordPattern.valueFor, also a Pix charge's saved amount); an
-  /// older app would store the average.
-  /// 4 (2026-11-03): the profiles are gone (new rows have no profile_id; an
-  /// older app showing one profile would leave them out), and money between
-  /// the user's own accounts is stored, tagged "Entre contas" (an older app
-  /// would count both sides as income and expense).
-  /// 5 (2026-11-05): an upcoming occurrence edited by hand leaves its
-  /// recurrence ("pular:" in payment_codes) and becomes an item of its own;
-  /// an older app would show both.
-  /// 6 (2026-11-05): C6 Pix without "Pix" in the description and money in
-  /// on a bank account are no longer tagged "Débito"; an older app would tag
-  /// them back on its next Dinzo pull.
-  /// 7 (2026-11-08): money between an everyday bank and a broker is an
-  /// Aporte (or Resgate) of the wallet to invest; an older app would see it
-  /// as hidden in Dinzo and remove it on its next pull. Deleting an aporte
-  /// also deletes the transfer that covered it (`livre:cobre:`); an older
-  /// app would leave it behind.
-  /// 8 (2026-11-09): money moved inside the banks outside the everyday ones
-  /// is left out, and a payment straight from one has a withdrawal (or
-  /// aporte) next to it (`livre:pago:`); an older app would bring the first
-  /// back as income or expense and leave the second behind when deleting.
-  /// 9 (2026-11-09): an aporte whose other side Dinzo does not show (a Pix
-  /// to a crypto exchange, a transfer to myself that reached no everyday
-  /// bank) is an Aporte (or Resgate) too; an older app would remove it on
-  /// its next pull.
-  /// 10 (2026-11-09): refunds and the expense they undo, linked by the user
-  /// (`refund_link` on each): one refund of all of it, neither counts;
-  /// partial ones (several per expense, never more than it) are positive in
-  /// the expense's category. An older app would count them all again and sum
-  /// the partial ones as spending in the balance chart.
   static const dataCompat = 10;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
@@ -128,7 +92,7 @@ class HybridSync {
   /// Raised when the set of portable preferences shrinks: what is hashed
   /// changes, and without this each device would see a change by the user
   /// after updating, then a conflict.
-  static const _prefsHashVersion = 4;
+  static const _prefsHashVersion = 5;
 
   /// Device-only state pointing at the data being replaced (wallet ids change).
   /// The Dinzo key, other logins and the sync bookmarks stay: only the
@@ -138,7 +102,6 @@ class HybridSync {
   ];
   static const _staleKeyPrefixes = [
     'homePageWalletFilter_',
-    'homePageWalletTotals_',
     'walletsTabWalletFilter_',
   ];
 
@@ -214,8 +177,7 @@ class HybridSync {
   // ---------------------------------------------------------------------------
   // The folder
 
-  static Future<String?> _readRemote() async =>
-      await _read(fileName) ?? await _read(legacyFileName);
+  static Future<String?> _readRemote() => _read(fileName);
 
   static Future<String?> _read(String name) async {
     final uri = folderUri;
@@ -706,49 +668,21 @@ class HybridSync {
       );
       return false;
     }
-    final Uint8List opened;
-    String? plain;
+    if (remote.header.payload != payloadDatabase) {
+      await _event('Arquivo de um app antigo demais: nada foi alterado');
+      return false;
+    }
+    final ({String preferences, Uint8List database}) unpacked;
     try {
       final key = await _keyFor(remote.salt);
-      opened = await compute(openSnapshot, remote.openWith(key));
-      if (remote.header.payload == null) {
-        plain = utf8.decode(opened);
-        if ((jsonDecode(plain) as Map<String, dynamic>)['records'] is! List) {
-          throw const FormatException('Snapshot without records');
-        }
-      }
+      final opened = await compute(openSnapshot, remote.openWith(key));
+      unpacked = await compute(unpackDatabase, opened);
     } catch (e, st) {
       _logger.handle(e, st, 'Could not open the sync snapshot');
       await _event('Senha errada ou arquivo danificado: nada foi alterado');
       return false;
     }
-    if (plain == null) {
-      final unpacked = await compute(unpackDatabase, opened);
-      return _replaceFile(unpacked.database, unpacked.preferences);
-    }
-
-    // A file from an app that still sent the backup JSON.
-    await _keepOld();
-    final safety = await BackupService.createJsonBackupFile(
-      backupFileName:
-          'hybrid_sync_legacy_safety${BackupService.MANDATORY_BACKUP_SUFFIX}',
-      directoryPath: (await getTemporaryDirectory()).path,
-    );
-    final dir = await getTemporaryDirectory();
-    final incoming = File(join(dir.path, 'hybrid_sync_incoming_obackup.json'));
-    await incoming.writeAsString(plain, flush: true);
-    try {
-      var ok = await _replaceDataWith(incoming);
-      if (!ok) {
-        await _replaceDataWith(safety);
-        await _event('Não consegui restaurar: seus dados foram mantidos');
-        return false;
-      }
-    } finally {
-      await incoming.delete();
-    }
-    _backupStale = true;
-    return true;
+    return _replaceFile(unpacked.database, unpacked.preferences);
   }
 
   /// Writes the new file next to the database, checks it there, and only then
@@ -794,14 +728,6 @@ class HybridSync {
     for (final key in prefs.getKeys().toList()) {
       if (_staleKeyPrefixes.any(key.startsWith)) await prefs.remove(key);
     }
-  }
-
-  static Future<bool> _replaceDataWith(File backup) async {
-    await ServiceConfig.database.deleteDatabase();
-    await _clearStalePrefs();
-    final ok = await BackupService.importDataFromBackupFile(backup);
-    await CategoryHierarchy.refresh();
-    return ok;
   }
 
   static Future<Directory> _safetyDir() async {
@@ -945,7 +871,6 @@ class HybridSync {
   /// The latest revision both this device and [remote] descend from, among
   /// the ones with a base here.
   static Future<String?> _ancestorFor(SnapshotHeader remote) async {
-    // A file from an app that still sent the backup JSON has no database.
     if (remote.payload != payloadDatabase) return null;
     for (final rev in _chain.reversed) {
       if (rev != remote.rev && !remote.chain.contains(rev)) continue;
@@ -967,7 +892,7 @@ class HybridSync {
   }
 
   /// The database and preferences inside [remote]; null when the password does
-  /// not open it or it is from an app that still sent the backup JSON.
+  /// not open it.
   static Future<({String preferences, Uint8List database})?>
   _openDatabaseSnapshot(SealedSnapshot remote) async {
     if (remote.header.payload != payloadDatabase) return null;
@@ -988,7 +913,6 @@ class HybridSync {
         options: OpenDatabaseOptions(
           version: SqliteDatabase.version,
           onUpgrade: SqliteMigrationService.onUpgrade,
-          onOpen: SqliteMigrationService.ensureForkSchema,
           singleInstance: false,
         ),
       );

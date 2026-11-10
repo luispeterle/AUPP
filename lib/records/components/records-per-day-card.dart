@@ -69,7 +69,7 @@ class RecordsPerDayCard extends StatefulWidget {
 
 class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     with AutomaticKeepAliveClientMixin {
-  // Fork: denser rows (smaller fonts, icon further left, less spacing).
+  // Denser rows (smaller fonts, icon further left, less spacing).
   // The amount leads the row: bigger and bold, tabular figures so amounts
   // line up; the name is plain and smaller.
   final _titleFontStyle =
@@ -93,14 +93,6 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
   }
 
   Future<void> _loadWallets() async {
-    if (!ServiceConfig.walletsEnabled) {
-      if (mounted && _walletsById.isNotEmpty) {
-        setState(() {
-          _walletsById = {};
-        });
-      }
-      return;
-    }
     final wallets = await _database.getAllWallets();
     if (!mounted) return;
     setState(() {
@@ -134,7 +126,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     return formatMoney(recordsTotal(records));
   }
 
-  /// Fork: the part of a purchase paid with a caixinha (Record.splitPrefix)
+  /// The part of a purchase paid with a caixinha (Record.splitPrefix)
   /// is shown on the purchase itself (icon + "R\$ 600 por: Caixinha"), not
   /// as a row of its own — only when the purchase is in this same list (a
   /// view of the caixinha alone still lists its outgoing part).
@@ -468,7 +460,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 movement.tags.where((t) => t != Record.hiddenTag).toSet()),
         ],
       ),
-      // Fork: tapping the code copies it to pay; a boleto / Pix
+      // Tapping the code copies it to pay; a boleto / Pix
       // occurrence still without its code blinks red until it gets one.
       trailing: movement.markedPaid
           ? Row(
@@ -646,7 +638,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     );
   }
 
-  /// Fork: an estimate with a payment code ([Record.paymentCode]): amber
+  /// An estimate with a payment code ([Record.paymentCode]): amber
   /// Pix / boleto button left of the amount; tap copies the code and offers
   /// the bank apps ([PaymentLauncher]).
   Widget _buildPayButton(String code) {
@@ -680,7 +672,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
   bool _offersRefund(Record r) =>
       RefundLink.canBeRefund(r) && RefundLink.looksLikeRefund(r);
 
-  /// Fork: money in that looks like a refund: tapping links it to an
+  /// Money in that looks like a refund: tapping links it to an
   /// expense, the suggested one ([RefundLink.markSuggestions]) or another.
   Widget _buildRefundButton(Record refund) {
     final expense = refund.refundSuggestion;
@@ -749,7 +741,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     );
   }
 
-  /// Fork: a card bill due this day, as a reminder ([RecordsPerDay.reminders]):
+  /// A card bill due this day, as a reminder ([RecordsPerDay.reminders]):
   /// shaped like a row, but faded, italic, with an outlined icon and a gray
   /// amount, so it reads as a note and not as money. It sums nowhere.
   Widget _buildReminderRow(UpcomingBill bill) {

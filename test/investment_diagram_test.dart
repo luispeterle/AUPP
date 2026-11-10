@@ -407,7 +407,7 @@ void main() {
       expect(pending.map((a) => a.key), ['PETR4', 'ITUB4']);
     });
 
-    test('status, notes, dates and the tree survive a round trip', () {
+    test('status, notes and dates survive a round trip', () {
       final state = DiagramState(
         status: {'VALE3': HoldStatus.paused},
         statusNotes: {'VALE3': holdReasons.first},
@@ -415,7 +415,6 @@ void main() {
         skipped: {'ITUB4': {'q'}},
         watchedEtfs: {'IVVB11'},
         emergencyTarget: 30000,
-        treeMarks: {CerradoRoot.company},
       );
       final read = DiagramState.decode(state.encode());
       expect(read.statusOf('VALE3'), HoldStatus.paused);
@@ -427,7 +426,6 @@ void main() {
       expect(read.skipped['ITUB4'], {'q'});
       expect(read.watchedEtfs, {'IVVB11'});
       expect(read.emergencyTarget, 30000);
-      expect(read.treeMarks, {CerradoRoot.company});
       expect(DiagramState().emergencyTarget, 20000);
     });
   });
@@ -559,7 +557,7 @@ void main() {
   });
 
   group('Cerrado tree', () {
-    test('paints what is held and what the user marked', () {
+    test('paints what is held', () {
       final roots = cerradoRoots(
         assets: [
           DiagramAsset(key: 'PETR4', label: 'PETR4', cls: DiagramClass.nationalStock, value: 10),
@@ -569,7 +567,6 @@ void main() {
         ],
         emergencyReserve: 100,
         fixedIncomeHeld: 0,
-        marked: {CerradoRoot.company},
       );
       expect(
         [for (final e in roots.entries) if (e.value) e.key],
@@ -578,7 +575,6 @@ void main() {
           CerradoRoot.stocks,
           CerradoRoot.etfs,
           CerradoRoot.digital,
-          CerradoRoot.company,
         ],
       );
       expect(CerradoRoot.values, hasLength(11));

@@ -241,15 +241,6 @@ Future<List<Record?>> getRecordsByInterval(
   return await database.getAllRecordsInInterval(_from, _to);
 }
 
-Future<List<Record?>> getRecordsByMonth(
-    DatabaseInterface database, int year, int month) async {
-  /// Returns the list of movements of a given month identified by
-  /// :year and :month integers.
-  DateTime _from = new DateTime(year, month, 1);
-  DateTime _to = getEndOfMonth(year, month);
-  return await getRecordsByInterval(database, _from, _to);
-}
-
 Future<List<Record?>> getRecordsByYear(DatabaseInterface database, int year) async {
   /// Returns the list of movements of a given year identified by
   /// :year integer.
@@ -335,7 +326,7 @@ Future<List<Record?>> getRecordsByHomepageTimeInterval(
   }
 }
 
-/// Fork: the caixinha's part of each purchase paid partly with one
+/// The caixinha's part of each purchase paid partly with one
 /// ([Record.isSplitPart]), by the purchase's dinzo_id, when the part enters
 /// the counted wallets ([Record.countsAsSetAside]) and the purchase is in
 /// [records] too: money the month didn't pay.
@@ -354,7 +345,7 @@ Map<String, Record> purchaseParts(Iterable<Record?> records) {
   };
 }
 
-/// Fork: the expenses in [records] at what the month really paid: a
+/// The expenses in [records] at what the month really paid: a
 /// purchase partly paid with a caixinha counts without that part (view
 /// copies, never saved). The full amount stays available from
 /// [Record.countsAsExpense].
@@ -369,7 +360,7 @@ List<Record> realExpenses(Iterable<Record?> records) {
   ];
 }
 
-/// Fork: money moved between the counted wallets and the others
+/// Money moved between the counted wallets and the others
 /// ([Record.countsAsSetAside]), as the summaries show it under income /
 /// expenses / balance: [invested] (to a wallet where [isInvestment] says so,
 /// i.e. Liberdade Financeira in the budget plan), [saved] (other goals, like
@@ -404,7 +395,7 @@ class SetAsideSplit {
 List<Record?> balanceRelevantRecords(List<Record?> records) =>
     records.where((r) => r != null && r.countsTowardTotals).toList();
 
-// Fork: softer green/red (the Material 700/400 shades were too strong).
+// Softer green/red (the Material 700/400 shades were too strong).
 Color incomeAmountColor(Brightness brightness) =>
     brightness == Brightness.dark
         ? const Color(0xFF81B98C)
@@ -438,7 +429,7 @@ Color? getAmountColor(double amount, Brightness brightness) {
 /// Non-transfer records are always colored by sign.
 Color? getRecordAmountColor(Record record, Brightness brightness) {
   if (record.isTransfer && !record.isSingleSideTransferView) return null;
-  // A refund and its expense count for nothing (fork, RefundLink).
+  // A refund and its expense count for nothing (RefundLink).
   if (record.isRefundPair) return null;
   return getAmountColor(record.value ?? 0.0, brightness);
 }

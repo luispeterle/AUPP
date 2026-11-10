@@ -60,7 +60,7 @@ void main() {
     final backup = Backup(
       'AUPP',
       '1.15.14',
-      '32',
+      '35',
       [],
       [],
       [
@@ -73,7 +73,6 @@ void main() {
           id: 'p-investir',
           walletId: 1,
           transferWalletId: 2,
-          transferValue: 2000,
         ),
       ],
       [],

@@ -204,7 +204,6 @@ class RecurrentRecordService {
           recurrencePatternId: recordPattern.id,
           walletId: recordPattern.walletId,
           transferWalletId: recordPattern.transferWalletId,
-          transferValue: recordPattern.transferValue,
           tags: recordPattern.tags,
         );
         newRecord.occurrenceUtc = startDate.toUtc();
@@ -217,7 +216,7 @@ class RecurrentRecordService {
       }
 
       // Helper function to add records with a given interval.
-      // Fork: every occurrence sits on the start date's grid (start + k
+      // Every occurrence sits on the start date's grid (start + k
       // periods), counted from the start and not from the last stored one:
       // a start date changed later (another weekday, another day of the
       // month) moves the occurrences still to come.
@@ -302,7 +301,6 @@ class RecurrentRecordService {
               recurrencePatternId: recordPattern.id,
               walletId: recordPattern.walletId,
               transferWalletId: recordPattern.transferWalletId,
-              transferValue: recordPattern.transferValue,
               tags: recordPattern.tags,
             );
             newRecord.occurrenceUtc = nextDate.toUtc();
@@ -424,7 +422,7 @@ class RecurrentRecordService {
       for (var pattern in patterns) {
         // Generate records up to the specified endDate
         var allRecords = generateRecurrentRecordsFromDateTime(pattern, endDate);
-        // Fork: estimates are forecasts, never stored. Every occurrence is
+        // Estimates are forecasts, never stored. Every occurrence is
         // shown (past ones too) until it is linked to the real record it
         // forecast (see EstimateLink); the estimate is deleted once it ends
         // with nothing left.
@@ -445,7 +443,7 @@ class RecurrentRecordService {
           continue;
         }
 
-        // Fork: a read-only database (data from a newer app) stores nothing:
+        // A read-only database (data from a newer app) stores nothing:
         // what is due shows as upcoming until the app is updated.
         if (SqliteDatabase.readOnly) {
           for (final r in allRecords) {

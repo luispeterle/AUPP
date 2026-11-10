@@ -16,11 +16,6 @@ class AlertDialogBuilder {
     this.subtitle = null;
   }
 
-  AlertDialogBuilder addTitle(String title) {
-    this.title = title;
-    return this;
-  }
-
   AlertDialogBuilder addSubtitle(String subtitle) {
     this.subtitle = subtitle;
     return this;

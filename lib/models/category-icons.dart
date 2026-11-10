@@ -151,7 +151,7 @@ class CategoryIcons {
     FontAwesomeIcons.handHoldingHand.data,
     FontAwesomeIcons.accessibleIcon.data,
 
-    // Dinzo subcategories (fork-only), appended so existing code points keep
+    // Dinzo subcategories, appended so existing code points keep
     // their meaning.
     FontAwesomeIcons.fileInvoiceDollar.data,
     FontAwesomeIcons.moneyCheck.data,

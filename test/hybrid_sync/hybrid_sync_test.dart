@@ -22,6 +22,7 @@ SnapshotHeader _header(
   List<String> chain, {
   int? dbVersion,
   int? compat,
+  String? payload,
 }) => SnapshotHeader(
   rev: rev,
   chain: chain,
@@ -30,6 +31,7 @@ SnapshotHeader _header(
   dbVersion: dbVersion ?? SqliteDatabase.version,
   compat: compat ?? HybridSync.dataCompat,
   appVersion: '9.9.9',
+  payload: payload,
 );
 
 void main() {
@@ -116,10 +118,8 @@ void main() {
       expect(backupsToDelete(names, today), hasLength(5));
       expect(DailyBackup.parse('aupp_sync.enc'), isNull);
     });
-    test('still sees the backups written under the old name', () {
-      final backup = DailyBackup.parse('oinkoin_backup_2026-10-30_celular.enc');
-      expect(backup?.device, 'celular');
-      expect(DailyBackup.parse(DailyBackup.nameFor(today, 'pc')), isNotNull);
+    test('reads the device from the name it writes', () {
+      expect(DailyBackup.parse(DailyBackup.nameFor(today, 'pc'))?.device, 'pc');
     });
   });
 
@@ -172,18 +172,6 @@ void main() {
       );
       final wrong = deriveKey((password: 'outra-senha', salt: sealed.salt));
       expect(() => openSnapshot(sealed.openWith(wrong)), throwsA(anything));
-    });
-
-    test('a snapshot written under the old name still opens', () {
-      final text = sealSnapshot((
-        plain: utf8.encode('{}'),
-        header: _header('a', []),
-        key: key,
-        salt: salt,
-      ));
-      expect(text, contains('aupp-sync-1'));
-      final old = text.replaceFirst('aupp-sync-1', 'oinkoin-sync-1');
-      expect(SealedSnapshot.parse(old).header.rev, 'a');
     });
 
     test('altered header or content does not open', () {
@@ -240,8 +228,8 @@ void main() {
       Record(-10, title, null, DateTime.utc(2026, 9, 1), walletId: 1),
     );
 
-    /// What an app from before the database payload would have written: the
-    /// full backup JSON, with the records' titles changed.
+    /// What another device would have written: this data, with the records'
+    /// titles changed.
     Future<void> writeFromOtherDevice(
       String title, {
       String rev = 'outro',
@@ -251,30 +239,29 @@ void main() {
       int? compat,
     }) async {
       final current = SealedSnapshot.parse(await snapshotFile.readAsString());
-      final backup = await BackupService.createJsonBackupFile(
-        backupFileName: 'other_obackup.json',
-        directoryPath: tmp.path,
+      final copy = (await SqliteDatabase.createDatabaseSnapshot())!;
+      final other = await databaseFactory.openDatabase(
+        copy.path,
+        options: OpenDatabaseOptions(singleInstance: false),
       );
-      final data =
-          jsonDecode(await backup.readAsString()) as Map<String, dynamic>;
-      await backup.delete();
-      for (final record in data['records'] as List) {
-        record['title'] = title;
-      }
+      await other.update('records', {'title': title});
+      await other.close();
       final salt = randomBytes(16);
       await snapshotFile.writeAsString(
         sealSnapshot((
-          plain: utf8.encode(jsonEncode(data)),
+          plain: packDatabase('{}', await copy.readAsBytes()),
           header: _header(
             rev,
             chain ?? [...current.header.chain],
             dbVersion: dbVersion,
             compat: compat,
+            payload: payloadDatabase,
           ),
           key: deriveKey((password: pass, salt: salt)),
           salt: salt,
         )),
       );
+      await copy.delete();
     }
 
     /// The user chose "Usar de ...": the app restarts with this flag.
@@ -312,6 +299,12 @@ void main() {
     }
 
     File oldFile() => File('${tmp.path}/aupp/movements.db.old');
+
+    /// Without a base to join against (the first sync), the app asks.
+    Future<void> forgetBases() async {
+      final bases = Directory('${tmp.path}/hybrid_sync_base');
+      if (await bases.exists()) await bases.delete(recursive: true);
+    }
 
     bool fileHasText(File file, String text) =>
         String.fromCharCodes(file.readAsBytesSync()).contains(text);
@@ -387,27 +380,12 @@ void main() {
     test('newer data asks first, and nothing changes until the user chooses',
         () async {
       await writeFromOtherDevice('do outro');
+      await forgetBases();
       await AutomaticWrites.run(HybridSync.startup);
       await HybridSync.check();
       expect(await titles(), ['segredo local']);
       expect(HybridSync.incoming.value?.rev, 'outro');
       expect(HybridSync.conflict.value, isNull);
-    });
-
-    test('data under the old file name still arrives, and the new name wins',
-        () async {
-      await writeFromOtherDevice('do outro');
-      final legacy = File('${folder.path}/${HybridSync.legacyFileName}');
-      await snapshotFile.rename(legacy.path);
-      await AutomaticWrites.run(HybridSync.startup);
-      await HybridSync.check();
-      expect(HybridSync.incoming.value?.rev, 'outro');
-
-      final sent = await legacy.readAsString();
-      await legacy.writeAsString('arquivo velho, ilegível');
-      await snapshotFile.writeAsString(sent);
-      await HybridSync.check();
-      expect(HybridSync.incoming.value?.rev, 'outro');
     });
 
     test('a database file from another device replaces the local one, which '
@@ -531,23 +509,9 @@ void main() {
       expect(await snapshotFile.readAsString(), isNot(theirs));
     });
 
-    test('a file with the old backup JSON is still followed', () async {
-      await writeFromOtherDevice('do outro');
-      await startupAfterChoosingRemote();
-
-      expect(await titles(), ['do outro']);
-      final prefs = ServiceConfig.sharedPreferences!;
-      expect(prefs.getString(PreferencesKeys.dinzoApiKey), 'dz_live_keep');
-      expect(fileHasText(oldFile(), 'segredo local'), isTrue);
-
-      // In step now: replacing it did not count as a change to send back.
-      final after = await snapshotFile.readAsString();
-      await HybridSync.flush();
-      expect(await snapshotFile.readAsString(), after);
-    });
-
     test('changes on both sides ask, and touch nothing', () async {
       await writeFromOtherDevice('do outro');
+      await forgetBases();
       final remote = await snapshotFile.readAsString();
       await addRecord('tambem local');
       await HybridSync.flush();

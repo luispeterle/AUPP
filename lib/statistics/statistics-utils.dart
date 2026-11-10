@@ -1,25 +1,9 @@
 import 'dart:math';
-import 'dart:ui';
 
-import "package:collection/collection.dart";
 import 'package:intl/intl.dart';
 import 'package:aupp/helpers/datetime-utility-functions.dart';
-import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/statistics/statistics-models.dart';
-
-double computeNumberOfMonthsBetweenTwoDates(DateTime from, DateTime to) {
-  var apprxSizeOfMonth = 30;
-  var numberOfDaysInBetween = from.difference(to).abs().inDays;
-  var numberOfMonths = numberOfDaysInBetween / apprxSizeOfMonth;
-  return numberOfMonths;
-}
-
-double computeNumberOfYearsBetweenTwoDates(DateTime from, DateTime to) {
-  var apprxSizeOfYear = 365;
-  var numberOfDaysInBetween = from.difference(to).abs().inDays;
-  return numberOfDaysInBetween / apprxSizeOfYear;
-}
 
 /// Calculates the number of days between two dates (inclusive).
 int computeNumberOfDays(DateTime from, DateTime to) {
@@ -79,13 +63,6 @@ int computeNumberOfIntervals(
   return count;
 }
 
-double? computeAverage(DateTime from, DateTime to,
-    List<DateTimeSeriesRecord> records, AggregationMethod aggregationMethod) {
-  var sumValues = records.fold(0, (dynamic acc, e) => acc + e.value).abs();
-  int denominator = computeNumberOfIntervals(from, to, aggregationMethod);
-  return sumValues / (denominator == 0 ? 1 : denominator);
-}
-
 DateTime truncateDateTime(
     DateTime dateTime, AggregationMethod? aggregationMethod) {
   DateTime newDateTime;
@@ -122,17 +99,8 @@ DateTime truncateDateTime(
   return newDateTime;
 }
 
-/// Returns [record]'s real value expressed in the user's default (main)
-/// currency, converting from the record's wallet currency when they differ
-/// and a conversion rate is available. The sign is preserved (expenses stay
-/// negative, income positive). Falls back to the raw value when the record
-/// has no currency, the default currency is not set, or no conversion rate
-/// exists.
-///
-/// All aggregation logic works with these real values; callers apply `abs()`
-/// only where a magnitude is needed for representation (chart bars,
-/// percentages, formatted amounts) so multi-currency amounts are aggregated
-/// in a single currency instead of summing raw numeric values (issue #411).
+/// Sums the records' signed values per period; callers apply `abs()` only
+/// where a magnitude is needed for representation.
 List<DateTimeSeriesRecord> aggregateRecordsByDate(
     List<Record?> records, AggregationMethod? aggregationMethod,
     {bool useTagWeight = false}) {
@@ -156,89 +124,6 @@ List<DateTimeSeriesRecord> aggregateRecordsByDate(
   List<DateTimeSeriesRecord> data = aggregatedByDay.values.toList();
   data.sort((a, b) => a.value.abs().compareTo(b.value.abs()));
   return data;
-}
-
-List<Record?> aggregateRecordsByDateAndCategory(
-    List<Record?> records, AggregationMethod? aggregationMethod) {
-  /// Record Day 1: 100 euro Food, 20 euro Food, 30 euro Transport
-  /// Record Day 1: 120 euro food, 30 euro transports.
-  /// Available grouping: by day, month, year.
-  if (aggregationMethod == AggregationMethod.NOT_AGGREGATED)
-    return records; // don't aggregate
-  List<Record?> newAggregatedRecords = [];
-  final categorizedRecords = records
-      .where((record) => record?.category != null && !record!.isOwnMove)
-      .toList();
-  Map<DateTime?, List<Record?>> mapDateTimeRecords = groupBy(categorizedRecords,
-      (Record? obj) => truncateDateTime(obj!.dateTime, aggregationMethod));
-  for (var recordsByDatetime in mapDateTimeRecords.entries) {
-    Map<String?, List<Record?>> mapRecordsCategory =
-        groupBy(recordsByDatetime.value, (Record? obj) => obj!.category!.name);
-    for (var recordsSameDateTimeSameCategory in mapRecordsCategory.entries) {
-      Record? aggregatedRecord;
-      if (recordsSameDateTimeSameCategory.value.length > 1) {
-        Category category = recordsSameDateTimeSameCategory.value[0]!.category!;
-        var value = recordsSameDateTimeSameCategory.value.fold(0,
-            (dynamic previousValue, element) => previousValue + element!.value);
-        aggregatedRecord = Record(value, category.name, category,
-            truncateDateTime(recordsByDatetime.key!, aggregationMethod));
-        aggregatedRecord.aggregatedValues =
-            recordsSameDateTimeSameCategory.value.length;
-      } else {
-        aggregatedRecord = recordsSameDateTimeSameCategory.value[0];
-      }
-      newAggregatedRecords.add(aggregatedRecord);
-    }
-  }
-  return newAggregatedRecords;
-}
-
-// Tag equivalent of aggregateRecordsByDateAndCategory
-List<Record?> aggregateRecordsByDateAndTag(
-    List<Record?> records, AggregationMethod? aggregationMethod, String tag) {
-  /// Same pattern as aggregateRecordsByDateAndCategory but groups by tag instead of category
-  if (aggregationMethod == AggregationMethod.NOT_AGGREGATED)
-    return records; // don't aggregate
-
-  List<Record?> newAggregatedRecords = [];
-  Map<DateTime?, List<Record?>> mapDateTimeRecords = groupBy(records,
-      (Record? obj) => truncateDateTime(obj!.dateTime, aggregationMethod));
-
-  for (var recordsByDatetime in mapDateTimeRecords.entries) {
-    Map<String?, List<Record?>> mapRecordsTag = groupBy(recordsByDatetime.value,
-        (Record? obj) => obj!.tags.contains(tag) ? tag : null);
-
-    for (var recordsSameDateTimeSameTag in mapRecordsTag.entries) {
-      if (recordsSameDateTimeSameTag.key == null)
-        continue; // Skip records without the tag
-
-      Record? aggregatedRecord;
-      if (recordsSameDateTimeSameTag.value.length > 1) {
-        // Use the category from the first record for the aggregated record
-        Category? category = recordsSameDateTimeSameTag.value[0]!.category;
-        var value = recordsSameDateTimeSameTag.value.fold(0,
-            (dynamic previousValue, element) => previousValue + element!.value);
-        // Use category name as title instead of tag for better display
-        String? title = category?.name ?? tag;
-        aggregatedRecord = Record(value, title, category,
-            truncateDateTime(recordsByDatetime.key!, aggregationMethod));
-        aggregatedRecord.tags = {tag};
-        aggregatedRecord.aggregatedValues =
-            recordsSameDateTimeSameTag.value.length;
-      } else {
-        aggregatedRecord = recordsSameDateTimeSameTag.value[0];
-      }
-      newAggregatedRecords.add(aggregatedRecord);
-    }
-  }
-  return newAggregatedRecords;
-}
-
-int getColorSortValue(Color color) {
-  int red = (color.r * 255).toInt();
-  int green = (color.g * 255).toInt();
-  int blue = (color.b * 255).toInt();
-  return (red << 16) | (green << 8) | blue;
 }
 
 DateTime getEndOfInterval(
@@ -419,100 +304,5 @@ class ChartDateRangeConfig {
     }
     final endDay = weekEnd.day;
     return '$startDay-$endDay';
-  }
-}
-
-/// Generates tick labels for chart axes.
-/// Shared between bar-chart and balance-chart to ensure consistent tick display.
-class ChartTickGenerator {
-  /// Generates X-axis tick labels for DAY aggregation with month boundaries.
-  /// Shows month boundaries with M/D format (e.g., "2/20") and other days as just day numbers.
-  static List<String> generateDayTicks(DateTime start, DateTime end) {
-    final int days = end.difference(start).inDays + 1;
-    final int jump = max(1, (days / 12).ceil());
-
-    final List<String> ticks = [];
-    DateTime current = start;
-
-    while (!current.isAfter(end)) {
-      final bool isMonthStart = current.day == 1;
-      // Only show month at the start of a month (day 1)
-      // Example: 30 March to 3 April -> "30 31 1/4 2 3"
-
-      final String label =
-          isMonthStart ? "${current.month}/${current.day}" : "${current.day}";
-
-      ticks.add(label);
-      current = current.add(Duration(days: jump));
-    }
-
-    // Ensure end date is always shown
-    final String endLabel =
-        end.day == 1 ? "${end.month}/${end.day}" : "${end.day}";
-    if (ticks.last != endLabel) {
-      ticks.add(endLabel);
-    }
-
-    return ticks;
-  }
-
-  /// Generic tick generator for all aggregation methods.
-  static List<String> generateTicks(ChartDateRangeConfig config) {
-    List<String> ticks;
-    switch (config.aggregationMethod) {
-      case AggregationMethod.DAY:
-        ticks = generateDayTicks(config.start, config.end);
-        break;
-
-      case AggregationMethod.WEEK:
-        ticks = _generateWeekTicks(config.start, config.end);
-        break;
-
-      case AggregationMethod.MONTH:
-        ticks = _generateMonthTicks(config.start, config.end);
-        break;
-
-      case AggregationMethod.YEAR:
-        ticks = _generateYearTicks(config.start, config.end);
-        break;
-
-      default:
-        ticks = [];
-    }
-    return ticks;
-  }
-
-  static List<String> _generateWeekTicks(DateTime start, DateTime end) {
-    final List<String> ticks = [];
-    DateTime current = start;
-    while (!current.isAfter(end)) {
-      final weekEnd = current.add(Duration(days: 6));
-      final endDay = weekEnd.month != current.month
-          ? DateTime(current.year, current.month + 1, 0).day
-          : weekEnd.day;
-      ticks.add("${current.day}-$endDay");
-      current = current.add(Duration(days: 7));
-    }
-    return ticks;
-  }
-
-  static List<String> _generateMonthTicks(DateTime start, DateTime end) {
-    final List<String> ticks = [];
-    DateTime current = start;
-    while (!current.isAfter(end)) {
-      ticks.add("${current.month}");
-      current = DateTime(current.year, current.month + 1);
-    }
-    return ticks;
-  }
-
-  static List<String> _generateYearTicks(DateTime start, DateTime end) {
-    final List<String> ticks = [];
-    DateTime current = start;
-    while (!current.isAfter(end)) {
-      ticks.add("${current.year}");
-      current = DateTime(current.year + 1);
-    }
-    return ticks;
   }
 }

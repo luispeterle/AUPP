@@ -41,7 +41,7 @@ import 'due-today-alert.dart';
 
 import 'package:aupp/dinzo/estimate-link.dart';
 
-/// Home screen (fork-only, pt-BR): what needs attention now. Shows the cached
+/// Home screen (pt-BR): what needs attention now. Shows the cached
 /// Dinzo data at once and refreshes it in the background every time it is
 /// shown; month totals and the budget split come from the local records.
 class DashboardPage extends StatefulWidget {
@@ -283,7 +283,7 @@ class DashboardPageState extends State<DashboardPage> {
       if (r.value == null || r.estimateMatch != null) continue;
       if (r.walletId == defaultWallet?.id) freePending += r.value!;
       if (r.transferWalletId == defaultWallet?.id) {
-        freePending -= r.transferValue ?? r.value!;
+        freePending -= r.value!;
       }
     }
 
@@ -492,7 +492,7 @@ class DashboardPageState extends State<DashboardPage> {
 
   Widget _buildHero() {
     const shadow = [Shadow(blurRadius: 8, color: Colors.black54)];
-    // Only the money waiting to be invested (user's choice, 2026-10-12):
+    // Only the money waiting to be invested:
     // caixinhas, crypto and yield have their own screens.
     // The month's estimates count: the big number is how the month ends.
     final pending = _freePending.abs() >= 0.005;
@@ -597,12 +597,7 @@ class DashboardPageState extends State<DashboardPage> {
                     ],
                   ),
                 ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: ServiceConfig.walletsEnabledNotifier,
-                  builder: (context, enabled, _) => enabled
-                      ? _walletsButton(shadow)
-                      : const SizedBox.shrink(),
-                ),
+                _walletsButton(shadow),
               ],
             ),
           ),
@@ -611,8 +606,8 @@ class DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  /// Fork: the wallets live here instead of the bottom bar (user's choice,
-  /// 2026-10-13): a frosted round button over the picture.
+  /// The wallets live here instead of the bottom bar: a frosted round button
+  /// over the picture.
   Widget _walletsButton(List<Shadow> shadow) {
     return Padding(
       padding: const EdgeInsets.only(left: 12),

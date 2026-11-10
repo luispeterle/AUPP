@@ -5,13 +5,10 @@ import 'package:aupp/dinzo/daily-money.dart';
 import 'package:aupp/dinzo/dinzo-models.dart';
 import 'package:aupp/investments/aportes.dart';
 import 'package:aupp/dinzo/dinzo-taxes.dart';
-import 'package:aupp/investments/asset-lots.dart';
 import 'package:aupp/models/category.dart';
-import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/wallet.dart';
 import 'package:aupp/services/crypto-quote-service.dart';
-import 'package:aupp/services/database/money-model-migration.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
@@ -53,9 +50,8 @@ void main() {
     String name, {
     double initial = 0,
     WalletKind kind = WalletKind.normal,
-    String? currency,
   }) => database().addWallet(
-    Wallet(name, initialAmount: initial, kind: kind, currency: currency),
+    Wallet(name, initialAmount: initial, kind: kind),
   );
 
   group('the wallet to invest is what the others leave', () {
@@ -253,126 +249,6 @@ void main() {
       ], const []);
       expect(balances.complete, isFalse);
       expect(balances.unknown, ['C6 Bank']);
-    });
-  });
-
-  group('moving from the old model', () {
-    late int investir, bruto, rendimentos, btc, reserva, viagem, mainId;
-
-    setUp(() async {
-      mainId = (await database().getDefaultWallet())!.id!;
-      investir = await addWallet('Investir', initial: 1000);
-      bruto = await addWallet('Investido Bruto');
-      rendimentos = await addWallet('Rendimentos');
-      await db.insert('wallets', {'name': 'Livre', 'kind': 'free', 'initial_amount': 271, 'profile_id': 1});
-      btc = await addWallet('Bitcoin', initial: 0.5, currency: 'BTC');
-      reserva = await addWallet('Reserva de Emergencia', initial: 2000);
-      viagem = await addWallet('Caixinha Viagem', initial: 300);
-
-      final day = DateTime.utc(2026, 3, 1).millisecondsSinceEpoch;
-      Future<int> insert(Map<String, Object?> row) => db.insert('records', {
-        'datetime': day,
-        'timezone': 'UTC',
-        'profile_id': 1,
-        ...row,
-      });
-      // What the sync used to write.
-      await insert({'value': 500, 'wallet_id': mainId, 'dinzo_id': 'livre:inicial'});
-      await insert({'value': 40, 'wallet_id': mainId, 'dinzo_id': 'livre:2026-03'});
-      await insert({'value': -10, 'wallet_id': mainId, 'dinzo_id': 'livre:ir:x'});
-      await insert({'value': 25, 'wallet_id': viagem, 'dinzo_id': 'livre:rend:legado:2025-01:6'});
-      await insert({'value': 90, 'wallet_id': rendimentos, 'dinzo_id': 'livre:rend:2026-03'});
-      // A purchase and a coin bought through their wallets.
-      await insert({
-        'value': -400,
-        'title': 'Compra PETR4',
-        'wallet_id': investir,
-        'transfer_wallet_id': bruto,
-        'dinzo_id': 'livre:inv:PETR4|2026-03-01|BUY|1#1',
-      });
-      await insert({
-        'value': -100,
-        'title': 'Compra de BTC',
-        'wallet_id': mainId,
-        'transfer_wallet_id': btc,
-        'transfer_value': 0.001,
-      });
-      // Real entries must not be touched.
-      await insert({'value': -70, 'title': 'Mercado', 'wallet_id': mainId, 'dinzo_id': 'dinzo-1'});
-      await ServiceConfig.sharedPreferences!.setString(
-        PreferencesKeys.assetLots,
-        jsonEncode({
-          'BTC': [
-            {'id': 'a', 'day': '2023-10-01', 'qty': 0.5},
-          ],
-        }),
-      );
-      await ServiceConfig.sharedPreferences!.setString(
-        'dinzoInvestedAnchors',
-        '{}',
-      );
-    });
-
-    test('every wallet that stays keeps its balance', () async {
-      final before = await balances();
-      expect(await MoneyModelMigration.needed(db), isTrue);
-      await MoneyModelMigration.run(db);
-      final after = await balances();
-      for (final name in [
-        (await database().getDefaultWallet())!.name,
-        'Investir',
-        'Reserva de Emergencia',
-        'Caixinha Viagem',
-      ]) {
-        expect(after[name], closeTo(before[name]!, 0.001), reason: name);
-      }
-      expect(await MoneyModelMigration.needed(db), isFalse);
-    });
-
-    test('the wallets of the old model go', () async {
-      await MoneyModelMigration.run(db);
-      final wallets = await database().getAllWallets();
-      final names = wallets.map((w) => w.name);
-      expect(names, isNot(contains('Investido Bruto')));
-      expect(names, isNot(contains('Rendimentos')));
-      expect(names, isNot(contains('Bitcoin')));
-      expect(names, isNot(contains('Livre')));
-      expect(wallets.firstWhere((w) => w.id == investir).isInvestmentReserve, isTrue);
-      expect(wallets.firstWhere((w) => w.id == reserva).isEmergencyReserve, isTrue);
-      expect(wallets.firstWhere((w) => w.id == viagem).kind, WalletKind.normal);
-    });
-
-    test('purchases become investment entries, in the same wallet', () async {
-      await MoneyModelMigration.run(db);
-      final records = (await database().getAllRecords()).whereType<Record>();
-      expect(records.map((r) => r.value).toSet(), {-400.0, -100.0, -70.0});
-      final buy = records.firstWhere((r) => r.value == -400);
-      expect(buy.isInvestmentBuy, isTrue);
-      expect(buy.walletId, investir);
-      expect(buy.transferWalletId, isNull);
-      expect(buy.category?.categoryType, CategoryType.investment);
-      final coin = records.firstWhere((r) => r.value == -100);
-      expect(coin.isInvestmentBuy, isTrue);
-      expect(coin.walletId, mainId);
-    });
-
-    test('no coin is lost, and what is gone is logged', () async {
-      await MoneyModelMigration.run(db);
-      expect(AssetLots.coins['BTC'], closeTo(0.501, 1e-9));
-      expect(
-        ServiceConfig.sharedPreferences!.containsKey('dinzoInvestedAnchors'),
-        isFalse,
-      );
-      final logged = await db.query('change_log');
-      expect(logged.where((e) => e['target'] == 'wallets'), isNotEmpty);
-      expect(logged.where((e) => e['action'] == 'Editou'), isNotEmpty);
-    });
-
-    test('running again changes nothing', () async {
-      await MoneyModelMigration.run(db);
-      final once = await balances();
-      await MoneyModelMigration.run(db);
-      expect(await balances(), once);
     });
   });
 }

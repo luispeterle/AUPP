@@ -2,7 +2,7 @@ import 'package:aupp/models/wallet.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 
-/// Fork: the wallets whose money is "to spend", chosen in the Extrato's
+/// The wallets whose money is "to spend", chosen in the Extrato's
 /// wallet picker ("Total" column). Everything that splits spending money
 /// from money set aside reads this set: the Extrato totals, "O mês até
 /// agora", the budget base, "Para que está guardado" and the Dinzo free
@@ -54,22 +54,6 @@ class TotalWallets {
       PreferencesKeys.totalWallets,
       wallets.map((w) => w.name.trim()).toList(),
     );
-  }
-
-  /// Converts the old choice (wallet ids, device-only, under the id of the
-  /// profile the app used to have) once.
-  static Future<void> migrateFromIds() async {
-    final prefs = ServiceConfig.sharedPreferences;
-    if (prefs == null) return;
-    const oldKey = 'homePageWalletTotals_1';
-    final ids = prefs.getStringList(oldKey);
-    if (ids == null) return;
-    if (!prefs.containsKey(PreferencesKeys.totalWallets)) {
-      final wanted = ids.map(int.tryParse).toSet();
-      final wallets = await ServiceConfig.database.getAllWallets();
-      await save(wallets.where((w) => wanted.contains(w.id)));
-    }
-    await prefs.remove(oldKey);
   }
 
   /// Keeps a renamed wallet in the set.

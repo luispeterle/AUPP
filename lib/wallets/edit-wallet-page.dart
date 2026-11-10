@@ -69,7 +69,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
         _otherToInvest = wallets.any(
           (w) => w.isInvestmentReserve && w.id != passedWallet?.id,
         );
-        // Fork: a new one goes after the caixinhas there are.
+        // A new one goes after the caixinhas there are.
         if (passedWallet == null) {
           wallet.sortOrder = WalletSection.nextSortOrder(wallets);
         }
@@ -204,7 +204,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Fork: what is created here is a caixinha; the reserves exist
+        // What is created here is a caixinha; the reserves exist
         // already, and an existing wallet can still change what it is for.
         if (!isDefaultWallet && !_managed && passedWallet != null) ...[
           _getPageSeparatorLabel('Para que serve'),
@@ -370,7 +370,7 @@ class _EditWalletPageState extends State<EditWalletPage> {
     wallet.initialAmount = enteredBalance - sumOfRecords;
 
     if (passedWallet == null) {
-      _logger.info('Creating new wallet "${wallet.name}" (currency: ${wallet.currency ?? 'none'}, initialAmount: ${wallet.initialAmount})');
+      _logger.info('Creating new wallet "${wallet.name}" (initialAmount: ${wallet.initialAmount})');
       await database.addWallet(wallet);
     } else {
       _logger.info('Updating wallet "${wallet.name}" (ID ${passedWallet!.id}, initialAmount: ${wallet.initialAmount})');

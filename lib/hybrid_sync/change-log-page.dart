@@ -18,13 +18,11 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
     'wallets': 'Carteira',
     'categories': 'Categoria',
     'recurrent_record_patterns': 'Recorrência',
-    'profiles': 'Perfil',
     'tags': 'Tag',
   };
 
   static const _fields = {
     'value': 'Valor',
-    'transfer_value': 'Valor recebido',
     'title': 'Título',
     'description': 'Descrição',
     'datetime': 'Data',
@@ -37,7 +35,7 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
     'is_archived': 'Arquivada',
   };
 
-  static const _amounts = {'value', 'transfer_value', 'initial_amount'};
+  static const _amounts = {'value', 'initial_amount'};
 
   @override
   void initState() {

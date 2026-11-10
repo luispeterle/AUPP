@@ -1,4 +1,3 @@
-// file: edit-record-page.dart
 
 import 'package:aupp/budget_plan/budget-plan.dart';
 import 'package:aupp/budget_plan/budget-plan-page.dart';
@@ -18,7 +17,6 @@ import 'package:collection/collection.dart' show SetEquality;
 import 'package:flutter/material.dart';
 import 'package:aupp/records/refund-link-ui.dart';
 import 'package:aupp/components/info-tip.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:aupp/categories/categories-tab-page-view.dart';
 import 'package:aupp/components/tag_chip.dart';
@@ -116,19 +114,19 @@ class EditRecordPageState extends State<EditRecordPage> {
   /// Forecast entry (see [DinzoSyncService.estimateTag]); never a transfer.
   bool _isEstimateChecked = false;
 
-  /// Fork: a new record made with "+" gets [DinzoSyncService.cashTag] by
+  /// A new record made with "+" gets [DinzoSyncService.cashTag] by
   /// itself, following estimate, transfer and Pix / boleto, until the user
   /// adds or removes the tag.
   bool _autoCash = false;
 
-  /// Fork: an occurrence of an estimate (read-only view of a recurrence).
+  /// An occurrence of an estimate (read-only view of a recurrence).
   bool get _isEstimateOccurrence =>
       record != null &&
       record!.isFutureRecord &&
       record!.recurrencePatternId != null &&
       record!.tags.contains(DinzoSyncService.estimateTag);
 
-  /// Fork: an upcoming occurrence of a recurrence (estimate, boleto or
+  /// An upcoming occurrence of a recurrence (estimate, boleto or
   /// plain), editable by hand ([_saveOccurrence]). Transfers stay read-only.
   bool get _isEditableOccurrence =>
       widget.passedRecord != null &&
@@ -173,7 +171,7 @@ class EditRecordPageState extends State<EditRecordPage> {
       (_isEstimateChecked || _forcedEstimate) &&
       _selectedDestinationWallet == null;
 
-  /// Real records come from Dinzo (fork, 2026-10-12): unless manual records
+  /// Real records come from Dinzo: unless manual records
   /// are allowed in Settings → Dinzo, a new one-off record is an estimate.
   /// Recurring records (e.g. meal voucher) and transfers stay as they are.
   bool get _forcedEstimate =>
@@ -223,7 +221,7 @@ class EditRecordPageState extends State<EditRecordPage> {
   Wallet? _selectedWallet;
   Wallet? _selectedDestinationWallet;
 
-  /// Fork: the default wallet (the banks' money) and the paper money one
+  /// The default wallet (the banks' money) and the paper money one
   /// ([CashWallet]), for [_lockedSource].
   Wallet? _defaultWallet;
   Wallet? _cashWallet;
@@ -243,7 +241,6 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   DateTime? _originalUtcDateTime;
   double? _originalValue;
-  double? _originalTransferValue;
 
   EditRecordPageState(
     this.passedRecord,
@@ -305,7 +302,7 @@ class EditRecordPageState extends State<EditRecordPage> {
       // I am editing an existing record
       record = passedRecord;
       if (_isEditableOccurrence) {
-        // Fork: an upcoming occurrence opens editable (see _saveOccurrence).
+        // An upcoming occurrence opens editable (see _saveOccurrence).
         readOnly = false;
         _occurrenceBefore = passedRecord!.copyWith(
           tags: Set.of(passedRecord!.tags),
@@ -314,8 +311,6 @@ class EditRecordPageState extends State<EditRecordPage> {
       // Capture original values to detect changes for pattern-linked records
       _originalUtcDateTime = passedRecord!.utcDateTime;
       _originalValue = passedRecord!.value;
-      _originalTransferValue = passedRecord!.transferValue;
-      // Use the localDateTime getter for display purposes
       localDisplayDate = passedRecord!.localDateTime;
       // Initialize time if the record has a non-midnight time
       final localDT = passedRecord!.localDateTime;
@@ -356,7 +351,6 @@ class EditRecordPageState extends State<EditRecordPage> {
         });
       }
       _paymentCode = passedRecord!.paymentCode;
-      // Initialize selected tags for existing record
       _selectedTags = Set.from(record!.tags);
       _isEstimateChecked = _selectedTags.contains(DinzoSyncService.estimateTag);
       _originalTitle = record!.title;
@@ -376,9 +370,7 @@ class EditRecordPageState extends State<EditRecordPage> {
         tags: passedRecurrentRecordPattern!.tags, // Pass tags from pattern
         walletId: passedRecurrentRecordPattern!.walletId,
         transferWalletId: passedRecurrentRecordPattern!.transferWalletId,
-        transferValue: passedRecurrentRecordPattern!.transferValue,
       );
-      // Use the localDateTime for display
       localDisplayDate = passedRecurrentRecordPattern!.localDateTime;
       localDisplayEndDate = passedRecurrentRecordPattern!.localEndDate;
       // Initialize time if the recurrent pattern has a non-midnight time
@@ -403,7 +395,6 @@ class EditRecordPageState extends State<EditRecordPage> {
       _defaultPix = passedRecurrentRecordPattern!.defaultPix;
       _pixName = passedRecurrentRecordPattern!
           .paymentCodes[RecurrentRecordPattern.pixNameKey];
-      // Initialize selected tags for existing recurrent pattern
       _selectedTags = Set.from(passedRecurrentRecordPattern!.tags);
       _isEstimateChecked = _selectedTags.contains(DinzoSyncService.estimateTag);
     } else {
@@ -456,7 +447,6 @@ class EditRecordPageState extends State<EditRecordPage> {
       _loadSuggestedTags();
     }
 
-    // Load wallet
     _initWallet();
 
     // Keyboard listeners initializations (the same as before)
@@ -694,7 +684,7 @@ class EditRecordPageState extends State<EditRecordPage> {
                   ),
                 ),
               ),
-              // Fork: which budget group the category counts in.
+              // Which budget group the category counts in.
               if (category?.categoryType == CategoryType.expense)
                 BudgetGroupLabel(
                   _selectedTags.contains(outOfBudgetTag)
@@ -1161,7 +1151,6 @@ class EditRecordPageState extends State<EditRecordPage> {
                         onTap: canChangeEndDate
                             ? () async {
                                 FocusScope.of(context).unfocus();
-                                // Default to 30 days from now (not 1 year, which is confusing)
                                 DateTime initialDate =
                                     localDisplayEndDate ??
                                     DateTime.now().add(Duration(days: 30));
@@ -1406,16 +1395,9 @@ class EditRecordPageState extends State<EditRecordPage> {
       return;
     }
 
-    if (ServiceConfig.walletsEnabled) {
-      if (_sourceLocked) _selectedWallet = _lockedSource;
-      record!.walletId = _selectedWallet?.id;
-      record!.transferWalletId = _selectedDestinationWallet?.id;
-    } else if (record!.id == null) {
-      // New record while wallets are disabled: silently assign the default
-      // wallet so that re-enabling wallets keeps data consistent. Existing
-      // records keep their current wallet/transfer assignment untouched.
-      record!.walletId = (await database.getDefaultWallet())?.id;
-    }
+    if (_sourceLocked) _selectedWallet = _lockedSource;
+    record!.walletId = _selectedWallet?.id;
+    record!.transferWalletId = _selectedDestinationWallet?.id;
     _applyOriginTag(isTransfer: record!.transferWalletId != null);
     record!.tags = _selectedTags; // Assign selected tags to the record
     _logger.debug('Saving record with ${_selectedTags.length} tags');
@@ -1426,10 +1408,7 @@ class EditRecordPageState extends State<EditRecordPage> {
               _originalUtcDateTime!.millisecondsSinceEpoch;
       final amountChanged =
           _originalValue != null && record!.value != _originalValue;
-      final receivedAmountChanged =
-          (record!.transferValue ?? record!.value?.abs()) !=
-          (_originalTransferValue ?? _originalValue?.abs());
-      if (dateChanged || amountChanged || receivedAmountChanged) {
+      if (dateChanged || amountChanged) {
         record!.recurrencePatternId = null;
       }
     }
@@ -1635,7 +1614,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     });
   }
 
-  /// Fork: Pix copia-e-cola / boleto digitable line of this estimate
+  /// Pix copia-e-cola / boleto digitable line of this estimate
   /// occurrence, saved on the recurrence right away.
   Widget _createPaymentCodeTile() {
     final code = _paymentCode;
@@ -1687,13 +1666,11 @@ class EditRecordPageState extends State<EditRecordPage> {
   /// nothing is left of it.
   Future<void> _makeReal() async {
     final occurrence = record!;
-    if (ServiceConfig.walletsEnabled) {
-      // Now a "Manual" record: paper money, not the default wallet.
-      final wallet = _selectedWallet?.id == _defaultWallet?.id
-          ? _cashWallet ?? _selectedWallet
-          : _selectedWallet;
-      occurrence.walletId = wallet?.id;
-    }
+    // Now a "Manual" record: paper money, not the default wallet.
+    final wallet = _selectedWallet?.id == _defaultWallet?.id
+        ? _cashWallet ?? _selectedWallet
+        : _selectedWallet;
+    occurrence.walletId = wallet?.id;
     final tags = {..._selectedTags}
       ..remove(DinzoSyncService.estimateTag)
       ..remove(DinzoSyncService.virtualTag)
@@ -1732,7 +1709,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     _resolvePendingAmountExpression();
     final before = _occurrenceBefore!;
     final edited = record!;
-    if (ServiceConfig.walletsEnabled) edited.walletId = _selectedWallet?.id;
+    edited.walletId = _selectedWallet?.id;
     final wasEstimate = before.tags.contains(DinzoSyncService.estimateTag);
     if (wasEstimate && !_isEstimate) {
       await _makeReal();
@@ -1933,12 +1910,6 @@ class EditRecordPageState extends State<EditRecordPage> {
   }
 
   Future<void> _initWallet() async {
-    if (!ServiceConfig.walletsEnabled) {
-      // Wallets feature disabled: no wallet selection shown or restored.
-      _selectedWallet = null;
-      _selectedDestinationWallet = null;
-      return;
-    }
     final allWallets = await database.getAllWallets();
     final activeWallets = allWallets.where((w) => !w.isArchived).toList();
 
@@ -2024,16 +1995,9 @@ class EditRecordPageState extends State<EditRecordPage> {
     _resolvePendingAmountExpression();
 
     // Assign wallet and transfer fields before creating the pattern
-    if (ServiceConfig.walletsEnabled) {
-      if (_sourceLocked) _selectedWallet = _lockedSource;
-      record!.walletId = _selectedWallet?.id;
-      record!.transferWalletId = _selectedDestinationWallet?.id;
-    } else if (id == null) {
-      // New recurrent pattern while wallets are disabled: silently assign the
-      // default wallet. Existing patterns keep their wallet assignment.
-      record!.walletId = (await database.getDefaultWallet())?.id;
-    }
-    // Create a new recurrent pattern from the updated record
+    if (_sourceLocked) _selectedWallet = _lockedSource;
+    record!.walletId = _selectedWallet?.id;
+    record!.transferWalletId = _selectedDestinationWallet?.id;
     RecurrentRecordPattern recordPattern = RecurrentRecordPattern.fromRecord(
       record!,
       recurrentPeriod!,
@@ -2049,7 +2013,7 @@ class EditRecordPageState extends State<EditRecordPage> {
     _applyOriginTag(isTransfer: record!.transferWalletId != null);
     recordPattern.tags =
         _selectedTags; // Assign selected tags to the recurrent pattern
-    // Fork: editing the pattern keeps the occurrences' payment codes.
+    // Editing the pattern keeps the occurrences' payment codes.
     recordPattern.paymentCodes =
         Map.of(passedRecurrentRecordPattern?.paymentCodes ?? const {})
           ..remove(RecurrentRecordPattern.defaultPixKey)
@@ -2218,23 +2182,21 @@ class EditRecordPageState extends State<EditRecordPage> {
             Divider(height: 1),
             _createCategoryCard(),
             Divider(height: 1),
-            if (ServiceConfig.walletsEnabled) ...[
-              _createWalletCard(),
-              // Fork: part of a Dinzo purchase paid with a caixinha.
-              if (!readOnly && SplitPayment.supports(record))
-                SplitPaymentTile(purchase: record!),
-              // Fork: an aporte the wallet to invest could not pay alone.
-              if (!readOnly && record?.id != null && record!.isInvestmentBuy)
-                AporteShortfallTile(aporte: record!),
-              Divider(height: 1),
-            ],
+            _createWalletCard(),
+            // Part of a Dinzo purchase paid with a caixinha.
+            if (!readOnly && SplitPayment.supports(record))
+              SplitPaymentTile(purchase: record!),
+            // An aporte the wallet to invest could not pay alone.
+            if (!readOnly && record?.id != null && record!.isInvestmentBuy)
+              AporteShortfallTile(aporte: record!),
+            Divider(height: 1),
             _createDateAndRepeatCard(),
             Divider(height: 1),
             if (EstimateLink.decode(record?.estimateLink) case final link?) ...[
               _createEstimateLinkTile(link),
               Divider(height: 1),
             ],
-            // Fork: money that came in may undo an expense (RefundLink).
+            // Money that came in may undo an expense (RefundLink).
             if (!readOnly && record?.id != null && RefundLinkTile.shows(record)) ...[
               RefundLinkTile(record: record!),
               Divider(height: 1),

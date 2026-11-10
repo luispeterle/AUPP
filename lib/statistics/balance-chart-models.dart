@@ -18,9 +18,6 @@ class ComparisonData {
   double get netSavings => income - expenses;
 }
 
-// ChartDateRangeConfig is now imported from statistics-utils.dart
-// and is shared between bar-chart and balance-chart for consistency.
-
 /// Aggregates records by time period for comparison chart display.
 class ComparisonDataAggregator {
   final AggregationMethod aggregationMethod;
@@ -34,7 +31,6 @@ class ComparisonDataAggregator {
   ) {
     final data = <String, ComparisonData>{};
 
-    // Initialize all time periods with zero values
     var current = config.start;
     while (current.isBefore(config.end)) {
       final key = config.getKey(current);
@@ -52,7 +48,7 @@ class ComparisonDataAggregator {
       if (data.containsKey(key) && !record.isOwnMove) {
         // Income/expenses are positive magnitudes in this model
         // (netSavings = income - expenses). An expense is stored negative; a
-        // partial refund (fork, RefundLink) is positive in its category and
+        // partial refund (RefundLink) is positive in its category and
         // lowers it.
         final value = record.value!;
         if (record.category?.categoryType == CategoryType.expense) {
@@ -63,7 +59,6 @@ class ComparisonDataAggregator {
       }
     }
 
-    // Calculate cumulative savings
     _calculateCumulativeSavings(data);
 
     return data;

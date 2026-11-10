@@ -29,10 +29,8 @@ class OverviewCard extends StatelessWidget {
   final DateTime? selectedDate;
 
   /// The records underlying the current selection (e.g. the pie slice or bar
-  /// period). Used to detect the currencies involved so the selected amount is
-  /// shown converted to the primary currency (with the original secondary
-  /// currency as a second line when the selection is a single non-default
-  /// currency). When empty, the selection is derived from [selectedDate].
+  /// period), whose total is shown. When empty, the selection is derived from
+  /// [selectedDate].
   final List<Record?> selectedRecords;
 
   final bool isBalance;

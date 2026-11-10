@@ -1,4 +1,4 @@
-// Fork: an upcoming occurrence edited by hand leaves its recurrence.
+// An upcoming occurrence edited by hand leaves its recurrence.
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/recurrent-period.dart';
 import 'package:aupp/models/recurrent-record-pattern.dart';

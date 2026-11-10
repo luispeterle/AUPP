@@ -175,23 +175,6 @@ class AssetWorkspaces extends ChangeNotifier {
     notifyListeners();
   }
 
-  @visibleForTesting
-  void resetForTest({bool supported = true}) {
-    _supported = supported;
-    workspaces.clear();
-    calculators
-      ..tabs.clear()
-      ..activeSite = null;
-    current = null;
-    _nextId = 0;
-    _shown = null;
-    _channel.setMethodCallHandler(_onNativeCall);
-  }
-
-  /// Back to the standby list after a restart. Pages load when opened.
-  @visibleForTesting
-  void restoreForTest() => _restore();
-
   void _restore() {
     final raw = ServiceConfig.sharedPreferences?.getString(_prefKey);
     if (raw == null) return;

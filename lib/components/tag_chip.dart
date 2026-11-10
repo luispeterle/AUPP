@@ -31,7 +31,7 @@ class TagChip extends StatelessWidget {
     );
 
     return FilterChip(
-        // Banks, payment methods and origin tags show as an icon (fork).
+        // Banks, payment methods and origin tags show as an icon.
         label: TagLabel(labelText, textStyle: effectiveLabelStyle),
         labelStyle: effectiveLabelStyle,
         selected: isSelected,

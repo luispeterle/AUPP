@@ -2,7 +2,7 @@ import 'package:aupp/models/wallet.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 
-/// Fork: the wallet of paper money, chosen in the wallet's edit page. A
+/// The wallet of paper money, chosen in the wallet's edit page. A
 /// record typed by hand ("Manual") always moves it, never the default
 /// wallet, whose money is the banks' and comes from Dinzo.
 ///

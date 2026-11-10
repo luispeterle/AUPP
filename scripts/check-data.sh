@@ -54,7 +54,7 @@ cp "$support/shared_preferences.json" "$copy/"
 balances() {
   sqlite3 "file:$1?mode=ro" "SELECT w.name, round(COALESCE(w.initial_amount,0)
     + COALESCE((SELECT SUM(value) FROM records r WHERE r.wallet_id=w.id),0)
-    + COALESCE((SELECT SUM(ABS(COALESCE(transfer_value,value))) FROM records r WHERE r.transfer_wallet_id=w.id),0), 6)
+    + COALESCE((SELECT SUM(ABS(value)) FROM records r WHERE r.transfer_wallet_id=w.id),0), 6)
     FROM wallets w ORDER BY w.id; SELECT COUNT(*) FROM records;"
 }
 schema() { sqlite3 "file:$1?mode=ro" "PRAGMA user_version;"; }

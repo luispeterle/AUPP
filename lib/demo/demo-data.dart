@@ -451,7 +451,6 @@ class DemoData {
     Category? category,
     int wallet = _conta,
     int? to,
-    double? transferValue,
     String? description,
     String? recurrenceId,
     String? dinzoId,
@@ -471,7 +470,6 @@ class DemoData {
       'recurrence_id': recurrenceId,
       'wallet_id': wallet,
       'transfer_wallet_id': to,
-      'transfer_value': transferValue,
       'dinzo_id': dinzoId,
       'dinzo_snapshot': snapshot,
     });
@@ -536,7 +534,6 @@ class DemoData {
       title: '$title · $envelopeName',
       wallet: envelope,
       to: _conta,
-      transferValue: part,
       description: 'Parte paga com a caixinha',
       dinzoId: '${DinzoSyncService.syntheticPrefix}split:$dinzoId',
       tags: const [DinzoSyncService.virtualTag],
@@ -596,7 +593,7 @@ class DemoData {
       final value = (r['value'] as num).toDouble();
       if (r['wallet_id'] == wallet) sum += value;
       if (r['transfer_wallet_id'] == wallet) {
-        sum += (r['transfer_value'] as num?)?.toDouble() ?? -value;
+        sum -= value;
       }
     }
     return sum;
@@ -617,7 +614,6 @@ class DemoData {
       String name,
       int icon, {
       String? color,
-      String? currency = 'BRL',
       String kind = 'normal',
     }) => {
       'id': id,
@@ -630,13 +626,12 @@ class DemoData {
       'is_default': id == _conta ? 1 : 0,
       'is_predefined': id == _conta ? 1 : 0,
       'sort_order': id - 1,
-      'currency': currency,
       'kind': kind,
     };
     // Icons and colours as in the user's own backup.
     return [
       wallet(_conta, 'Conta corrente', 62805,
-          color: '255:129:199:132', currency: null),
+          color: '255:129:199:132'),
       wallet(_investir, 'Investir', 62675,
           color: '255:0:200:83', kind: 'toInvest'),
       wallet(_carro, 'Caixinha Carro', 61881, color: '255:239:108:0'),
@@ -644,7 +639,7 @@ class DemoData {
       wallet(_saude, 'Caixinha Saude', 61681, color: '255:79:195:247'),
       wallet(_reserva, 'Reserva de Emergencia', 62675,
           color: '255:183:28:28', kind: 'emergency'),
-      wallet(_voucherWallet, 'Vale alimentação', 62097, currency: null),
+      wallet(_voucherWallet, 'Vale alimentação', 62097),
     ];
   }
 
@@ -745,7 +740,6 @@ class DemoData {
     'end_date': null,
     'wallet_id': _conta,
     'transfer_wallet_id': to,
-    'transfer_value': null,
     'custom_interval_value': null,
     'custom_interval_unit': null,
   };
