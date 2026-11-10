@@ -27,8 +27,9 @@ class DinzoBalances {
   /// Card used limit: open bills plus future installments.
   final double cardDebt;
 
-  /// Fixed income in the everyday banks: money parked, not invested.
-  final double fixedIncome;
+  /// What the everyday banks hold beyond the accounts and is chosen as
+  /// everyday money ([DailyBanks]): CDB, cofrinho, whatever the user chose.
+  final double parked;
 
   /// Accounts that count in the totals but came without a balance (a bank
   /// still refreshing). The totals then miss them: a card left out would show
@@ -38,14 +39,14 @@ class DinzoBalances {
   DinzoBalances({
     required this.bank,
     required this.cardDebt,
-    required this.fixedIncome,
+    required this.parked,
     this.unknown = const [],
   });
 
   bool get complete => unknown.isEmpty;
 
   /// What the wallets divide, see [DailyMoney].
-  double get money => bank + fixedIncome - cardDebt;
+  double get money => bank + parked - cardDebt;
 
   /// What the default wallet starts at on the first sync.
   double get spendable => bank - cardDebt;

@@ -630,8 +630,8 @@ class DinzoSyncService {
         items: [
           ...result.items,
           'Dinheiro ${balances.money.toStringAsFixed(2)} = bancos '
-              '${balances.bank.toStringAsFixed(2)} + renda fixa '
-              '${balances.fixedIncome.toStringAsFixed(2)} − cartões '
+              '${balances.bank.toStringAsFixed(2)} + aplicações '
+              '${balances.parked.toStringAsFixed(2)} − cartões '
               '${balances.cardDebt.toStringAsFixed(2)}',
         ],
       ),

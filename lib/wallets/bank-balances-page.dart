@@ -447,7 +447,7 @@ class _MoneyCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             row('Contas dos bancos do dia a dia', balances.bank),
-            row('Renda fixa dos bancos do dia a dia', balances.fixedIncome),
+            row('Aplicações do dia a dia', balances.parked),
             row('Cartões (limite usado)', -balances.cardDebt),
             const Divider(),
             row('Dinheiro', balances.money, bold: true),

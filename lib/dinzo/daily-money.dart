@@ -18,9 +18,10 @@ import 'dinzo-api.dart';
 import 'dinzo-models.dart';
 import 'dinzo-taxes.dart';
 
-/// Which banks hold everyday money. Whatever is elsewhere (a broker) is an
-/// investment, even fixed income. The user chooses; each bank starts by what it
-/// usually is.
+/// Which banks hold everyday money. The bank's choice goes for all it holds,
+/// what comes later too; a kind of product there ([productOf]) can be the
+/// other way, chosen by hand: stocks in an everyday bank as an investment, a
+/// CDB at a broker as everyday money. Each bank starts by what it usually is.
 class DailyBanks {
   /// Where money usually goes to be invested.
   static const brokers = {
@@ -52,8 +53,7 @@ class DailyBanks {
     }
   }
 
-  static bool isDaily(String bank) =>
-      _choices[bank] ?? !brokers.contains(bank);
+  static bool isDaily(String bank) => _choices[bank] ?? !brokers.contains(bank);
 
   static Future<void> choose(String bank, bool daily) async {
     await ServiceConfig.sharedPreferences!.setString(
@@ -61,6 +61,57 @@ class DailyBanks {
       jsonEncode({..._choices, bank: daily}),
     );
   }
+
+  static Map<String, Map<String, bool>> get _productChoices {
+    final raw = ServiceConfig.sharedPreferences?.getString(
+      PreferencesKeys.dailyProducts,
+    );
+    if (raw == null) return {};
+    try {
+      return {
+        for (final e in (jsonDecode(raw) as Map).entries)
+          e.key as String: (e.value as Map).cast<String, bool>(),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Whether [product] in [bank] is everyday money.
+  static bool holdsProduct(String bank, String product) =>
+      _productChoices[bank]?[product] ?? isDaily(bank);
+
+  /// Whether the product goes against its bank, by the user's hand.
+  static bool isException(String bank, String product) =>
+      holdsProduct(bank, product) != isDaily(bank);
+
+  /// Choosing what the bank already is takes the exception away.
+  static Future<void> chooseProduct(
+    String bank,
+    String product,
+    bool daily,
+  ) async {
+    final all = _productChoices;
+    final products = {...?all[bank]}..remove(product);
+    if (daily != isDaily(bank)) products[product] = daily;
+    if (products.isEmpty) {
+      all.remove(bank);
+    } else {
+      all[bank] = products;
+    }
+    await _saveProducts(all);
+  }
+
+  /// Everything in [bank] follows it again.
+  static Future<void> followBank(String bank) async {
+    await _saveProducts(_productChoices..remove(bank));
+  }
+
+  static Future<void> _saveProducts(Map<String, Map<String, bool>> all) =>
+      ServiceConfig.sharedPreferences!.setString(
+        PreferencesKeys.dailyProducts,
+        jsonEncode(all),
+      );
 
   /// An account without a bank behind it was added by hand: it is everyday.
   static bool holdsAccount(DinzoAccount account) {
@@ -70,26 +121,28 @@ class DailyBanks {
   }
 }
 
-/// Money is what can be spent or moved at its face value: the accounts and the
-/// fixed income in the everyday banks ([DailyBanks]), minus the cards. All of it
-/// sits together in the banks, whatever it is for: the wallets say what it is
-/// for, and the wallet to invest is what they leave. So interest raises it,
-/// and money sent to a broker lowers it, without any step in between.
-/// A price never gets here: stocks and the like are not money in any bank.
+/// Money is what the user keeps for the everyday: the accounts and what the
+/// everyday banks hold ([DailyBanks]), minus the cards. All
+/// of it sits together in the banks, whatever it is for: the wallets say what
+/// it is for, and the wallet to invest is what they leave. So interest raises
+/// it, and money sent to a broker lowers it, without any step in between. A
+/// stock chosen as everyday money brings its price along: what it moves goes
+/// in the month's adjustment, like interest.
 class DailyMoney {
   static final _logger = Logger.withClass(DailyMoney);
 
   static const fixedIncomeType = 'FIXED_INCOME';
   static const adjustmentPrefix = 'livre:ajuste:';
 
-  static bool isMoney(DinzoInvestment investment) =>
-      investment.type == fixedIncomeType &&
-      DailyBanks.isDaily(Institution.of(investment).name);
+  static bool isMoney(DinzoInvestment investment) => DailyBanks.holdsProduct(
+    Institution.of(investment).name,
+    productOf(investment),
+  );
 
-  static double fixedIncomeIn(Iterable<DinzoInvestment> investments) =>
-      investments
-          .where((i) => !i.archived && isMoney(i))
-          .fold<double>(0, (sum, i) => sum + i.balance);
+  /// What is parked in the everyday banks as everyday money.
+  static double parkedIn(Iterable<DinzoInvestment> investments) => investments
+      .where((i) => !i.archived && isMoney(i))
+      .fold<double>(0, (sum, i) => sum + i.balance);
 
   /// A sync has already brought the history: the first one must bring it all.
   static Future<bool> started() async {
@@ -196,8 +249,7 @@ class DailyMoney {
     final sqlite = (await SqliteDatabase.instance.database)!;
     await SqliteDatabase.ensureCategory(sqlite, Category.adjustment());
     final db = ServiceConfig.database;
-    final month =
-        '${today.year}-${today.month.toString().padLeft(2, '0')}';
+    final month = '${today.year}-${today.month.toString().padLeft(2, '0')}';
     final id = '$adjustmentPrefix$month';
     final rows = await sqlite.rawQuery(
       'SELECT id FROM records WHERE dinzo_id = ? LIMIT 1',
@@ -243,7 +295,7 @@ class DailyMoney {
       if (!await started()) return;
       await reconcile(
         snapshot.bankBalance +
-            fixedIncomeIn(snapshot.investments) -
+            parkedIn(snapshot.investments) -
             snapshot.cardDebt,
       );
     } catch (e, st) {
@@ -274,7 +326,7 @@ class DailyMoney {
     return DinzoBalances(
       bank: bank,
       cardDebt: cardDebt,
-      fixedIncome: fixedIncomeIn(investments),
+      parked: parkedIn(investments),
       unknown: unknown,
     );
   }

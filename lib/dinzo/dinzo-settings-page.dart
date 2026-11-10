@@ -267,7 +267,7 @@ class _DinzoSettingsPageState extends State<DinzoSettingsPage> {
               icon: const Icon(Icons.account_balance, color: Colors.white),
               iconBackgroundColor: Colors.indigo.shade400,
               title: 'Bancos do dia a dia',
-              subtitle: 'O que está nos outros é investimento',
+              subtitle: 'Em cada banco, o que é dinheiro e o que é investimento',
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const DailyBanksPage()),

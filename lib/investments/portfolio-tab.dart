@@ -419,7 +419,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final money = widget.snapshot == null
         ? null
         : widget.snapshot!.bankBalance +
-              DailyMoney.fixedIncomeIn(widget.snapshot!.investments) -
+              DailyMoney.parkedIn(widget.snapshot!.investments) -
               widget.snapshot!.cardDebt;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),

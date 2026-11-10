@@ -46,6 +46,7 @@ class PreferencesKeys {
   static const dinzoConfig = 'dinzoConfig';
   static const dinzoLastSync = 'dinzoLastSync';
   static const dailyBanks = 'dailyBanks';
+  static const dailyProducts = 'dailyProducts';
   static const welcomeSeen = 'welcomeSeen';
   static const cryptoQuotesMain = 'cryptoQuotesMain';
   static const cryptoQuotesUpdatedAt = 'cryptoQuotesUpdatedAt';

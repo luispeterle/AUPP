@@ -54,7 +54,7 @@ class _MoneyPurposeCardState extends State<MoneyPurposeCard> {
     final money = snapshot == null
         ? null
         : snapshot.bankBalance +
-              DailyMoney.fixedIncomeIn(snapshot.investments) -
+              DailyMoney.parkedIn(snapshot.investments) -
               snapshot.cardDebt;
     if (!mounted) return;
     setState(

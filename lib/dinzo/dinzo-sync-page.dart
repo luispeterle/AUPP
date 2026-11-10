@@ -353,7 +353,7 @@ class _DinzoSyncPageState extends State<DinzoSyncPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Renda fixa ${getCurrencyValueString(b.fixedIncome)} · '
+              'Aplicações ${getCurrencyValueString(b.parked)} · '
               'Em conta ${getCurrencyValueString(b.bank)} · '
               'Cartões −${getCurrencyValueString(b.cardDebt)}',
               style: theme.textTheme.bodySmall,

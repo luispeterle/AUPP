@@ -5,13 +5,13 @@ import 'diagram.dart';
 import 'stock-catalog.dart';
 
 /// What the Carteira tab can switch on and off: the classes of Carteira e
-/// aporte, and the fixed income of the everyday banks, which is the wallets'
-/// money and not an investment.
+/// aporte, and what the everyday banks hold as everyday money, which is the
+/// wallets' money and not an investment.
 enum PortfolioClass {
   nationalStock('Ações', DiagramClass.nationalStock),
   fii('FIIs', DiagramClass.fii),
   fixedIncome('Renda fixa', DiagramClass.fixedIncome),
-  dailyFixedIncome('Renda fixa do dia a dia', null),
+  dailyFixedIncome('Dia a dia', null),
   intlStock('Ações internacionais', DiagramClass.intlStock),
   reit('REITs', DiagramClass.reit),
   crypto('Cripto', DiagramClass.crypto);

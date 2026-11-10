@@ -1025,6 +1025,21 @@ class _Position {
     this.atBroker = false,
   });
 
+  /// Stocks, funds and what [atBroker] sit at a broker.
+  String? get broker => atBroker || type != DailyMoney.fixedIncomeType
+      ? 'XP'
+      : null;
+
+  /// What says which bank holds it and what it is.
+  Map<String, dynamic> get identity => {
+    'asset_key': assetKey,
+    'name': name,
+    'type': type,
+    'sub_type': subType,
+    'issuer': issuer,
+    'broker': broker,
+  };
+
   String get shortName {
     // Tickers read better than names; a fund's code is its CNPJ.
     if (code != null && RegExp(r'^[A-Z]{4}\d{1,2}$').hasMatch(code!)) {
@@ -1285,9 +1300,10 @@ class _Investments {
         prices[d.difference(_base).inDays.clamp(0, prices.length - 1)];
   }
 
-  /// What is outside the money the wallets divide: stocks, funds and the like.
+  /// What is outside the money the wallets divide: what is not everyday
+  /// money in its bank ([DailyMoney.isMoney]).
   double get outsideMoney => positions
-      .where((p) => p.type != DailyMoney.fixedIncomeType || p.atBroker)
+      .where((p) => !DailyMoney.isMoney(DinzoInvestment.fromJson(p.identity)))
       .fold<double>(0, (s, p) => s + p.valueOn(today, today));
 
   void settleCofrinho(double investmentsTotal) {
@@ -1381,6 +1397,7 @@ class _Investments {
         'code': p.code,
         'isin': null,
         'issuer': p.issuer,
+        'broker': p.broker,
         'currency': 'BRL',
         'due_date': p.due == null ? null : DemoData._day(p.due!),
         'purchase_date':

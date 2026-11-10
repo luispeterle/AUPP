@@ -197,16 +197,54 @@ void main() {
           movements: const [],
         );
 
-    test('only fixed income there is money', () {
+    test('what an everyday bank holds is money, whatever it is', () {
       expect(
-        DailyMoney.fixedIncomeIn([
+        DailyMoney.parkedIn([
           position('FIXED_INCOME', 'Nubank', 1000),
           position('EQUITY', 'Nubank', 700),
           position('MUTUAL_FUND', 'C6', 50),
           position('FIXED_INCOME', 'BTG', 400),
         ]),
-        1000,
+        1750,
       );
+    });
+
+    test('a product can go against its bank, and the rest follows it', () async {
+      DinzoInvestment product(String type, String? subType, String broker) =>
+          DinzoInvestment.fromJson({
+            'asset_key': '$type$subType$broker',
+            'name': 'Ativo',
+            'type': type,
+            'sub_type': subType,
+            'balance': 100,
+            'broker': broker,
+          });
+      final cdb = product('FIXED_INCOME', 'CDB', 'Nubank');
+      final stock = product('EQUITY', 'STOCK', 'Nubank');
+      final fund = product('MUTUAL_FUND', null, 'Nubank');
+      final atRico = product('EQUITY', 'STOCK', 'Rico');
+      expect(DailyMoney.isMoney(stock), isTrue);
+      expect(DailyMoney.isMoney(atRico), isFalse);
+
+      await DailyBanks.chooseProduct('Nubank', 'Ações', false);
+      expect(DailyMoney.isMoney(stock), isFalse);
+      expect(DailyMoney.isMoney(fund), isTrue);
+      expect(DailyBanks.isException('Nubank', 'Ações'), isTrue);
+      expect(DailyBanks.isException('Nubank', 'CDB'), isFalse);
+
+      // The bank changes what follows it; the exception keeps its side.
+      await DailyBanks.choose('Nubank', false);
+      expect(DailyMoney.isMoney(cdb), isFalse);
+      expect(DailyMoney.isMoney(stock), isFalse);
+      expect(DailyBanks.isException('Nubank', 'Ações'), isFalse);
+
+      // Choosing what the bank is takes the exception away.
+      await DailyBanks.choose('Nubank', true);
+      await DailyBanks.chooseProduct('Nubank', 'Ações', true);
+      expect(DailyBanks.isException('Nubank', 'Ações'), isFalse);
+      await DailyBanks.chooseProduct('Nubank', 'Fundo', false);
+      await DailyBanks.followBank('Nubank');
+      expect(DailyMoney.parkedIn([cdb, stock, fund, atRico]), 300);
     });
 
     test('the user decides, against what each bank usually is', () async {
