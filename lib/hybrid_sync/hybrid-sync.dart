@@ -94,7 +94,11 @@ class HybridSync {
   /// is left out, and a payment straight from one has a withdrawal (or
   /// aporte) next to it (`livre:pago:`); an older app would bring the first
   /// back as income or expense and leave the second behind when deleting.
-  static const dataCompat = 8;
+  /// 9 (2026-11-09): an aporte whose other side Dinzo does not show (a Pix
+  /// to a crypto exchange, a transfer to myself that reached no everyday
+  /// bank) is an Aporte (or Resgate) too; an older app would remove it on
+  /// its next pull.
+  static const dataCompat = 9;
   static const _maxChain = 200;
   static const _keepSafetyCopies = 5;
   static const _pushDelay = Duration(seconds: 8);

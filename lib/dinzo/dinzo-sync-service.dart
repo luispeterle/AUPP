@@ -377,6 +377,7 @@ class DinzoSyncService {
         categories: categories,
         defaultWalletId: defaultWallet?.id,
         toInvestWalletId: await DailyMoney.toInvestWalletId(),
+        unpairedAportesFrom: await DailyMoney.adjustedSince(),
       );
       final linked = await linkedRecords();
       final plan = engine.plan(

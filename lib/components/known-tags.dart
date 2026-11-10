@@ -291,6 +291,12 @@ class KnownTag {
       color: Color(0xFFF3BA2F),
       keywords: ['binance'],
     ),
+    KnownTag(
+      'OKX',
+      kind: KnownTagKind.bank,
+      color: Color(0xFF000000),
+      keywords: ['okx'],
+    ),
   ];
 
   static final List<KnownTag> others = [

@@ -38,6 +38,7 @@ class DailyBanks {
     'Warren',
     'Ágora',
     'Binance',
+    'OKX',
   };
 
   static Map<String, bool> get _choices {
@@ -100,6 +101,25 @@ class DailyMoney {
       "AND dinzo_id NOT LIKE 'livre:%' LIMIT 1",
     );
     return rows.isNotEmpty;
+  }
+
+  /// First day of the oldest month with an adjustment: since then the
+  /// difference between the banks and the wallets is explained month by
+  /// month; before it, it is inside the wallets' starting balances. Null
+  /// before the first one (the first sync).
+  static Future<DateTime?> adjustedSince() async {
+    final db = await SqliteDatabase.instance.database;
+    if (db == null) return null;
+    final rows = await db.rawQuery(
+      'SELECT MIN(dinzo_id) AS id FROM records WHERE dinzo_id LIKE ?',
+      ['$adjustmentPrefix%'],
+    );
+    final id = rows.first['id'] as String?;
+    final month = id == null
+        ? null
+        : RegExp(r'(\d{4})-(\d{2})$').firstMatch(id);
+    if (month == null) return null;
+    return DateTime(int.parse(month[1]!), int.parse(month[2]!));
   }
 
   /// The wallet to invest, once the first sync has made it.

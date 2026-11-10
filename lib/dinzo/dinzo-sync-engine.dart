@@ -256,12 +256,22 @@ class DinzoSyncEngine {
   final int? defaultWalletId;
 
   /// The wallet to invest: money sent to a bank outside the everyday ones
-  /// leaves it ([brokerOf]). Null before it exists: such transfers are
+  /// leaves it ([isAporte]). Null before it exists: such transfers are
   /// skipped like any other investment move.
   final int? toInvestWalletId;
 
   /// Whether an account is in an everyday bank ([DailyBanks]).
   final bool Function(DinzoAccount account) isDailyAccount;
+
+  /// Whether a bank (catalogue name) is an everyday one ([DailyBanks]).
+  final bool Function(String bank) isDailyBank;
+
+  /// Aportes whose other side Dinzo does not show (a Pix to a crypto
+  /// exchange, a TED to a broker that sends no entries) are recognised from
+  /// this day on. Before it, the wallets' starting balances already hold
+  /// them ([DailyMoney]): recognising them again would count them twice.
+  /// Null: from the start (the first sync).
+  final DateTime? unpairedAportesFrom;
 
   DinzoSyncEngine({
     required this.config,
@@ -270,6 +280,8 @@ class DinzoSyncEngine {
     required this.defaultWalletId,
     this.toInvestWalletId,
     this.isDailyAccount = DailyBanks.holdsAccount,
+    this.isDailyBank = DailyBanks.isDaily,
+    this.unpairedAportesFrom,
   }) : accounts = {for (final a in accounts) a.id: a},
        categories = {for (final c in categories) c.id: c};
 
@@ -291,9 +303,10 @@ class DinzoSyncEngine {
   /// [plan].
   final Set<String> _billPaymentPairs = {};
 
-  /// Money between an everyday bank and another one (a broker), by the id
-  /// of the everyday side → the other bank's account. Filled by [plan].
-  final Map<String, DinzoAccount> _brokerTransfers = {};
+  /// Money that left the everyday banks to be invested, or came back from
+  /// an investment, by the id of the everyday side → the other bank's short
+  /// name ("BTG", "OKX"), null when unknown. Filled by [plan].
+  final Map<String, String?> _aportes = {};
 
   /// Ids of transactions on a bank outside the everyday ones whose other
   /// side is on another own account (Dinzo hid one side only). Filled by
@@ -395,7 +408,7 @@ class DinzoSyncEngine {
     if (config.ignoredIds.contains(tx.id)) return DinzoSkipReason.ignoredByUser;
     // Dinzo hides it as a transfer between own accounts, but the money left
     // (or came back to) the everyday banks.
-    if (brokerOf(tx) != null) return null;
+    if (isAporte(tx)) return null;
     if (tx.hidden) return DinzoSkipReason.hidden;
     if (isBillPayment(tx)) return DinzoSkipReason.internalTransfer;
     if (isInvestment(tx)) return DinzoSkipReason.investment;
@@ -431,10 +444,12 @@ class DinzoSyncEngine {
     return false;
   }
 
-  /// The account outside the everyday banks that [tx] sent money to or got
-  /// it from, when [tx] is one: then it is an aporte (or a withdrawal) of the
-  /// wallet to invest.
-  DinzoAccount? brokerOf(DinzoTransaction tx) => _brokerTransfers[tx.id];
+  /// Whether [tx] sent money from the everyday banks to be invested, or got
+  /// it back: an aporte (or a withdrawal) of the wallet to invest.
+  bool isAporte(DinzoTransaction tx) => _aportes.containsKey(tx.id);
+
+  /// The bank the money of an aporte went to (or came from), when known.
+  String? aporteBankOf(DinzoTransaction tx) => _aportes[tx.id];
 
   bool _isBankAccount(DinzoAccount? account) =>
       account != null && !account.isCreditCard;
@@ -486,13 +501,21 @@ class DinzoSyncEngine {
     }
   }
 
-  /// Pairs each transfer between own accounts on an everyday bank with the
-  /// other side on a bank outside them: opposite direction, same amount, up
-  /// to 3 days apart (the closest), one to one. Only the everyday side
-  /// becomes a record; the other one stays hidden like everything that
-  /// happens inside a broker.
-  void _findBrokerTransfers(List<DinzoTransaction> transactions) {
-    _brokerTransfers.clear();
+  /// Finds the aportes and withdrawals of the wallet to invest, on the
+  /// everyday side (the only one that becomes a record):
+  /// - a transfer between own accounts whose other side is on a bank
+  ///   outside the everyday ones: opposite direction, same amount, up to 3
+  ///   days apart (the closest), one to one. The other side stays hidden
+  ///   like everything that happens inside a broker;
+  /// - from [unpairedAportesFrom] on (or when it is a record already,
+  ///   [recorded]), one whose other side Dinzo does not show: money it files
+  ///   under Investimentos (a Pix to a crypto exchange), or a transfer
+  ///   between own accounts that reached no everyday bank (a TED to a broker
+  ///   that sends no entries).
+  /// Money that stays in the bank (RDB, cofrinho, stocks bought there), its
+  /// yield and a transfer that failed and came back are none of these.
+  void _findAportes(List<DinzoTransaction> transactions, Set<String> recorded) {
+    _aportes.clear();
     if (toInvestWalletId == null) return;
     final real = transactions.where((t) => !t.projected).toList();
     final elsewhere = [
@@ -501,7 +524,6 @@ class DinzoSyncEngine {
             !isDailyAccount(accounts[t.accountId]!))
           t,
     ];
-    if (elsewhere.isEmpty) return;
     bool daily(DinzoTransaction t) =>
         _isBankAccount(accounts[t.accountId]) &&
         isDailyAccount(accounts[t.accountId]!);
@@ -513,11 +535,23 @@ class DinzoSyncEngine {
                 .inDays
                 .abs() <=
             3;
+    final cameBack = {
+      ..._refunded.keys,
+      for (final debit in _refunded.values) debit.id,
+    };
+    final from = unpairedAportesFrom == null ? null : day(unpairedAportesFrom!);
     final used = <String>{};
     for (final tx in real) {
-      if (!daily(tx)) continue;
-      if (!tx.hidden && !isOwnTransfer(tx)) continue;
-      if (isBillPayment(tx) || isInvestment(tx)) continue;
+      if (!daily(tx) || isBillPayment(tx) || cameBack.contains(tx.id)) {
+        continue;
+      }
+      final investment = isInvestment(tx);
+      final invested =
+          investment &&
+          !_investmentMove.hasMatch(tx.description) &&
+          !_brokerEntry.hasMatch(tx.description);
+      final own = !investment && (tx.hidden || isOwnTransfer(tx));
+      if (!invested && !own) continue;
       // Its other side is in another everyday bank: the money stayed.
       if (real.any(
         (t) => t.accountId != tx.accountId && daily(t) && sameMoney(t, tx),
@@ -537,10 +571,28 @@ class DinzoSyncEngine {
         best = other;
         bestGap = gap;
       }
-      if (best == null) continue;
-      used.add(best.id);
-      _brokerTransfers[tx.id] = accounts[best.accountId]!;
+      if (best != null) {
+        used.add(best.id);
+        _aportes[tx.id] = _bankName(accounts[best.accountId]!);
+        continue;
+      }
+      if (from != null &&
+          tx.date.compareTo(from) < 0 &&
+          !recorded.contains(tx.id)) {
+        continue;
+      }
+      _aportes[tx.id] = _outsideBankNamedIn(tx);
     }
+  }
+
+  /// The bank outside the everyday ones that [tx] names as the other side
+  /// ("Pix enviado para OKX SERVICOS DIGITAIS"), if any.
+  String? _outsideBankNamedIn(DinzoTransaction tx) {
+    for (final text in [tx.description, ?tx.originalDescription]) {
+      final bank = KnownTag.bankIn(counterparty(text));
+      if (bank != null && !isDailyBank(bank.name)) return bank.name;
+    }
+    return null;
   }
 
   void _findInstallmentTotals(List<DinzoTransaction> transactions) {
@@ -661,7 +713,7 @@ class DinzoSyncEngine {
   static String _normalized(String s) =>
       s.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
-  CategoryType categoryTypeOf(DinzoTransaction tx) => brokerOf(tx) != null
+  CategoryType categoryTypeOf(DinzoTransaction tx) => isAporte(tx)
       ? CategoryType.investment
       : tx.isDebit
       ? CategoryType.expense
@@ -675,7 +727,7 @@ class DinzoSyncEngine {
   /// (a subcategory such as "Luz"; AUPP knows its parent). A merchant rule or a category mapping, when present, is an
   /// explicit override.
   String resolveCategory(DinzoTransaction tx) {
-    if (brokerOf(tx) != null) {
+    if (isAporte(tx)) {
       return tx.isDebit ? Category.investmentName : Category.withdrawalName;
     }
     final rule = config.merchantRules[merchantKey(tx.description)];
@@ -756,7 +808,7 @@ class DinzoSyncEngine {
     bankTag(tx),
     methodTag(tx),
     // An aporte has one side only: nothing to cancel it out.
-    if (isOwnTransfer(tx) && brokerOf(tx) == null) MoneyAccounts.transferTag,
+    if (isOwnTransfer(tx) && !isAporte(tx)) MoneyAccounts.transferTag,
   ].whereType<String>().toList()..sort();
 
   /// Dinzo subcategory title → its top-level category title.
@@ -766,7 +818,7 @@ class DinzoSyncEngine {
         c.title: categories[c.parentId]!.title,
   };
 
-  int? resolveWallet(DinzoTransaction tx) => brokerOf(tx) != null
+  int? resolveWallet(DinzoTransaction tx) => isAporte(tx)
       ? toInvestWalletId
       : config.merchantRules[merchantKey(tx.description)]?.walletId ??
             defaultWalletId;
@@ -777,10 +829,12 @@ class DinzoSyncEngine {
   /// in the tag).
   String titleFor(DinzoTransaction tx) {
     final own = accounts[tx.accountId];
-    final broker = brokerOf(tx);
-    if (broker != null && own != null) {
+    if (isAporte(tx) && own != null) {
       final here = _bankName(own);
-      final there = _bankName(broker);
+      final there = aporteBankOf(tx);
+      if (there == null) {
+        return tx.isDebit ? 'Aporte do $here' : 'Resgate para o $here';
+      }
       return tx.isDebit
           ? 'Aporte do $here para o $there'
           : 'Resgate do $there para o $here';
@@ -855,7 +909,12 @@ class DinzoSyncEngine {
     _findBillPaymentPairs(transactions);
     _findRefunds(transactions);
     _findInstallmentTotals(transactions);
-    _findBrokerTransfers(transactions);
+    _findAportes(transactions, {
+      for (final r in linkedRecords)
+        if (r.dinzoId != null &&
+            r.category?.categoryType == CategoryType.investment)
+          r.dinzoId!,
+    });
     _findMovesOutside(transactions);
 
     for (final tx in transactions) {

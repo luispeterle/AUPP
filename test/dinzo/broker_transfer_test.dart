@@ -4,6 +4,9 @@ import 'package:aupp/dinzo/dinzo-models.dart';
 import 'package:aupp/dinzo/dinzo-sync-engine.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
+import 'package:aupp/models/record.dart';
+import 'package:aupp/services/service-config.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 
 const conta = 1;
 const investir = 3;
@@ -118,7 +121,10 @@ void main() {
       tx('out', 'nu', 'DEBIT', 100),
       tx('in', 'btg', 'CREDIT', 100, date: '2026-11-06'),
     ]);
-    expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    // It still left the everyday banks, to somewhere unknown.
+    final item = p.ofKind(DinzoPlanKind.create).single;
+    expect(item.transaction!.id, 'out');
+    expect(item.desired!.title, 'Aporte do Nubank');
   });
 
   test('without the wallet to invest yet, it stays hidden', () {
@@ -230,6 +236,159 @@ void main() {
       );
       expect(engine.outsideBankOf('btgb'), 'BTG');
       expect(engine.outsideBankOf('nu'), isNull);
+    });
+  });
+
+  group('aportes whose other side Dinzo does not show', () {
+    setUpAll(() {
+      tz.initializeTimeZones();
+      ServiceConfig.localTimezone = 'UTC';
+    });
+
+    final categories = [
+      DinzoCategory(id: 'invest', title: 'Investimentos'),
+      DinzoCategory(id: 'aplicacao', title: 'Aplicação', parentId: 'invest'),
+      DinzoCategory(id: 'proventos', title: 'Proventos', parentId: 'invest'),
+    ];
+
+    DinzoSyncPlan unpaired(
+      List<DinzoTransaction> txs, {
+      List<Record> linked = const [],
+    }) =>
+        DinzoSyncEngine(
+          config: DinzoConfig(
+            startDate: DateTime(2026, 10, 1),
+            selfIdentifiers: ['Fulano de Tal'],
+          ),
+          accounts: accounts,
+          categories: categories,
+          defaultWalletId: conta,
+          toInvestWalletId: investir,
+          isDailyAccount: (a) => !a.id.startsWith('btg'),
+          unpairedAportesFrom: DateTime(2026, 11, 1),
+        ).plan(
+          transactions: txs,
+          linkedRecords: linked,
+          from: DateTime(2026, 10, 1),
+          to: DateTime(2026, 11, 30),
+        );
+
+    DinzoTransaction invested(String id, String description, {String? date}) =>
+        DinzoTransaction(
+          id: id,
+          date: date ?? '2026-11-08',
+          type: 'DEBIT',
+          amount: 300,
+          description: description,
+          accountId: 'nu',
+          categoryId: 'aplicacao',
+        );
+
+    test('a Pix to a crypto exchange is an aporte to it', () {
+      final p = unpaired([
+        invested('okx', 'Transferência enviada pelo Pix|OKX SERVICOS DIGITAIS'),
+      ]);
+      final item = p.ofKind(DinzoPlanKind.create).single;
+      expect(item.categoryType, CategoryType.investment);
+      expect(item.desired!.categoryName, Category.investmentName);
+      expect(item.desired!.walletId, investir);
+      expect(item.desired!.value, -300);
+      expect(item.desired!.title, 'Aporte do Nubank para o OKX');
+    });
+
+    test('a transfer to myself that reached no everyday bank', () {
+      final p = unpaired([
+        tx('ted', 'c6', 'DEBIT', 31.36, date: '2026-11-06'),
+        tx(
+          'back',
+          'nu',
+          'CREDIT',
+          26,
+          date: '2026-11-07',
+          description: 'Pix recebido de Fulano de Tal',
+        ),
+      ]);
+      final titles = {
+        for (final i in p.ofKind(DinzoPlanKind.create))
+          i.transaction!.id: (i.desired!.title, i.desired!.categoryName),
+      };
+      expect(titles, {
+        'ted': ('Aporte do C6', Category.investmentName),
+        'back': ('Resgate para o Nubank', Category.withdrawalName),
+      });
+    });
+
+    test('a transfer that failed and came back is none', () {
+      final p = unpaired([
+        tx(
+          'failed',
+          'c6',
+          'DEBIT',
+          31.36,
+          date: '2026-11-06',
+          description: 'Transferência enviada Fulano de Tal',
+        ),
+        tx(
+          'refund',
+          'c6',
+          'CREDIT',
+          31.36,
+          date: '2026-11-06',
+          description: 'Reembolso de transferência enviada Fulano de Tal',
+          hidden: false,
+        ),
+        tx(
+          'sent',
+          'c6',
+          'DEBIT',
+          31.36,
+          date: '2026-11-06',
+          description: 'Transferência enviada Fulano de Tal',
+        ),
+      ]);
+      expect(p.ofKind(DinzoPlanKind.create).map((i) => i.transaction!.id), [
+        'sent',
+      ]);
+    });
+
+    test('money that stays in the bank and its yield are none', () {
+      final p = unpaired([
+        invested('rdb', 'Aplicação RDB'),
+        invested('acoes', 'Compra de Renda Variável'),
+        DinzoTransaction(
+          id: 'rend',
+          date: '2026-11-08',
+          type: 'CREDIT',
+          amount: 0.53,
+          description: 'Rendimentos',
+          accountId: 'nu',
+          categoryId: 'proventos',
+        ),
+      ]);
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    });
+
+    test('before the wallets explain each month, it is in their balances', () {
+      final okx = invested(
+        'okx',
+        'Transferência enviada pelo Pix|OKX SERVICOS DIGITAIS',
+        date: '2026-10-08',
+      );
+      expect(unpaired([okx]).ofKind(DinzoPlanKind.create), isEmpty);
+      // One already recorded stays.
+      final recorded = Record(
+        -300,
+        'Aporte do Nubank para o OKX',
+        Category(
+          Category.investmentName,
+          categoryType: CategoryType.investment,
+        ),
+        DateTime.utc(2026, 10, 8, 12),
+        walletId: investir,
+        dinzoId: 'okx',
+      );
+      final p = unpaired([okx], linked: [recorded]);
+      expect(p.ofKind(DinzoPlanKind.remove), isEmpty);
     });
   });
 }

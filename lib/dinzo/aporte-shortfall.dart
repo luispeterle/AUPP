@@ -2,7 +2,7 @@ import 'package:aupp/models/record.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
 
-/// An aporte from the Dinzo ([DinzoSyncEngine.brokerOf]) always leaves the
+/// An aporte from the Dinzo ([DinzoSyncEngine.isAporte]) always leaves the
 /// wallet to invest. When that wallet did not have the money, the rest came
 /// from the default wallet (Conta corrente): the Extrato marks the aporte
 /// ([Record.investShortfall]) until the user confirms it, which records a
