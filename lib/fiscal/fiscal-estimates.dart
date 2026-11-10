@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:aupp/accounts/money-accounts.dart';
+import 'package:aupp/dinzo/estimate-link.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/recurrent-period.dart';
 import 'package:aupp/models/recurrent-record-pattern.dart';
@@ -129,13 +130,16 @@ class FiscalEstimates {
     final data = company.fiscal;
     final now = FiscalStore.currentMonth;
     var changed = false;
+    final linked = await EstimateLink.linkedOccurrences();
 
     /// Whether the estimate [id] is still there; it is paid by Pix (each
-    /// month expects its code), so the tag is put back when missing.
+    /// month expects its code), so the tag is put back when missing. One
+    /// gone because linking consumed it (EstimateLink.deleteIfDone) was
+    /// paid, not deleted: it is not created again.
     Future<bool> exists(String? id) async {
       if (id == null) return false;
       final pattern = await db.getRecurrentRecordPattern(id);
-      if (pattern == null) return false;
+      if (pattern == null) return linked.containsKey(id);
       if (!pattern.tags.contains('Pix')) {
         pattern.tags = {...pattern.tags, 'Pix'};
         await db.updateRecordPatternById(id, pattern);
