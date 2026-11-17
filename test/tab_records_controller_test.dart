@@ -410,6 +410,25 @@ void main() {
     });
   });
 
+  group('withoutUpcoming', () {
+    Record occurrence(String title, DateTime at) =>
+        Record(-10, title, testCategory, at)..isFutureRecord = true;
+
+    test('hides only what comes after today, past unlinked ones stay', () {
+      final today = DateTime(2026, 11, 17);
+      final stored = Record(-5, 'Mercado', testCategory,
+          DateTime.utc(2026, 11, 20, 12));
+      // Vienna is UTC+1: 21:00 of the 17th, then 00:30 of the 18th.
+      final listed = TabRecordsController.withoutUpcoming([
+        occurrence('Aluguel', DateTime.utc(2026, 11, 5, 12)),
+        occurrence('Luz', DateTime.utc(2026, 11, 17, 20)),
+        occurrence('Internet', DateTime.utc(2026, 11, 17, 23, 30)),
+        stored,
+      ], today);
+      expect(listed.map((r) => r!.title), ['Aluguel', 'Luz', 'Mercado']);
+    });
+  });
+
   group('isPastPeriodEnd', () {
     test('a past month end is before today', () {
       final now = DateTime(2026, 7, 7);
