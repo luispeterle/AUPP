@@ -450,6 +450,50 @@ void main() {
   });
 
   group('how records look', () {
+    DinzoTransaction renamed(String original) => DinzoTransaction(
+      id: 'r',
+      date: '2026-10-05',
+      type: 'DEBIT',
+      amount: 68,
+      description: 'Sorveteria',
+      originalDescription: original,
+      accountId: 'card',
+    );
+
+    test('the notes keep what the bank wrote, even when renamed', () {
+      final p = plan([renamed('Compra a Vista   sem Juros MasterCard')]);
+      final item = p.ofKind(DinzoPlanKind.create).single;
+      expect(item.desired!.title, 'Sorveteria');
+      expect(item.description, 'No banco: Compra a Vista sem Juros MasterCard');
+    });
+
+    test('the bank name comes after installments, also when not renamed', () {
+      final p = plan([tx('a', amount: 163.08, current: 1, total: 10)]);
+      expect(
+        p.ofKind(DinzoPlanKind.create).single.description,
+        'Parcelado em 10x de 163,08\nNo banco: LOJA',
+      );
+    });
+
+    test('the bank line joins the notes without touching the rest', () {
+      final t = renamed('MERCADO CENTRO');
+      expect(
+        DinzoSyncEngine.notesWithBankName('Era o mercado', t),
+        'Era o mercado\nNo banco: MERCADO CENTRO',
+      );
+      expect(
+        DinzoSyncEngine.notesWithBankName(
+          'Era o mercado\nNo banco: Compra a Vista\nlinha minha',
+          t,
+        ),
+        'Era o mercado\nNo banco: MERCADO CENTRO\nlinha minha',
+      );
+      expect(
+        DinzoSyncEngine.notesWithBankName('No banco: MERCADO CENTRO', t),
+        'No banco: MERCADO CENTRO',
+      );
+    });
+
     test('Nubank "Kind|Counterparty" keeps the counterparty as title', () {
       expect(
         DinzoSyncEngine.cleanTitle(
