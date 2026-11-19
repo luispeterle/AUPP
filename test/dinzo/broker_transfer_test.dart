@@ -254,6 +254,7 @@ void main() {
     DinzoSyncPlan unpaired(
       List<DinzoTransaction> txs, {
       List<Record> linked = const [],
+      bool Function(String bank, String product)? isDailyProduct,
     }) =>
         DinzoSyncEngine(
           config: DinzoConfig(
@@ -265,6 +266,7 @@ void main() {
           defaultWalletId: conta,
           toInvestWalletId: investir,
           isDailyAccount: (a) => !a.id.startsWith('btg'),
+          isDailyProduct: isDailyProduct ?? (_, _) => true,
           unpairedAportesFrom: DateTime(2026, 11, 1),
         ).plan(
           transactions: txs,
@@ -366,6 +368,70 @@ void main() {
         ),
       ]);
       expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    });
+
+    test('the C6 moving its own CDBs is money that stays in the bank', () {
+      DinzoTransaction c6(String id, String type, String description) =>
+          DinzoTransaction(
+            id: id,
+            date: '2026-11-17',
+            type: type,
+            amount: 20.53,
+            description: description,
+            accountId: 'c6',
+            categoryId: 'aplicacao',
+          );
+      final p = unpaired([
+        c6('aplica', 'DEBIT', 'APLICAÇÃO DE CDB'),
+        c6('garant', 'DEBIT', 'CDB C6 LIM.GARANT.'),
+        c6('volta', 'CREDIT', 'CDB C6 LIM. GARANT.'),
+        c6('resgate', 'CREDIT', 'RESGATE DE CDB'),
+      ]);
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+
+      // CDB in the C6 chosen as an investment: it leaves the wallets.
+      final chosen = unpaired(
+        [
+          c6('aplica', 'DEBIT', 'APLICAÇÃO DE CDB'),
+          c6('resgate', 'CREDIT', 'RESGATE DE CDB'),
+        ],
+        isDailyProduct: (bank, product) => !(bank == 'C6' && product == 'CDB'),
+      );
+      expect(
+        chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.title),
+        unorderedEquals(['Aporte do C6', 'Resgate para o C6']),
+      );
+      expect(
+        chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.walletId),
+        everyElement(investir),
+      );
+    });
+
+    test('stocks chosen as an investment in the Nubank: the order and what '
+        'comes back of it leave and return to the wallets', () {
+      DinzoTransaction nu(String id, String type, double amount, String text) =>
+          DinzoTransaction(
+            id: id,
+            date: '2026-11-10',
+            type: type,
+            amount: amount,
+            description: text,
+            accountId: 'nu',
+            categoryId: 'aplicacao',
+          );
+      final txs = [
+        nu('ordem', 'DEBIT', 2600.99, 'Compra de Renda Variável'),
+        nu('sobra', 'CREDIT', 20.24, 'Valor recebido de Investimentos'),
+      ];
+      expect(unpaired(txs).ofKind(DinzoPlanKind.create), isEmpty);
+      final chosen = unpaired(
+        txs,
+        isDailyProduct: (bank, product) => product != 'Ações',
+      );
+      expect(
+        chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.value),
+        unorderedEquals([-2600.99, 20.24]),
+      );
     });
 
     test('before the wallets explain each month, it is in their balances', () {

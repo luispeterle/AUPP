@@ -266,6 +266,10 @@ class DinzoSyncEngine {
   /// Whether a bank (catalogue name) is an everyday one ([DailyBanks]).
   final bool Function(String bank) isDailyBank;
 
+  /// Whether a product ([productOf]) in a bank is everyday money there
+  /// ([DailyBanks.holdsProduct]).
+  final bool Function(String bank, String product) isDailyProduct;
+
   /// Aportes whose other side Dinzo does not show (a Pix to a crypto
   /// exchange, a TED to a broker that sends no entries) are recognised from
   /// this day on. Before it, the wallets' starting balances already hold
@@ -281,6 +285,7 @@ class DinzoSyncEngine {
     this.toInvestWalletId,
     this.isDailyAccount = DailyBanks.holdsAccount,
     this.isDailyBank = DailyBanks.isDaily,
+    this.isDailyProduct = DailyBanks.holdsProduct,
     this.unpairedAportesFrom,
   }) : accounts = {for (final a in accounts) a.id: a},
        categories = {for (final c in categories) c.id: c};
@@ -290,13 +295,45 @@ class DinzoSyncEngine {
     caseSensitive: false,
   );
 
-  /// Nubank debits "Compra de Renda Variável" when a stock order is placed
-  /// and refunds what was not executed as "Valor recebido de Investimentos";
-  /// Dinzo files the debit under Compras, so it is matched by name.
+  /// Money a bank moves between its account and what it holds itself: the
+  /// Nubank's "Aplicação RDB", the C6's "RESGATE DE CDB" and "CDB C6 LIM.
+  /// GARANT.". Nubank debits "Compra de Renda Variável" when a stock order is
+  /// placed and refunds what was not executed as "Valor recebido de
+  /// Investimentos"; Dinzo files the debit under Compras, so it is matched by
+  /// name.
   static final RegExp _investmentMove = RegExp(
-    r'valor (recebido|transferido) (de|para) investimentos|aplica[cç][aã]o (rdb|cdb)|resgate (rdb|cdb|fundo)|dinheiro (reservado|retirado)|(compra|venda) de renda vari[aá]vel',
+    r'valor (recebido|transferido) (de|para) investimentos|(aplica[cç][aã]o|resgate) (de )?(rdb|cdb|fundo)|\bcdb c6\b|dinheiro (reservado|retirado)|(compra|venda) de renda vari[aá]vel',
     caseSensitive: false,
   );
+
+  /// The product a bank moves its own money into or out of
+  /// ([_investmentMove]), named as [productOf] names the positions; null
+  /// when the description does not say.
+  static String? _productMoved(String description) {
+    final text = description.toLowerCase();
+    if (RegExp(r'\b(cdb|rdb)\b').hasMatch(text)) return 'CDB';
+    if (text.contains('fundo')) return 'Fundo';
+    // The Nubank's stocks: the order and what comes back of it.
+    if (text.contains('renda vari') || text.contains('investimentos')) {
+      return 'Ações';
+    }
+    if (text.contains('dinheiro reservado') ||
+        text.contains('dinheiro retirado')) {
+      return 'Cofrinho';
+    }
+    return null;
+  }
+
+  /// Money the bank moves between its account and what it holds itself,
+  /// when that is everyday money there: it stays in the wallets. A product
+  /// chosen as an investment in that bank takes it out, like any aporte.
+  bool _staysInBank(DinzoTransaction tx) {
+    if (!_investmentMove.hasMatch(tx.description)) return false;
+    final account = accounts[tx.accountId];
+    final product = _productMoved(tx.description);
+    if (account == null || product == null) return true;
+    return isDailyProduct(_bankName(account), product);
+  }
 
   /// Ids of card bill payments found by pairing: a credit on a card and a
   /// debit of the same amount on a bank account within 3 days. Filled by
@@ -512,8 +549,9 @@ class DinzoSyncEngine {
   ///   under Investimentos (a Pix to a crypto exchange), or a transfer
   ///   between own accounts that reached no everyday bank (a TED to a broker
   ///   that sends no entries).
-  /// Money that stays in the bank (RDB, cofrinho, stocks bought there), its
-  /// yield and a transfer that failed and came back are none of these.
+  /// Money that stays in the bank (an RDB, a cofrinho, stocks bought there,
+  /// when everyday money there: [_staysInBank]), its yield and a transfer
+  /// that failed and came back are none of these.
   void _findAportes(List<DinzoTransaction> transactions, Set<String> recorded) {
     _aportes.clear();
     if (toInvestWalletId == null) return;
@@ -548,7 +586,7 @@ class DinzoSyncEngine {
       final investment = isInvestment(tx);
       final invested =
           investment &&
-          !_investmentMove.hasMatch(tx.description) &&
+          !_staysInBank(tx) &&
           !_brokerEntry.hasMatch(tx.description);
       final own = !investment && (tx.hidden || isOwnTransfer(tx));
       if (!invested && !own) continue;
