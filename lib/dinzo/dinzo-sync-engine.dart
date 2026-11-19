@@ -923,7 +923,34 @@ class DinzoSyncEngine {
     if (tx.notes != null && tx.notes!.trim().isNotEmpty) {
       parts.add(tx.notes!.trim());
     }
-    return parts.isEmpty ? null : parts.join('\n');
+    return notesWithBankName(parts.isEmpty ? null : parts.join('\n'), tx);
+  }
+
+  static const bankNamePrefix = 'No banco: ';
+
+  /// What the bank itself wrote, before any rename in Dinzo or here.
+  static String? bankName(DinzoTransaction tx) {
+    final name = (tx.originalDescription ?? tx.description)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return name.isEmpty ? null : name;
+  }
+
+  /// [notes] with the "No banco: …" line holding [tx]'s [bankName]. That
+  /// line is the sync's; the rest of the notes is never touched.
+  static String? notesWithBankName(String? notes, DinzoTransaction tx) {
+    final name = bankName(tx);
+    if (name == null) return notes;
+    final line = '$bankNamePrefix$name';
+    if (notes == null || notes.trim().isEmpty) return line;
+    final lines = notes.split('\n');
+    final i = lines.indexWhere((l) => l.startsWith(bankNamePrefix));
+    if (i >= 0) {
+      lines[i] = line;
+    } else {
+      lines.add(line);
+    }
+    return lines.join('\n');
   }
 
   /// [transactions] must cover the whole [from]..[to] window: a linked

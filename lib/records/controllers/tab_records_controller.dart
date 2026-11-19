@@ -72,9 +72,10 @@ class TabRecordsController {
           ?.getBool(PreferencesKeys.extratoShowHidden) ??
       false;
 
-  /// Whether the list shows the occurrences not stored yet
-  /// (recurrences, estimates); those of today always show. Off at every
-  /// start of the app. Only the list: totals and statistics count them.
+  /// Whether the list shows the occurrences not stored yet (recurrences,
+  /// estimates) after today; today's and past ones still not linked always
+  /// show ([withoutUpcoming]). Off at every start of the app. Only the
+  /// list: totals and statistics count them.
   static bool showUpcoming = false;
 
   /// The list before hidden records are dropped: hiding only takes them off
@@ -240,12 +241,16 @@ class TabRecordsController {
       listedRecords = filteredRecords;
       return;
     }
-    listedRecords = filteredRecords.where((r) {
-      if (r == null || !r.isFutureRecord) return true;
-      final d = r.dateTime;
-      return d.year == now.year && d.month == now.month && d.day == now.day;
-    }).toList();
+    listedRecords = withoutUpcoming(filteredRecords, today);
   }
+
+  /// [records] without the occurrences not stored yet dated after [today].
+  static List<Record?> withoutUpcoming(List<Record?> records, DateTime today) =>
+      records.where((r) {
+        if (r == null || !r.isFutureRecord) return true;
+        final d = r.dateTime;
+        return !DateTime(d.year, d.month, d.day).isAfter(today);
+      }).toList();
 
   /// [records] without the hidden ones. A purchase's caixinha part
   /// ([Record.isSplitPart]) goes with it.

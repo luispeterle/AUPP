@@ -7,6 +7,7 @@ import 'package:aupp/investments/investments-cache.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
+import 'package:aupp/services/automatic-writes.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/logger.dart';
 import 'package:aupp/services/service-config.dart';
@@ -599,6 +600,7 @@ class DinzoSyncService {
       await db.deleteRecordsInBatch(toDelete);
       result.removed = toDelete.length;
     }
+    await writeBankNames(prepared.plan);
     result.items.addAll(
       await BrokerPayment.sync(
         await linkedRecords(),
@@ -687,6 +689,43 @@ class DinzoSyncService {
         'tags ${before.tags.join(',')}→${after.tags.join(',')}',
     ];
     return parts.isEmpty ? 'sem mudança visível' : parts.join('; ');
+  }
+
+  /// The bank's own name in the notes of every linked record in the plan
+  /// ([DinzoSyncEngine.notesWithBankName]), new ones already have it. The
+  /// app does it by itself: each device redoes it, nothing to review.
+  @visibleForTesting
+  static Future<void> writeBankNames(DinzoSyncPlan plan) async {
+    final notes = <int, String?>{};
+    for (final item in plan.items) {
+      final record = item.existing;
+      final tx = item.transaction;
+      if (record?.id == null || tx == null) continue;
+      if (item.kind == DinzoPlanKind.remove ||
+          item.kind == DinzoPlanKind.skipped) {
+        continue;
+      }
+      final updated = DinzoSyncEngine.notesWithBankName(record!.description, tx);
+      if (updated == record.description) continue;
+      record.description = updated;
+      notes[record.id!] = updated;
+    }
+    if (notes.isEmpty) return;
+    await AutomaticWrites.run(() async {
+      final sqlite = (await SqliteDatabase.instance.database)!;
+      final batch = sqlite.batch();
+      notes.forEach(
+        (id, description) => batch.update(
+          'records',
+          {'description': description},
+          where: 'id = ?',
+          whereArgs: [id],
+        ),
+      );
+      await batch.commit(noResult: true);
+      SqliteDatabase.notifyChanged();
+    });
+    _logger.info('Bank names written in the notes of ${notes.length} records');
   }
 
   /// Renames the record's transaction in Dinzo, so its panel shows the same
