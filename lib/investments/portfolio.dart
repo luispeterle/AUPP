@@ -4,16 +4,16 @@ import 'asset-lots.dart';
 import 'diagram.dart';
 import 'stock-catalog.dart';
 
-/// What the Carteira tab can switch on and off: the classes of Carteira e
-/// aporte, and what the everyday banks hold as everyday money, which is the
-/// wallets' money and not an investment.
+/// What the Carteira tab can switch on and off, in the order it shows them:
+/// the classes of Carteira e aporte, and what the everyday banks hold as
+/// everyday money, which is the wallets' money and not an investment.
 enum PortfolioClass {
-  nationalStock('Ações', DiagramClass.nationalStock),
-  fii('FIIs', DiagramClass.fii),
   fixedIncome('Renda fixa', DiagramClass.fixedIncome),
-  dailyFixedIncome('Dia a dia', null),
+  nationalStock('Ações', DiagramClass.nationalStock),
   intlStock('Ações internacionais', DiagramClass.intlStock),
+  fii('FIIs', DiagramClass.fii),
   reit('REITs', DiagramClass.reit),
+  dailyFixedIncome('Dia a dia', null),
   crypto('Cripto', DiagramClass.crypto);
 
   final String label;
@@ -26,10 +26,10 @@ enum PortfolioClass {
   static PortfolioClass of(DiagramClass cls) =>
       values.firstWhere((c) => c.diagram == cls);
 
-  /// What a new visit shows: everything invested.
+  /// What a new visit shows: everything but the everyday money and cripto.
   static Set<PortfolioClass> get shownByDefault => {
     for (final c in values)
-      if (c != dailyFixedIncome) c,
+      if (c != dailyFixedIncome && c != crypto) c,
   };
 
   /// Held in Brazil: the Dinzo's positions.
@@ -60,14 +60,16 @@ Map<String, List<AssetLot>> dinzoLots(Iterable<DinzoInvestment> investments) {
       if (type != 'BUY' && type != 'SELL') continue;
       final sign = type == 'BUY' ? 1 : -1;
       final amount = (move['amount'] as num?)?.toDouble();
-      result.putIfAbsent(ticker, () => []).add(
-        AssetLot(
-          id: 'dinzo:${inv.assetKey}:${move['id'] ?? result[ticker]!.length}',
-          day: DateTime(day.year, day.month, day.day),
-          quantity: sign * quantity.abs(),
-          cost: amount == null ? null : sign * amount.abs(),
-        ),
-      );
+      result
+          .putIfAbsent(ticker, () => [])
+          .add(
+            AssetLot(
+              id: 'dinzo:${inv.assetKey}:${move['id'] ?? result[ticker]!.length}',
+              day: DateTime(day.year, day.month, day.day),
+              quantity: sign * quantity.abs(),
+              cost: amount == null ? null : sign * amount.abs(),
+            ),
+          );
     }
   }
   return result;

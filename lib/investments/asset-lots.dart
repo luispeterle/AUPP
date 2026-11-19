@@ -248,35 +248,59 @@ class AssetLots {
     return result;
   }
 
-  /// [points] from [from] on (all of them when null) as returns from 0%, next
-  /// to the Selic over the same days: the measure of the other portfolios.
+  /// [points] from [from] on (all of them when null) as returns from 0%:
+  /// what the money earned over what was invested on average (Modified
+  /// Dietz), so a time when little was invested weighs little, next to the
+  /// same money, deposits and withdrawals at the Selic. [selicKept] is the
+  /// share of the Selic's gain left after its tax (1 gross).
   static List<PerformancePoint> performance(
     List<PortfolioPoint> points,
     BenchmarkRates rates, {
     DateTime? from,
+    double selicKept = 1,
   }) {
     final shown = from == null
         ? points
         : points.where((p) => !p.date.isBefore(from)).toList();
     if (shown.isEmpty) return const [];
+    final start = shown.first;
     final result = <PerformancePoint>[];
-    var selic = 1.0;
-    var day = shown.first.date;
-    for (final point in shown) {
+    var selic = start.value;
+    // Money in (out when negative) since the start, and its sum by day.
+    var flows = 0.0, flowDays = 0.0;
+    var day = start.date;
+    for (var i = 0; i < shown.length; i++) {
+      final point = shown[i];
       while (day.isBefore(point.date)) {
         selic *= 1 + BenchmarkRates.rateOn(rates.selic, day);
         day = DateTime(day.year, day.month, day.day + 1);
       }
+      final span = _daysBetween(start.date, point.date);
+      if (i > 0) {
+        final flow = point.invested - shown[i - 1].invested;
+        flows += flow;
+        flowDays += flow * span;
+        selic += flow;
+      }
+      // Each flow counts for the part of the period it was there.
+      final base = span == 0
+          ? start.value
+          : start.value + (span * flows - flowDays) / span;
+      double earned(double value) =>
+          span == 0 || base <= 0 ? 0 : (value - start.value - flows) / base;
       result.add(
         PerformancePoint(
           point.date,
-          point.index / shown.first.index - 1,
-          selic - 1,
+          earned(point.value),
+          earned(selic) * selicKept,
         ),
       );
     }
     return result;
   }
+
+  static int _daysBetween(DateTime a, DateTime b) =>
+      (b.difference(a).inHours / 24).round();
 
   /// A lot's entry may have got another id, or be gone: looks for it by its
   /// date and value, and a lot without an entry stays, as a manual one.
@@ -344,5 +368,4 @@ class AssetLots {
     }
     return result;
   }
-
 }

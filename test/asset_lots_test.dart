@@ -101,8 +101,23 @@ void main() {
       final performance = AssetLots.performance(points, rates);
       expect(performance.first.portfolio, 0);
       expect(performance[1].portfolio, closeTo(0.10, 1e-9));
+      // The purchase is not gain, and on its day it has not earned yet.
       expect(performance[2].portfolio, closeTo(0.10, 1e-9));
-      expect(performance[3].portfolio, closeTo(0.21, 1e-9));
+      // R\$ 1.121 earned over what was there on average: 100 the 3 days and
+      // 11.000 for 1 of them.
+      expect(performance[3].portfolio, closeTo(1121 / (100 + 11000 / 3), 1e-9));
+    });
+
+    test('the Selic gets the same money on the same days', () {
+      final points = [
+        PortfolioPoint(day(0), 100, 100, 100, 1),
+        PortfolioPoint(day(1), 101, 100, 101, 1),
+        PortfolioPoint(day(2), 1102.01, 1100, 1102.01, 1),
+      ];
+      final gross = AssetLots.performance(points, rates);
+      expect(gross.last.portfolio, closeTo(gross.last.selic, 1e-9));
+      final net = AssetLots.performance(points, rates, selicKept: 0.85);
+      expect(net.last.selic, closeTo(gross.last.selic * 0.85, 1e-12));
     });
 
     test('a period starts from 0%, against the Selic of those days', () {

@@ -16,6 +16,7 @@ import 'crypto-history.dart';
 import 'crypto-view.dart';
 import 'diagram-page.dart' show FreedomCard, divisionOf;
 import 'diagram.dart';
+import 'investments-analytics.dart' show Position;
 import 'investments-cache.dart';
 import 'investments-page.dart' show InstitutionLogo;
 import 'module-cards.dart';
@@ -70,8 +71,8 @@ class PortfolioContext {
 }
 
 /// Everything invested in one page, class by class. Every class starts
-/// switched on (but the everyday banks' fixed income, which is the wallets'
-/// money); switching one off takes it out of the total, the charts, the
+/// switched on but the everyday banks' fixed income (the wallets' money) and
+/// cripto; switching one off takes it out of the total, the charts, the
 /// Divisão, the positions and its own cards at the end. Nothing is
 /// remembered: each visit starts the same.
 class PortfolioTab extends StatefulWidget {
@@ -91,8 +92,8 @@ class PortfolioTab extends StatefulWidget {
   final Future<void> Function() onRefresh;
 
   /// What is only of the positions here (the full list, FGC, IR, dividends),
-  /// for the classes switched on.
-  final List<Widget> Function(Set<PortfolioClass> shown) brazilExtras;
+  /// for the positions [include] keeps: those of the classes switched on.
+  final List<Widget> Function(bool Function(Position) include) brazilExtras;
 
   /// An error or a hint above everything.
   final Widget? banner;
@@ -152,7 +153,12 @@ class _PortfolioTabState extends State<PortfolioTab> {
       CryptoHistory.load(AssetLots.coins.keys.toList()).then((history) {
         if (mounted) setState(() => _cryptoHistory = history);
       }, onError: (_) {}),
-      _ratesSince(days.isEmpty ? null : days.first).then((rates) {
+      // A position bought before the history began up to a year earlier.
+      _ratesSince(
+        days.isEmpty
+            ? null
+            : DateTime(days.first.year - 1, days.first.month, days.first.day),
+      ).then((rates) {
         if (mounted && rates != null) setState(() => _rates = rates);
       }),
     ]);
@@ -215,49 +221,80 @@ class _PortfolioTabState extends State<PortfolioTab> {
       ? _dailyFixedIncome.fold(0.0, (sum, i) => sum + i.balance)
       : _assetsOf(cls).fold(0.0, (sum, a) => sum + a.value);
 
-  /// What a class did day by day, from its real purchases.
-  List<PortfolioPoint> _seriesOf(PortfolioClass cls) {
+  /// The class a Dinzo position is shown in: the one it has in Carteira e
+  /// aporte (a bond ETF in Renda fixa, gold in Cripto), else by its kind.
+  PortfolioClass _classOf(DinzoInvestment inv) {
+    if (DailyMoney.isMoney(inv)) return PortfolioClass.dailyFixedIncome;
+    final ticker = StockCompany.tickerOf(inv);
+    final cls = ticker == null ? null : _assetByTicker(ticker)?.cls;
+    if (cls != null) return PortfolioClass.of(cls);
+    return inv.type == DailyMoney.fixedIncomeType
+        ? PortfolioClass.fixedIncome
+        : PortfolioClass.nationalStock;
+  }
+
+  /// Held on the B3 through the Dinzo, whatever its class: a share's card.
+  bool _isListed(DiagramAsset asset) =>
+      asset.ticker != null &&
+      _positions.any((inv) => StockCompany.tickerOf(inv) == asset.ticker);
+
+  /// What a class did day by day, from its real purchases; fixed income
+  /// gross, or [net] of IR and IOF.
+  List<PortfolioPoint> _seriesOf(PortfolioClass cls, {bool net = false}) {
     final rates = _rates;
     if (rates == null) return const [];
     final today = DateTime.now();
+    // What the Dinzo holds on the B3 in this class (shares, FIIs, a bond or
+    // gold ETF), by its purchases and each day's close.
+    final tickers = {
+      for (final a in _assetsOf(cls))
+        if (a.ticker != null) a.ticker!,
+    };
+    final dinzo = {
+      for (final e in dinzoLots(_positions).entries)
+        if (tickers.contains(e.key)) e.key: e.value,
+    };
+    final listed = AssetLots.history(
+      lots: dinzo,
+      priceOn: _stockPriceOn,
+      rates: rates,
+      today: today,
+    );
     switch (cls) {
       case PortfolioClass.nationalStock || PortfolioClass.fii:
-        final tickers = {
-          for (final a in _assetsOf(cls))
-            if (a.ticker != null) a.ticker!,
-        };
-        final lots = dinzoLots(_positions);
-        return AssetLots.history(
-          lots: {
-            for (final e in lots.entries)
-              if (tickers.contains(e.key)) e.key: e.value,
-          },
-          priceOn: _stockPriceOn,
-          rates: rates,
-          today: today,
-        );
+        return listed;
       case PortfolioClass.fixedIncome || PortfolioClass.dailyFixedIncome:
         final daily = cls == PortfolioClass.dailyFixedIncome;
-        return Performance.history(
-          [
-            for (final inv in _positions)
-              if (inv.type == DailyMoney.fixedIncomeType &&
-                  DailyMoney.isMoney(inv) == daily)
-                inv,
-          ],
-          rates,
-          today,
-        );
+        return combineSeries([
+          Performance.history(
+            [
+              for (final inv in _positions)
+                if (inv.type == DailyMoney.fixedIncomeType &&
+                    DailyMoney.isMoney(inv) == daily)
+                  inv,
+            ],
+            rates,
+            today,
+            net: net,
+          ),
+          listed,
+        ]);
       case PortfolioClass.intlStock ||
           PortfolioClass.reit ||
           PortfolioClass.crypto:
         final crypto = cls == PortfolioClass.crypto;
-        return AssetLots.history(
-          lots: {for (final a in _assetsOf(cls)) a.key: AssetLots.of(a.key)},
-          priceOn: crypto ? _coinPriceOn : _ctx.abroadPriceOn,
-          rates: rates,
-          today: today,
-        );
+        return combineSeries([
+          AssetLots.history(
+            lots: {
+              for (final a in _assetsOf(cls))
+                if (!dinzo.containsKey(a.key)) a.key: AssetLots.of(a.key),
+            },
+            priceOn: crypto ? _coinPriceOn : _ctx.abroadPriceOn,
+            rates: rates,
+            today: today,
+          ),
+          listed,
+        ]);
     }
   }
 
@@ -336,6 +373,13 @@ class _PortfolioTabState extends State<PortfolioTab> {
               sinceStart: _sinceStart,
               note: _chartNote(undrawn),
               points: series,
+              netPoints:
+                  shown.contains(PortfolioClass.fixedIncome) ||
+                      shown.contains(PortfolioClass.dailyFixedIncome)
+                  ? () => combineSeries([
+                      for (final c in shown) _seriesOf(c, net: true),
+                    ])
+                  : null,
             ),
             EvolutionCard(
               info: _chartNote(undrawn),
@@ -359,7 +403,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
           ],
           DivisionCard(groups: groups, portfolio: portfolio),
           _positionsSection(context, shown, colors),
-          if (shown.any((c) => c.isBrazil)) ...widget.brazilExtras(_shown),
+          if (shown.any((c) => c.isBrazil || c == PortfolioClass.crypto))
+            ...widget.brazilExtras((p) => _shown.contains(_classOf(p.inv))),
           if (shown.any((c) => c.isAbroad)) ?_watching(context),
           if (_ctx.loaded)
             Padding(
@@ -477,20 +522,20 @@ class _PortfolioTabState extends State<PortfolioTab> {
     Map<String, Color> colors,
   ) {
     final cards = <(double, Widget)>[];
+    final brazil = _ctx.assets
+        .where(
+          (a) => const {
+            DiagramClass.nationalStock,
+            DiagramClass.fii,
+            DiagramClass.fixedIncome,
+          }.contains(a.cls),
+        )
+        .fold(0.0, (sum, a) => sum + a.value);
     for (final c in shown) {
       switch (c) {
         case PortfolioClass.nationalStock || PortfolioClass.fii:
-          final module = _ctx.assets
-              .where(
-                (a) => const {
-                  DiagramClass.nationalStock,
-                  DiagramClass.fii,
-                  DiagramClass.fixedIncome,
-                }.contains(a.cls),
-              )
-              .fold(0.0, (sum, a) => sum + a.value);
           for (final a in _assetsOf(c)) {
-            cards.add((a.value, _stockCard(context, a, module, colors)));
+            cards.add((a.value, _stockCard(context, a, brazil, colors)));
           }
         case PortfolioClass.intlStock || PortfolioClass.reit:
           final module = _ctx.assets
@@ -506,10 +551,22 @@ class _PortfolioTabState extends State<PortfolioTab> {
         case PortfolioClass.crypto:
           final module = _totalOf(c);
           for (final a in _assetsOf(c)) {
-            cards.add((a.value, _coinCard(context, a, module, colors)));
+            cards.add((
+              a.value,
+              _isListed(a)
+                  ? _stockCard(context, a, brazil, colors)
+                  : _coinCard(context, a, module, colors),
+            ));
           }
-        case PortfolioClass.fixedIncome || PortfolioClass.dailyFixedIncome:
-          // One by one in "Todas as posições".
+        case PortfolioClass.fixedIncome:
+          // A bond ETF, like a share; the rest one by one in "Todas as
+          // posições".
+          for (final a in _assetsOf(c)) {
+            if (_isListed(a)) {
+              cards.add((a.value, _stockCard(context, a, brazil, colors)));
+            }
+          }
+        case PortfolioClass.dailyFixedIncome:
           break;
       }
     }

@@ -51,11 +51,8 @@ class _AssetLotsPageState extends State<AssetLotsPage> {
   Future<void> _edit([AssetLot? lot]) async {
     final result = await showDialog<_LotResult>(
       context: context,
-      builder: (_) => _LotDialog(
-        title: widget.title,
-        lot: lot,
-        estimateOn: widget.priceOn,
-      ),
+      builder: (_) =>
+          _LotDialog(title: widget.title, lot: lot, estimateOn: widget.priceOn),
     );
     if (result == null) return;
     final others = [
@@ -64,7 +61,8 @@ class _AssetLotsPageState extends State<AssetLotsPage> {
     ];
     // An entry made here by older versions goes with its purchase. What
     // left the wallets comes from the Dinzo: link the purchase to it.
-    if (result.lot == null && lot != null) await Aportes.delete('lot:${lot.id}');
+    if (result.lot == null && lot != null)
+      await Aportes.delete('lot:${lot.id}');
     await _store([...others, ?result.lot]);
   }
 
@@ -289,9 +287,9 @@ class _LotDialogState extends State<_LotDialog> {
               subtitle: record == null
                   ? const Text('Opcional, agora ou depois')
                   : Text(
-                      DateFormat('dd/MM/yyyy').format(
-                        DateTime.fromMillisecondsSinceEpoch(record.at),
-                      ),
+                      DateFormat(
+                        'dd/MM/yyyy',
+                      ).format(DateTime.fromMillisecondsSinceEpoch(record.at)),
                     ),
               trailing: record == null
                   ? null
@@ -388,14 +386,11 @@ class _RecordPickerState extends State<_RecordPicker> {
                         return ListTile(
                           title: Text(_text(record)),
                           subtitle: Text(
-                            DateFormat(
-                              'dd/MM/yyyy',
-                            ).format(record.utcDateTime.toLocal()),
+                            DateFormat('dd/MM/yyyy')
+                                .format(record.utcDateTime.toLocal()),
                           ),
                           trailing: Text(
-                            getCurrencyValueString(
-                                    (record.value ?? 0).abs(),
-                                  ),
+                            getCurrencyValueString((record.value ?? 0).abs()),
                           ),
                           onTap: () => Navigator.pop(context, record),
                         );
@@ -424,10 +419,18 @@ class LotsSelicCard extends StatefulWidget {
     required this.rates,
     this.note,
     this.sinceStart,
+    this.netPoints,
   });
 
   final List<PortfolioPoint> points;
   final BenchmarkRates rates;
+
+  /// The same [points] net of IR and IOF, when there is fixed income: shows
+  /// the switch between gross and net. Built only when asked for.
+  final List<PortfolioPoint> Function()? netPoints;
+
+  /// What the Selic keeps net: 15% of IR, the lowest rate, after two years.
+  static const selicKeptNet = 0.85;
 
   /// When the line has limits worth saying.
   final String? note;
@@ -442,47 +445,81 @@ class LotsSelicCard extends StatefulWidget {
 class _LotsSelicCardState extends State<LotsSelicCard> {
   bool _sinceStart = false;
 
+  /// Gross by default; on, net of IR and IOF.
+  bool _net = false;
+
   String _money(double value) => getCurrencyValueString(value);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final all = widget.points;
+    final net = _net && widget.netPoints != null;
+    final all = net ? widget.netPoints!() : widget.points;
     if (all.length < 2) return const SizedBox.shrink();
     final last = all.last;
     final sinceStart = widget.sinceStart ?? _sinceStart;
+    final selicKept = net ? LotsSelicCard.selicKeptNet : 1.0;
+    final selic = last.invested + (last.selic - last.invested) * selicKept;
+    final comparison = SelicComparison(
+      points: AssetLots.performance(
+        all,
+        widget.rates,
+        from: sinceStart
+            ? null
+            : DateTime(last.date.year - 1, last.date.month, last.date.day),
+        selicKept: selicKept,
+      ),
+      rates: widget.rates,
+      sinceStart: widget.sinceStart == null ? _sinceStart : null,
+      onSinceStart: widget.sinceStart == null
+          ? (value) => setState(() => _sinceStart = value)
+          : null,
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Desde a primeira compra: ${_money(last.invested)} investidos '
+            'valem ${_money(last.value)}. Na Selic, nas mesmas datas, seriam '
+            '${_money(selic)}${net ? ', já sem os 15% de IR' : ''}.',
+            style: theme.textTheme.bodySmall,
+          ),
+          if (widget.note != null)
+            Text(widget.note!, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
     return InvestmentCard(
       title: SelicComparison.title,
       info:
-          'Rendimento acumulado das suas compras, cada uma a partir da própria '
-          'data, descontando aportes e resgates.',
-      child: SelicComparison(
-        points: AssetLots.performance(
-          all,
-          widget.rates,
-          from: sinceStart
-              ? null
-              : DateTime(last.date.year - 1, last.date.month, last.date.day),
-        ),
-        rates: widget.rates,
-        sinceStart: widget.sinceStart == null ? _sinceStart : null,
-        onSinceStart: widget.sinceStart == null
-            ? (value) => setState(() => _sinceStart = value)
-            : null,
-        footer: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Desde a primeira compra: ${_money(last.invested)} investidos '
-              'valem ${_money(last.value)}. Na Selic, nas mesmas datas, seriam '
-              '${_money(last.selic)}.',
-              style: theme.textTheme.bodySmall,
+          'Quanto o dinheiro rendeu sobre o que estava investido em cada '
+          'período: aportes e resgates não contam como ganho, e um período '
+          'com pouco dinheiro pesa pouco. A Selic recebe os mesmos aportes e '
+          'resgates, nas mesmas datas.\n\n'
+          'Bruto: a renda fixa rende a taxa contratada, sem imposto. '
+          'Descontando impostos: os resgates contam pelo que caiu na conta '
+          '(depois de IR e IOF), a renda fixa termina no saldo que o banco '
+          'informa, e a Selic perde 15% de IR, a menor alíquota. Uma posição '
+          'comprada antes do histórico tem o custo refeito como se o imposto '
+          'retido fosse todo IR de 20%, sem IOF. Ações e cripto só pagam '
+          'imposto na venda e seguem iguais.',
+      child: widget.netPoints == null
+          ? comparison
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Descontar impostos'),
+                  subtitle: const Text(
+                    'IR e IOF na renda fixa, 15% de IR na Selic',
+                  ),
+                  value: _net,
+                  onChanged: (value) => setState(() => _net = value),
+                ),
+                comparison,
+              ],
             ),
-            if (widget.note != null)
-              Text(widget.note!, style: theme.textTheme.bodySmall),
-          ],
-        ),
-      ),
     );
   }
 }

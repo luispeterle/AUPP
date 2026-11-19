@@ -14,7 +14,6 @@ import 'investments-analytics.dart';
 import 'investments-cache.dart';
 import 'freedom.dart';
 import 'portfolio-tab.dart';
-import 'portfolio.dart';
 import 'package:aupp/dinzo/daily-money.dart';
 
 /// Investments tab (pt-BR): positions, split, flows, history and
@@ -47,7 +46,6 @@ class InvestmentsPageState extends State<InvestmentsPage> {
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
-
 
   _PositionSort? _positionSort;
   bool _positionSortAscending = false;
@@ -122,7 +120,8 @@ class InvestmentsPageState extends State<InvestmentsPage> {
     if (over.isEmpty) return null;
     return _card(
       title: '🛡️ Acima da garantia do FGC',
-      info: 'O FGC cobre até ${_money(DepositGuarantee.perInstitution)} por '
+      info:
+          'O FGC cobre até ${_money(DepositGuarantee.perInstitution)} por '
           'instituição em CDB, LCI e LCA. Os próximos aportes podem ir para outra '
           'instituição sólida (Basileia acima de 12) ou para o Tesouro.',
       child: Column(
@@ -188,7 +187,9 @@ class InvestmentsPageState extends State<InvestmentsPage> {
                 onPressed: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const DinzoSettingsPage()),
+                    MaterialPageRoute(
+                      builder: (_) => const DinzoSettingsPage(),
+                    ),
                   );
                   if (mounted) _refresh();
                 },
@@ -202,22 +203,11 @@ class InvestmentsPageState extends State<InvestmentsPage> {
     );
   }
 
-  /// What is only of the positions here, for the classes shown in the
-  /// Carteira tab.
-  List<Widget> _brazilExtras(Set<PortfolioClass> shown) {
+  /// What is only of the positions here, for those of the classes shown in
+  /// the Carteira tab ([include]).
+  List<Widget> _brazilExtras(bool Function(Position) include) {
     final o = _overview;
     if (o == null) return const [];
-    bool include(Position p) {
-      if (DailyMoney.isMoney(p.inv)) {
-        return shown.contains(PortfolioClass.dailyFixedIncome);
-      }
-      if (p.inv.type == DailyMoney.fixedIncomeType) {
-        return shown.contains(PortfolioClass.fixedIncome);
-      }
-      return shown.contains(PortfolioClass.nationalStock) ||
-          shown.contains(PortfolioClass.fii);
-    }
-
     return [
       _buildPositions(o, include),
       ?_buildGuarantee(o),
@@ -234,7 +224,12 @@ class InvestmentsPageState extends State<InvestmentsPage> {
     String? subtitle,
     String? info,
     required Widget child,
-  }) => InvestmentCard(title: title, subtitle: subtitle, info: info, child: child);
+  }) => InvestmentCard(
+    title: title,
+    subtitle: subtitle,
+    info: info,
+    child: child,
+  );
 
   // ----------------------------------------------------------- performance
 
@@ -304,7 +299,10 @@ class InvestmentsPageState extends State<InvestmentsPage> {
   // ------------------------------------------------------------- positions
 
   /// All together, the largest first, with the bank and the product as filters.
-  Widget _buildPositions(InvestmentsOverview o, bool Function(Position) include) {
+  Widget _buildPositions(
+    InvestmentsOverview o,
+    bool Function(Position) include,
+  ) {
     final shownPositions = o.positions.where(include).toList();
     final theme = Theme.of(context);
     double total(Iterable<Position> positions) =>
@@ -316,8 +314,7 @@ class InvestmentsPageState extends State<InvestmentsPage> {
       for (final p in shownPositions) {
         sums[keyOf(p)] = (sums[keyOf(p)] ?? 0) + p.balance;
       }
-      return sums.keys.toList()
-        ..sort((a, b) => sums[b]!.compareTo(sums[a]!));
+      return sums.keys.toList()..sort((a, b) => sums[b]!.compareTo(sums[a]!));
     }
 
     final banks = <String, Institution>{
@@ -406,8 +403,7 @@ class InvestmentsPageState extends State<InvestmentsPage> {
   List<Position> _sortedPositions(List<Position> positions) {
     final sort = _positionSort;
     if (sort == null) {
-      return List.of(positions)
-        ..sort((a, b) => b.balance.compareTo(a.balance));
+      return List.of(positions)..sort((a, b) => b.balance.compareTo(a.balance));
     }
     Comparable? key(Position p) => switch (sort) {
       _PositionSort.age => p.tax.ageDays,
@@ -505,10 +501,7 @@ class InvestmentsPageState extends State<InvestmentsPage> {
             ? StockCompany.titleOf(ticker)
             : '${p.product}${p.rateLabel == null ? '' : ' · ${p.rateLabel}'}',
       ),
-      subtitle: Text(
-        parts.join(' · '),
-        style: theme.textTheme.bodySmall,
-      ),
+      subtitle: Text(parts.join(' · '), style: theme.textTheme.bodySmall),
       trailing: Text(
         _money(p.balance),
         style: const TextStyle(fontWeight: FontWeight.w600),
