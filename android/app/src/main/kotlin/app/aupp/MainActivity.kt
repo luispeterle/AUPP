@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -40,9 +41,22 @@ class MainActivity : FlutterFragmentActivity() {
      */
     private val lockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            UnlockedNotification.cancel(context)
-            lockChannel?.invokeMethod("lock", null)
+            lockNow()
         }
+    }
+
+    /**
+     * The screen went off (or "Bloquear agora") since the app was last
+     * unlocked in front: an "unlocked" that Dart sends afterwards, as the app
+     * goes to the background, comes from before it and must not bring the
+     * notification back.
+     */
+    private var lockedSinceShown = false
+
+    private fun lockNow() {
+        lockedSinceShown = true
+        UnlockedNotification.cancel(this)
+        lockChannel?.invokeMethod("lock", null)
     }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -65,6 +79,23 @@ class MainActivity : FlutterFragmentActivity() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        // A new process starts locked: a notification left by one that was
+        // killed (closed from the recent apps) is wrong.
+        UnlockedNotification.cancel(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Left because the screen went off: lock now. Some phones freeze an
+        // app in the background, and the screen-off broadcast never reaches it.
+        if (!getSystemService(PowerManager::class.java).isInteractive) lockNow()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Locked while away (a broadcast that came late): Dart locks again,
+        // in case its own lock did not run.
+        if (lockedSinceShown) lockChannel?.invokeMethod("lock", null)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -101,8 +132,15 @@ class MainActivity : FlutterFragmentActivity() {
                 if (call.method == "unlocked") {
                     // Fork: the disguise calculator was unlocked; "until"
                     // is when it locks again (null while the app is open).
-                    askNotifications()
-                    UnlockedNotification.show(this, call.argument<Number>("until")?.toLong())
+                    val until = call.argument<Number>("until")?.toLong()
+                    if (until != null && lockedSinceShown) {
+                        // Sent as the app left, after the screen went off.
+                        UnlockedNotification.cancel(this)
+                    } else {
+                        if (until == null) lockedSinceShown = false
+                        askNotifications()
+                        UnlockedNotification.show(this, until)
+                    }
                     result.success(null)
                 } else if (call.method == "locked") {
                     UnlockedNotification.cancel(this)
