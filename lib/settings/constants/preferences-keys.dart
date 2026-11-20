@@ -67,7 +67,11 @@ class PreferencesKeys {
   static const dinzoRequestLog = 'dinzoRequestLog';
   static const dinzoBlockedUntil = 'dinzoQuotaBlockedUntil';
   static const dinzoRequestDaily = 'dinzoRequestDaily'; // minute -> count, 24 h
-  static const dinzoServerRemaining = 'dinzoServerRemaining'; // last RateLimit r=
+  static const dinzoServerRemaining =
+      'dinzoServerRemaining'; // last RateLimit r=
+  // Tesouro and stocks bought in an everyday bank, not settled yet
+  // (DailyMoney.inTransit), device-only: each device syncs the Dinzo.
+  static const dinzoInTransit = 'dinzoInTransit';
 
   // Disguise calculator tape (lib/disguise), device-only.
   static const calcTape = 'calcTape';

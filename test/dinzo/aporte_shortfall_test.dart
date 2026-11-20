@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aupp/dinzo/aporte-shortfall.dart';
+import 'package:aupp/dinzo/daily-money.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/wallet.dart';
@@ -89,6 +90,36 @@ void main() {
     await AporteShortfall.cover(r, 70);
     await db().deleteRecordById(r.id);
     expect(await db().getAllRecords(), isEmpty);
+  });
+
+  Future<void> adjustment(String month, double value, DateTime day) =>
+      db().addRecord(
+        Record(
+          value,
+          'Ajuste',
+          Category.adjustment(),
+          day,
+          walletId: investir,
+          dinzoId: '${DailyMoney.adjustmentPrefix}$month',
+        ),
+      );
+
+  test(
+    'the month\'s adjustment, measured after the aporte, flags nothing',
+    () async {
+      // Dated on the 1st, but it holds what left the banks later in the month.
+      await adjustment('2026-11', -1000, DateTime.utc(2026, 11, 1, 12));
+      final r = await aporte(value: -20);
+      await AporteShortfall.mark([r]);
+      expect(r.investShortfall, isNull);
+    },
+  );
+
+  test('a past month\'s adjustment was there before the aporte', () async {
+    await adjustment('2026-10', -25, DateTime.utc(2026, 10, 1, 12));
+    final r = await aporte(value: -20);
+    await AporteShortfall.mark([r]);
+    expect(r.investShortfall, 15);
   });
 
   test('only aportes from the Dinzo', () async {

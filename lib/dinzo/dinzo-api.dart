@@ -19,6 +19,43 @@ class DinzoApiException implements Exception {
   String toString() => 'DinzoApiException($status, $code): $message';
 }
 
+/// Money an everyday bank took from the account into something it holds as
+/// everyday money (Tesouro, stocks), which the Dinzo shows only once it
+/// settles, a day or two later: on its way in the meantime
+/// ([DailyMoney.inTransit]).
+class MoneyOnTheWay {
+  /// Catalogue name of the bank ("Nubank") and the product, as [productOf]
+  /// names the positions ("Tesouro", "Ações").
+  final String bank;
+  final String product;
+
+  /// The day it left the account (the first one, for a group).
+  final DateTime since;
+  final double amount;
+
+  const MoneyOnTheWay(this.bank, this.product, this.since, this.amount);
+
+  Map<String, dynamic> toJson() => {
+    'bank': bank,
+    'product': product,
+    'since': since.toIso8601String().substring(0, 10),
+    'amount': amount,
+  };
+
+  static MoneyOnTheWay? fromJson(dynamic json) {
+    if (json is! Map) return null;
+    final since = DateTime.tryParse('${json['since']}');
+    final amount = (json['amount'] as num?)?.toDouble();
+    if (since == null || amount == null) return null;
+    return MoneyOnTheWay(
+      '${json['bank']}',
+      '${json['product']}',
+      since,
+      amount,
+    );
+  }
+}
+
 /// Totals that make up the user's real money, read on every sync.
 class DinzoBalances {
   /// Sum of the accounts in the everyday banks (cards excluded).
@@ -36,14 +73,21 @@ class DinzoBalances {
   /// its whole bill as money.
   final List<String> unknown;
 
+  /// What left the accounts into everyday money the Dinzo does not show yet:
+  /// shown beside the totals, counted in none.
+  final List<MoneyOnTheWay> onTheWay;
+
   DinzoBalances({
     required this.bank,
     required this.cardDebt,
     required this.parked,
     this.unknown = const [],
+    this.onTheWay = const [],
   });
 
   bool get complete => unknown.isEmpty;
+
+  double get inTransit => onTheWay.fold(0.0, (sum, m) => sum + m.amount);
 
   /// What the wallets divide, see [DailyMoney].
   double get money => bank + parked - cardDebt;

@@ -147,6 +147,100 @@ class DailyMoney {
     productOf(investment),
   );
 
+  /// How long money on its way ([inTransit]) is waited for: Tesouro and
+  /// stocks settle in a day or two, and a bank that never shows the position
+  /// should not hide the gap for good.
+  static const inTransitDays = 10;
+
+  static List<MoneyOnTheWay> get _sent {
+    final raw = ServiceConfig.sharedPreferences?.getString(
+      PreferencesKeys.dinzoInTransit,
+    );
+    if (raw == null) return const [];
+    try {
+      return (jsonDecode(raw) as List)
+          .map(MoneyOnTheWay.fromJson)
+          .nonNulls
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Keeps what a sync saw leave an everyday account into Tesouro or stocks
+  /// held as everyday money ([DinzoSyncEngine.onTheWayIn]), of the last
+  /// [inTransitDays] days.
+  static Future<void> rememberSent(
+    List<MoneyOnTheWay> sent,
+    DateTime today,
+  ) async {
+    final since = DateTime(today.year, today.month, today.day - inTransitDays);
+    await ServiceConfig.sharedPreferences?.setString(
+      PreferencesKeys.dinzoInTransit,
+      jsonEncode([
+        for (final m in sent)
+          if (!m.since.isBefore(since)) m.toJson(),
+      ]),
+    );
+  }
+
+  /// What is still on its way, by bank and product: what left the accounts
+  /// since the first of those days, less the positions of that product there
+  /// bought since then. Positions within 2% of it (the price moved) take it
+  /// all; the difference goes in the month's adjustment, like interest.
+  static List<MoneyOnTheWay> inTransit(
+    Iterable<DinzoInvestment> investments, {
+    DateTime? now,
+  }) {
+    final today = now ?? DateTime.now();
+    final since = DateTime(today.year, today.month, today.day - inTransitDays);
+    final groups = <(String, String), List<MoneyOnTheWay>>{};
+    for (final m in _sent) {
+      if (m.since.isBefore(since)) continue;
+      groups.putIfAbsent((m.bank, m.product), () => []).add(m);
+    }
+    final result = <MoneyOnTheWay>[];
+    for (final MapEntry(key: (bank, product), value: moves) in groups.entries) {
+      final first = moves
+          .map((m) => m.since)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      final sent = moves.fold(0.0, (sum, m) => sum + m.amount);
+      final arrived = investments
+          .where(
+            (i) =>
+                !i.archived &&
+                isMoney(i) &&
+                Institution.of(i).name == bank &&
+                _sameKind(product, productOf(i)) &&
+                _boughtSince(i, first),
+          )
+          .fold(0.0, (sum, i) => sum + i.balance);
+      if (arrived >= sent * 0.98) continue;
+      result.add(MoneyOnTheWay(bank, product, first, sent - arrived));
+    }
+    return result;
+  }
+
+  /// Stocks bought may come as a share, an ETF or a FII.
+  static bool _sameKind(String sent, String held) =>
+      sent == held || (sent == 'Ações' && const {'ETF', 'FII'}.contains(held));
+
+  static bool _boughtSince(DinzoInvestment inv, DateTime day) {
+    final from = DateTime(day.year, day.month, day.day - 1);
+    return [
+          inv.purchaseDate,
+          for (final m in inv.movements)
+            if (m.type == 'BUY') m.date,
+        ]
+        .map((d) => d == null ? null : DateTime.tryParse(d))
+        .nonNulls
+        .any((d) => !DateTime(d.year, d.month, d.day).isBefore(from));
+  }
+
+  /// [inTransit], summed.
+  static double onTheWay(Iterable<DinzoInvestment> investments) =>
+      inTransit(investments).fold(0.0, (sum, m) => sum + m.amount);
+
   /// What is parked in the everyday banks as everyday money.
   static double parkedIn(Iterable<DinzoInvestment> investments) => investments
       .where((i) => !i.archived && isMoney(i))
@@ -336,6 +430,7 @@ class DailyMoney {
       cardDebt: cardDebt,
       parked: parkedIn(investments),
       unknown: unknown,
+      onTheWay: inTransit(investments),
     );
   }
 }

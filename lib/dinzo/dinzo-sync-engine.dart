@@ -8,6 +8,7 @@ import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 
 import 'daily-money.dart';
+import 'dinzo-api.dart' show MoneyOnTheWay;
 import 'dinzo-config.dart';
 import 'dinzo-models.dart';
 
@@ -295,45 +296,90 @@ class DinzoSyncEngine {
     caseSensitive: false,
   );
 
-  /// Money a bank moves between its account and what it holds itself: the
-  /// Nubank's "Aplicação RDB", the C6's "RESGATE DE CDB" and "CDB C6 LIM.
-  /// GARANT.". Nubank debits "Compra de Renda Variável" when a stock order is
+  /// Entries Dinzo may not file under Investimentos that are investments
+  /// anyway. Nubank debits "Compra de Renda Variável" when a stock order is
   /// placed and refunds what was not executed as "Valor recebido de
   /// Investimentos"; Dinzo files the debit under Compras, so it is matched by
   /// name.
   static final RegExp _investmentMove = RegExp(
-    r'valor (recebido|transferido) (de|para) investimentos|(aplica[cç][aã]o|resgate) (de )?(rdb|cdb|fundo)|\bcdb c6\b|dinheiro (reservado|retirado)|(compra|venda) de renda vari[aá]vel',
+    r'valor (recebido|transferido) (de|para) investimentos|(aplica[cç][aã]o|resgate) (de |em |do )?(rdb|cdb|fundo|tesouro)|dinheiro (reservado|retirado)|(compra|venda) de renda vari[aá]vel',
     caseSensitive: false,
   );
 
-  /// The product a bank moves its own money into or out of
-  /// ([_investmentMove]), named as [productOf] names the positions; null
-  /// when the description does not say.
+  /// How a bank names what it holds itself, as [productOf] names the
+  /// positions.
+  static final List<(RegExp, String)> _products = [
+    (RegExp(r'\b(cdb|rdb)\b'), 'CDB'),
+    (RegExp(r'\blci\b'), 'LCI'),
+    (RegExp(r'\blca\b'), 'LCA'),
+    (RegExp(r'tesouro'), 'Tesouro'),
+    (RegExp(r'\bfundos?\b'), 'Fundo'),
+    (RegExp(r'renda vari[aá]vel|\ba[cç][oõ]es\b'), 'Ações'),
+    (
+      RegExp(r'cofrinho|caixinha|dinheiro (reservado|retirado|guardado)'),
+      'Cofrinho',
+    ),
+  ];
+
+  /// Money sent to someone (a broker, an exchange), not moved inside the bank.
+  static final RegExp _sentAway = RegExp(
+    r'\bpix\b|\bted\b|\bdoc\b|\btef\b|transfer[eê]ncia',
+  );
+
+  /// A bank applying or redeeming without saying what ("APLIC AUT MAIS").
+  static final RegExp _appliedHere = RegExp(r'\baplic|\bresg');
+
+  /// The product of a bank's own entry; null when it does not say.
   static String? _productMoved(String description) {
     final text = description.toLowerCase();
-    if (RegExp(r'\b(cdb|rdb)\b').hasMatch(text)) return 'CDB';
-    if (text.contains('fundo')) return 'Fundo';
-    // The Nubank's stocks: the order and what comes back of it.
-    if (text.contains('renda vari') || text.contains('investimentos')) {
-      return 'Ações';
-    }
-    if (text.contains('dinheiro reservado') ||
-        text.contains('dinheiro retirado')) {
-      return 'Cofrinho';
+    for (final (pattern, product) in _products) {
+      if (pattern.hasMatch(text)) return product;
     }
     return null;
+  }
+
+  /// Whether an investment entry ([isInvestment]) is the bank moving money
+  /// between the account and what it holds itself: it names a product, or
+  /// an application, and no one it was sent to. Any bank, whatever its
+  /// wording ("Aplicação RDB", "RESGATE DE CDB", "Guardado no Cofrinho").
+  bool _inBank(DinzoTransaction tx) {
+    if (_investmentMove.hasMatch(tx.description)) return true;
+    final text = tx.description.toLowerCase();
+    if (_sentAway.hasMatch(text)) return false;
+    return _productMoved(text) != null || _appliedHere.hasMatch(text);
   }
 
   /// Money the bank moves between its account and what it holds itself,
   /// when that is everyday money there: it stays in the wallets. A product
   /// chosen as an investment in that bank takes it out, like any aporte.
   bool _staysInBank(DinzoTransaction tx) {
-    if (!_investmentMove.hasMatch(tx.description)) return false;
+    if (!_inBank(tx)) return false;
     final account = accounts[tx.accountId];
     final product = _productMoved(tx.description);
     if (account == null || product == null) return true;
     return isDailyProduct(_bankName(account), product);
   }
+
+  /// Money an everyday bank took from the account into Tesouro or stocks it
+  /// holds as everyday money there ([_staysInBank]): they settle a day or
+  /// two later, and only then does the Dinzo show the position
+  /// ([DailyMoney.inTransit]).
+  List<MoneyOnTheWay> onTheWayIn(List<DinzoTransaction> transactions) => [
+    for (final tx in transactions)
+      if (!tx.projected &&
+          tx.isDebit &&
+          isInvestment(tx) &&
+          _isBankAccount(accounts[tx.accountId]) &&
+          isDailyAccount(accounts[tx.accountId]!) &&
+          const {'Tesouro', 'Ações'}.contains(_productMoved(tx.description)) &&
+          _staysInBank(tx))
+        MoneyOnTheWay(
+          _bankName(accounts[tx.accountId]!),
+          _productMoved(tx.description)!,
+          DateTime.parse(tx.date),
+          tx.amount,
+        ),
+  ];
 
   /// Ids of card bill payments found by pairing: a credit on a card and a
   /// debit of the same amount on a bank account within 3 days. Filled by
@@ -584,10 +630,13 @@ class DinzoSyncEngine {
         continue;
       }
       final investment = isInvestment(tx);
+      // A product chosen as an investment in the bank leaves the wallets,
+      // even when it reads like a broker's own entry ("Tesouro Direto").
       final invested =
           investment &&
           !_staysInBank(tx) &&
-          !_brokerEntry.hasMatch(tx.description);
+          (_investmentMove.hasMatch(tx.description) ||
+              !_brokerEntry.hasMatch(tx.description));
       final own = !investment && (tx.hidden || isOwnTransfer(tx));
       if (!invested && !own) continue;
       // Its other side is in another everyday bank: the money stayed.

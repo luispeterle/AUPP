@@ -323,9 +323,9 @@ class DinzoSyncService {
       onProgress?.call('Buscando contas e categorias…');
       final accounts = await api.accounts();
       final categories = await api.categories();
-      final balances = DailyMoney.balances(
-        accounts,
-        await InvestmentsCache.withBrokers(api, await api.investmentsNow()),
+      final positions = await InvestmentsCache.withBrokers(
+        api,
+        await api.investmentsNow(),
       );
 
       final now = DateTime.now();
@@ -386,6 +386,10 @@ class DinzoSyncService {
         from: from,
         to: to,
       );
+      // Derived and kept on this device only: what is settling now, shown
+      // beside the totals until the Dinzo shows its position.
+      await DailyMoney.rememberSent(engine.onTheWayIn(transactions), now);
+      final balances = DailyMoney.balances(accounts, positions);
       _logger.info(
         'Dinzo plan: ${transactions.length} transactions, '
         '${plan.ofKind(DinzoPlanKind.create).length} new, '
@@ -634,7 +638,8 @@ class DinzoSyncService {
           'Dinheiro ${balances.money.toStringAsFixed(2)} = bancos '
               '${balances.bank.toStringAsFixed(2)} + aplicações '
               '${balances.parked.toStringAsFixed(2)} − cartões '
-              '${balances.cardDebt.toStringAsFixed(2)}',
+              '${balances.cardDebt.toStringAsFixed(2)}'
+              '${balances.inTransit > 0 ? ' (a caminho ${balances.inTransit.toStringAsFixed(2)}, fora da conta)' : ''}',
         ],
       ),
     );

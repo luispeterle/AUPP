@@ -1,3 +1,4 @@
+import 'package:aupp/dinzo/daily-money.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/services/database/sqlite-database.dart';
 import 'package:aupp/services/service-config.dart';
@@ -50,10 +51,30 @@ class AporteShortfall {
     final byDay = <DateTime, double>{};
     for (final aporte in candidates) {
       final end = _dayEnd(aporte);
-      final balance =
-          byDay[end] ??= await _balanceAt(toInvest!.id!, end) ?? 0;
+      final balance = byDay[end] ??=
+          (await _balanceAt(toInvest!.id!, end) ?? 0) -
+          await _adjustmentOf(end);
       aporte.investShortfall = shortfallOf(aporte, balance);
     }
+  }
+
+  /// The month's adjustment ([DailyMoney.reconcile]) is dated on its first
+  /// day but measured at the last sync, after all the month: what left the
+  /// banks later, or what the Dinzo does not show yet, is no money missing on
+  /// the aporte's day. A past month's adjustment was there before it.
+  static Future<double> _adjustmentOf(DateTime day) async {
+    final db = (await SqliteDatabase.instance.database)!;
+    final month = '${day.year}-${day.month.toString().padLeft(2, '0')}';
+    final rows = await db.query(
+      'records',
+      columns: ['value'],
+      where: 'dinzo_id = ?',
+      whereArgs: ['${DailyMoney.adjustmentPrefix}$month'],
+    );
+    return rows.fold<double>(
+      0,
+      (sum, r) => sum + ((r['value'] as num?)?.toDouble() ?? 0),
+    );
   }
 
   static Future<double?> _balanceAt(int walletId, DateTime asOf) async {

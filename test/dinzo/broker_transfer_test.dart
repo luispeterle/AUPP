@@ -407,8 +407,68 @@ void main() {
       );
     });
 
-    test('stocks chosen as an investment in the Nubank: the order and what '
-        'comes back of it leave and return to the wallets', () {
+    test('any bank moving its own products stays, whatever its wording', () {
+      DinzoTransaction bank(String id, String type, String description) =>
+          DinzoTransaction(
+            id: id,
+            date: '2026-11-17',
+            type: type,
+            amount: 120,
+            description: description,
+            accountId: 'c6',
+            categoryId: 'aplicacao',
+          );
+      final p = unpaired([
+        bank('inter', 'DEBIT', 'APLICACAO CDB DI LIQUIDEZ'),
+        bank('lci', 'CREDIT', 'RESG LCI 90D'),
+        bank('picpay', 'DEBIT', 'Guardado no Cofrinho'),
+        bank('itau', 'DEBIT', 'APLIC AUT MAIS'),
+        bank('santander', 'CREDIT', 'RESGATE CONTAMAX'),
+      ]);
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    });
+
+    test('a Pix that names a product is still money sent away', () {
+      final p = unpaired([
+        DinzoTransaction(
+          id: 'pix',
+          date: '2026-11-17',
+          type: 'DEBIT',
+          amount: 300,
+          description: 'Pix enviado para XP Investimentos CDB',
+          accountId: 'c6',
+          categoryId: 'aplicacao',
+        ),
+      ]);
+      expect(p.ofKind(DinzoPlanKind.create).single.desired!.value, -300);
+    });
+
+    test('Tesouro bought in an everyday bank follows the choice of the '
+        'product there', () {
+      final txs = [
+        DinzoTransaction(
+          id: 'tesouro',
+          date: '2026-11-18',
+          type: 'DEBIT',
+          amount: 9918.49,
+          description: 'Aplicação em Tesouro Direto',
+          accountId: 'nu',
+          categoryId: 'aplicacao',
+        ),
+      ];
+      expect(unpaired(txs).ofKind(DinzoPlanKind.create), isEmpty);
+      final chosen = unpaired(
+        txs,
+        isDailyProduct: (bank, product) => product != 'Tesouro',
+      );
+      expect(
+        chosen.ofKind(DinzoPlanKind.create).single.desired!.value,
+        -9918.49,
+      );
+    });
+
+    test('stocks chosen as an investment in the Nubank: the order leaves the '
+        'wallets; an entry that does not say the product stays', () {
       DinzoTransaction nu(String id, String type, double amount, String text) =>
           DinzoTransaction(
             id: id,
@@ -428,10 +488,9 @@ void main() {
         txs,
         isDailyProduct: (bank, product) => product != 'Ações',
       );
-      expect(
-        chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.value),
-        unorderedEquals([-2600.99, 20.24]),
-      );
+      expect(chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.value), [
+        -2600.99,
+      ]);
     });
 
     test('before the wallets explain each month, it is in their balances', () {

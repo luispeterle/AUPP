@@ -71,10 +71,17 @@ class DinzoAutoSync {
   static Future<void> whenIdle() => _running?.future ?? Future.value();
 
   /// What keeps a plan from being applied without the user: conflicts with
-  /// local edits, removals and records without a category.
+  /// local edits, records whose transaction is gone from the Dinzo (or that
+  /// were edited here) and records without a category. A record the app now
+  /// skips by its own rule ([DinzoSyncEngine.skipReason]), its transaction
+  /// still there, goes by itself: waiting for the user would hold back the
+  /// whole sync, the wallet to invest included.
   static List<String> reviewReasons(DinzoSyncPlan plan) {
     final conflicts = plan.ofKind(DinzoPlanKind.conflict).length;
-    final removals = plan.ofKind(DinzoPlanKind.remove).length;
+    final removals = plan
+        .ofKind(DinzoPlanKind.remove)
+        .where((i) => i.skipReason == null || !i.selected)
+        .length;
     final noCategory = plan.items
         .where((i) => i.selected && i.needsCategory)
         .length;

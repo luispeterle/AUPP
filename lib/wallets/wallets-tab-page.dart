@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:aupp/components/on-the-way-chip.dart';
 import 'package:aupp/dinzo/daily-money.dart';
+import 'package:aupp/investments/investments-cache.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/models/wallet.dart';
@@ -32,6 +34,9 @@ class WalletsTabPageState extends State<WalletsTabPage> {
   bool _showArchived = false;
 
   WalletSortOption _selectedSortOption = WalletSortOption.original;
+  /// Money that left an account and the Dinzo does not show yet: a hint.
+  double _onTheWay = 0;
+
   WalletSortOption _storedDefaultOption = WalletSortOption.original;
   bool _isDefaultOrder = false;
   InvestmentTotals _investments = const InvestmentTotals();
@@ -81,7 +86,13 @@ class WalletsTabPageState extends State<WalletsTabPage> {
 
   Future<void> _loadInvestments() async {
     final totals = await InvestmentTotals.load();
-    if (mounted) setState(() => _investments = totals);
+    final positions = (await InvestmentsCache.load())?.investments ?? const [];
+    if (mounted) {
+      setState(() {
+        _investments = totals;
+        _onTheWay = DailyMoney.onTheWay(positions);
+      });
+    }
   }
 
   Future<void> _loadWallets() async {
@@ -507,17 +518,23 @@ class WalletsTabPageState extends State<WalletsTabPage> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Text(
-                            _displayBalanceString(),
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineLarge
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: getAmountColor(
-                                      _displayBalanceTotal(),
-                                      brightness),
-                                ),
+                          Wrap(
+                            spacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                _displayBalanceString(),
+                                style: Theme.of(context).textTheme.headlineLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: getAmountColor(
+                                        _displayBalanceTotal(),
+                                        brightness,
+                                      ),
+                                    ),
+                              ),
+                              if (_onTheWay > 0.005) OnTheWayChip(_onTheWay),
+                            ],
                           ),
                         ],
                       ),
