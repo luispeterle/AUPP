@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aupp/dinzo/daily-money.dart';
 import 'package:aupp/dinzo/dinzo-models.dart';
-import 'package:aupp/investments/aportes.dart';
 import 'package:aupp/dinzo/dinzo-taxes.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
@@ -132,7 +131,7 @@ void main() {
             Category.investment(),
             DateTime.utc(2026, 11, 10, 12),
             walletId: walletId,
-            dinzoId: '${Aportes.prefix}k#$n',
+            dinzoId: 'livre:inv:k#$n',
           ),
         );
       }
@@ -147,14 +146,6 @@ void main() {
           .where((r) => r.isInvestmentBuy);
       expect(entries.map((r) => r.value).toSet(), {-400.0, -2600.0});
       expect(entries.every((r) => !r.countsAsExpense), isTrue);
-
-      await Aportes.delete('k');
-      expect(
-        (await database().getAllRecords()).whereType<Record>().where(
-          (r) => r.isInvestmentBuy,
-        ),
-        isEmpty,
-      );
     });
 
     test('the first sync starts from the accounts, without an entry', () async {

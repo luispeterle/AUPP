@@ -117,17 +117,7 @@ class PortfolioPoint {
   /// The same money, on the same days, had it gone to the Selic.
   final double selic;
 
-  /// What the holdings did since the first purchase, without counting what
-  /// went in as gain (1 = where it began).
-  final double index;
-
-  const PortfolioPoint(
-    this.date,
-    this.value,
-    this.invested,
-    this.selic,
-    this.index,
-  );
+  const PortfolioPoint(this.date, this.value, this.invested, this.selic);
 }
 
 class AssetLots {
@@ -202,8 +192,6 @@ class AssetLots {
     final result = <PortfolioPoint>[];
     var invested = 0.0;
     var selic = 0.0;
-    var index = 1.0;
-    final lastPrice = <String, double>{};
     var next = 0;
     for (
       var day = entries.first.lot.day;
@@ -211,16 +199,6 @@ class AssetLots {
       day = DateTime(day.year, day.month, day.day + 1)
     ) {
       selic *= 1 + BenchmarkRates.rateOn(rates.selic, day);
-      // What was held coming into the day, before today's purchases.
-      var before = 0.0, after = 0.0;
-      for (final e in held.entries) {
-        final price = priceOn(e.key, day);
-        final previous = lastPrice[e.key];
-        if (price == null || previous == null || e.value <= 0) continue;
-        before += e.value * previous;
-        after += e.value * price;
-      }
-      if (before > 0) index *= after / before;
       while (next < entries.length && !entries[next].lot.day.isAfter(day)) {
         final entry = entries[next++];
         held[entry.asset] = (held[entry.asset] ?? 0) + entry.lot.quantity;
@@ -238,11 +216,10 @@ class AssetLots {
           complete = false;
           continue;
         }
-        lastPrice[e.key] = price;
         value += e.value * price;
       }
       if (complete) {
-        result.add(PortfolioPoint(day, value, invested, selic, index));
+        result.add(PortfolioPoint(day, value, invested, selic));
       }
     }
     return result;

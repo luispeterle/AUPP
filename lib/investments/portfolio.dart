@@ -76,9 +76,8 @@ Map<String, List<AssetLot>> dinzoLots(Iterable<DinzoInvestment> investments) {
 }
 
 /// Several portfolios as one, day by day: values, money in and its Selic add
-/// up; the return of each day is that of the whole, weighted by what each
-/// held. A portfolio not started yet adds nothing; one with a day missing
-/// keeps its last day (nothing moved).
+/// up. A portfolio not started yet adds nothing; one with a day missing keeps
+/// its last day (nothing moved).
 List<PortfolioPoint> combineSeries(List<List<PortfolioPoint>> series) {
   final parts = [
     for (final s in series)
@@ -96,22 +95,10 @@ List<PortfolioPoint> combineSeries(List<List<PortfolioPoint>> series) {
   ];
   final last = List<PortfolioPoint?>.filled(parts.length, null);
   final result = <PortfolioPoint>[];
-  var index = 1.0;
   for (final day in days) {
-    var before = 0.0, moved = 0.0;
     for (var i = 0; i < parts.length; i++) {
-      final previous = last[i];
-      final today = byDay[i][day];
-      if (previous != null && today != null && previous.value > 0) {
-        before += previous.value;
-        moved += previous.value * (today.index / previous.index);
-      } else if (previous != null) {
-        before += previous.value;
-        moved += previous.value;
-      }
-      if (today != null) last[i] = today;
+      last[i] = byDay[i][day] ?? last[i];
     }
-    if (before > 0) index *= moved / before;
     var value = 0.0, invested = 0.0, selic = 0.0;
     for (final p in last) {
       if (p == null) continue;
@@ -119,7 +106,7 @@ List<PortfolioPoint> combineSeries(List<List<PortfolioPoint>> series) {
       invested += p.invested;
       selic += p.selic;
     }
-    result.add(PortfolioPoint(day, value, invested, selic, index));
+    result.add(PortfolioPoint(day, value, invested, selic));
   }
   return result;
 }

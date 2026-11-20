@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:aupp/components/on-the-way-chip.dart';
 import 'package:aupp/components/total-text.dart';
 import 'package:aupp/dinzo/daily-money.dart';
 import 'package:aupp/dinzo/dinzo-taxes.dart';
@@ -371,7 +372,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
             LotsSelicCard(
               rates: _rates!,
               sinceStart: _sinceStart,
-              note: _chartNote(undrawn),
               points: series,
               netPoints:
                   shown.contains(PortfolioClass.fixedIncome) ||
@@ -483,7 +483,18 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       'até ser marcada.',
                 ),
                 const SizedBox(height: 4),
-                TotalValue(_money(total)),
+                Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    TotalValue(_money(total)),
+                    if (DailyMoney.onTheWay(
+                          widget.snapshot?.investments ?? const [],
+                        )
+                        case final way when way > 0.005)
+                      OnTheWayChip(way),
+                  ],
+                ),
                 if (money != null &&
                     !_shown.contains(PortfolioClass.dailyFixedIncome) &&
                     daily > 0)

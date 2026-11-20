@@ -110,9 +110,9 @@ void main() {
 
     test('the Selic gets the same money on the same days', () {
       final points = [
-        PortfolioPoint(day(0), 100, 100, 100, 1),
-        PortfolioPoint(day(1), 101, 100, 101, 1),
-        PortfolioPoint(day(2), 1102.01, 1100, 1102.01, 1),
+        PortfolioPoint(day(0), 100, 100, 100),
+        PortfolioPoint(day(1), 101, 100, 101),
+        PortfolioPoint(day(2), 1102.01, 1100, 1102.01),
       ];
       final gross = AssetLots.performance(points, rates);
       expect(gross.last.portfolio, closeTo(gross.last.selic, 1e-9));

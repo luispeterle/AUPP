@@ -52,34 +52,31 @@ void main() {
     expect(AssetLots.quantityOf(lots), 48);
   });
 
-  test('two portfolios add up, and each day returns what the whole did', () {
-    // A doubles from day 2 to day 3; B is bought on day 3 and stays.
+  test('two portfolios add up', () {
+    // A doubles from day 2 to day 3; B is bought on day 3.
     final a = [
-      PortfolioPoint(day(1), 100, 100, 100, 1),
-      PortfolioPoint(day(2), 100, 100, 100, 1),
-      PortfolioPoint(day(3), 200, 100, 100, 2),
+      PortfolioPoint(day(1), 100, 100, 100),
+      PortfolioPoint(day(2), 100, 100, 100),
+      PortfolioPoint(day(3), 200, 100, 100),
     ];
-    final b = [PortfolioPoint(day(3), 300, 300, 300, 1)];
+    final b = [PortfolioPoint(day(3), 300, 300, 300)];
     final both = combineSeries([a, b]);
     expect(both.map((p) => p.value), [100, 100, 500]);
     expect(both.map((p) => p.invested), [100, 100, 400]);
-    // What came in on day 3 is not gain: only A's doubling is.
-    expect(both.last.index, 2);
   });
 
   test('a day missing in one keeps its last day', () {
     final a = [
-      PortfolioPoint(day(1), 100, 100, 100, 1),
-      PortfolioPoint(day(3), 110, 100, 100, 1.1),
+      PortfolioPoint(day(1), 100, 100, 100),
+      PortfolioPoint(day(3), 110, 100, 100),
     ];
     final b = [
-      PortfolioPoint(day(1), 100, 100, 100, 1),
-      PortfolioPoint(day(2), 100, 100, 100, 1),
-      PortfolioPoint(day(3), 100, 100, 100, 1),
+      PortfolioPoint(day(1), 100, 100, 100),
+      PortfolioPoint(day(2), 100, 100, 100),
+      PortfolioPoint(day(3), 100, 100, 100),
     ];
     final both = combineSeries([a, b]);
     expect(both.map((p) => p.value), [200, 200, 210]);
-    expect(both.last.index, closeTo(1.05, 1e-9));
   });
 
   test('fixed income grows at its contracted rate from each deposit', () {
@@ -100,7 +97,6 @@ void main() {
     expect(points.map((p) => p.date), [day(1), day(2), day(3)]);
     expect(points.last.value, closeTo(1000 * 1.001 * 1.001, 1e-6));
     expect(points.last.invested, 1000);
-    expect(points.last.index, closeTo(1.001 * 1.001, 1e-9));
   });
 
   group('fixed income net of tax', () {

@@ -14,6 +14,7 @@ class InvestmentCard extends StatelessWidget {
     this.subtitle,
     this.info,
     this.leading,
+    this.trailing,
     required this.child,
   });
 
@@ -21,6 +22,9 @@ class InvestmentCard extends StatelessWidget {
   final String? subtitle;
   final String? info;
   final Widget? leading;
+
+  /// At the end of the title row (a toggle).
+  final Widget? trailing;
   final Widget child;
 
   @override
@@ -36,11 +40,11 @@ class InvestmentCard extends StatelessWidget {
             Row(
               children: [
                 if (leading != null) ...[leading!, const SizedBox(width: 8)],
-                Flexible(child: Text(title, style: theme.textTheme.titleMedium)),
-                if (info != null) ...[
-                  const SizedBox(width: 6),
-                  InfoTip(info!),
-                ],
+                Flexible(
+                  child: Text(title, style: theme.textTheme.titleMedium),
+                ),
+                if (info != null) ...[const SizedBox(width: 6), InfoTip(info!)],
+                if (trailing != null) ...[const Spacer(), trailing!],
               ],
             ),
             if (subtitle != null)
@@ -70,9 +74,6 @@ class SelicComparison extends StatelessWidget {
     super.key,
     required this.points,
     required this.rates,
-    this.sinceStart,
-    this.onSinceStart,
-    this.footer,
   });
 
   static const title = 'Rendimento × Selic';
@@ -81,12 +82,6 @@ class SelicComparison extends StatelessWidget {
 
   final List<PerformancePoint> points;
   final BenchmarkRates rates;
-
-  /// With [onSinceStart], shows the choice of period. Null when the page has
-  /// its own.
-  final bool? sinceStart;
-  final ValueChanged<bool>? onSinceStart;
-  final Widget? footer;
 
   static String _pct(double v) =>
       '${v >= 0 ? '+' : ''}${(v * 100).toStringAsFixed(2).replaceAll('.', ',')}%';
@@ -128,18 +123,6 @@ class SelicComparison extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (sinceStart != null && onSinceStart != null) ...[
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('12 meses')),
-              ButtonSegment(value: true, label: Text('Desde o início')),
-            ],
-            selected: {sinceStart!},
-            showSelectedIcon: false,
-            onSelectionChanged: (s) => onSinceStart!(s.first),
-          ),
-          const SizedBox(height: 12),
-        ],
         Row(
           children: [
             figure('Sua carteira', portfolio, portfolioColor),
@@ -183,7 +166,6 @@ class SelicComparison extends StatelessWidget {
               ),
             ),
           ),
-        if (footer != null) ...[const SizedBox(height: 8), footer!],
       ],
     );
   }
