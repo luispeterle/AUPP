@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/components/squircle.dart';
 import 'package:aupp/settings/style.dart';
 
 class SettingsItem extends StatelessWidget {
@@ -28,10 +29,16 @@ class SettingsItem extends StatelessWidget {
         subtitle == null ? null : Text(subtitle!, style: subtitleTextStyle);
     return RawMaterialButton(
       child: ListTile(
-        leading: CircleAvatar(
-            backgroundColor:
-                iconBackgroundColor == null ? Colors.blue : iconBackgroundColor,
-            child: icon),
+        leading: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            shape: const SquircleBorder(),
+            color: iconBackgroundColor ?? Colors.blue,
+          ),
+          child: icon,
+        ),
         title: Text(title, style: titleTextStyle),
         subtitle: details == null
             ? subtitleText

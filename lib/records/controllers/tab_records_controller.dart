@@ -629,6 +629,9 @@ class TabRecordsController {
       selectedWallets = result.length == allWallets.length ? [] : result;
       filterRecords();
       onStateChanged();
+    } else {
+      // The icon switch is saved as soon as it changes.
+      onStateChanged();
     }
   }
 

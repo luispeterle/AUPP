@@ -29,6 +29,9 @@ class PreferencesKeys {
   // The Extrato also lists records hidden with the "Oculto" tag.
   static const extratoShowHidden = 'extratoShowHidden';
 
+  // The Extrato shows a subcategory's record with its parent's icon.
+  static const extratoParentIcon = 'extratoParentIcon';
+
   // The user's companies and which bank accounts are theirs (JSON,
   // portable), and the accounts this device leaves out of the Extrato.
   static const companies = 'empresas';

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:aupp/components/squircle.dart';
 import 'package:aupp/components/known-tags.dart';
 import 'package:aupp/dashboard/dashboard-data.dart';
 import 'package:aupp/components/missing-payment-code-icon.dart';
@@ -16,7 +17,9 @@ import 'package:aupp/models/records-per-day.dart';
 import 'package:aupp/models/wallet.dart';
 import 'package:aupp/records/edit-record-page.dart';
 import 'package:aupp/records/refund-link-ui.dart';
+import 'package:aupp/records/merchant-brands.dart';
 import 'package:aupp/records/refund-link.dart';
+import 'package:aupp/services/category-hierarchy.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/services/transfer-icon-service.dart';
 
@@ -313,19 +316,21 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     final transferIcon = TransferIconService.icon;
     final transferEmoji = TransferIconService.iconEmoji;
     final isUncategorizedTransfer = movement.isTransfer && movement.category == null;
+    final look = CategoryHierarchy.iconOf(movement.category);
     final base = CategoryIconCircle(
       circleSize: 36,
       mainIconSize: 18,
       overlayIconSize: 13,
+      imageAsset: MerchantBrands.of(movement)?.asset,
       iconEmoji: isUncategorizedTransfer
           ? transferEmoji
-          : movement.category?.iconEmoji,
+          : look?.iconEmoji,
       iconDataFromDefaultIconSet: isUncategorizedTransfer
           ? transferIcon
-          : movement.category?.icon ?? Icons.swap_horiz,
+          : look?.icon ?? Icons.swap_horiz,
       backgroundColor: isUncategorizedTransfer
           ? TransferIconService.color
-          : movement.category?.color,
+          : look?.color,
       overlayIcon: movement.recurrencePatternId != null ? Icons.repeat : null,
       topOverlayIcon: splitPart != null
           ? Icons.savings
@@ -369,8 +374,8 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
           child: Container(
             width: 38,
             height: 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
+            decoration: ShapeDecoration(
+              shape: const SquircleBorder(),
               color:
                   Theme.of(context).colorScheme.primary.withValues(alpha: 0.88),
             ),
@@ -759,9 +764,8 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
         leading: Container(
           width: 36,
           height: 36,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: muted, width: 1.2),
+          decoration: ShapeDecoration(
+            shape: SquircleBorder(side: BorderSide(color: muted, width: 1.2)),
           ),
           alignment: Alignment.center,
           child: bank != null

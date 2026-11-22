@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:aupp/components/squircle.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
 import 'package:aupp/models/wallet.dart';
@@ -246,9 +247,9 @@ class TagSummaryRow extends SummaryRow {
     return Container(
       width: 40,
       height: 40,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: Colors.blue.shade100,
-        shape: BoxShape.circle,
+        shape: const SquircleBorder(),
       ),
       child: Icon(Icons.label, color: Colors.blue, size: 20),
     );

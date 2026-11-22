@@ -78,6 +78,11 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
   late Set<int?> _countedIds;
   bool _saveAsDefault = false;
   late bool _showHidden = widget.initiallyShowHidden;
+  bool _parentIcon =
+      ServiceConfig.sharedPreferences?.getBool(
+        PreferencesKeys.extratoParentIcon,
+      ) ??
+      false;
 
   bool get _withTotals => widget.initiallyCounted != null;
 
@@ -341,6 +346,22 @@ class _WalletPickerPageState extends State<WalletPickerPage> {
                       subtitle: Text(widget.hiddenCount == 0
                           ? 'Nenhum oculto neste período'
                           : '${widget.hiddenCount} oculto(s) neste período'),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 4),
+                    ),
+                    const Divider(height: 1),
+                    SwitchListTile(
+                      value: _parentIcon,
+                      onChanged: (v) {
+                        setState(() => _parentIcon = v);
+                        ServiceConfig.sharedPreferences?.setBool(
+                          PreferencesKeys.extratoParentIcon,
+                          v,
+                        );
+                      },
+                      secondary: const Icon(Icons.category),
+                      title: const Text('Ícone da categoria mãe',
+                          style: TextStyle(fontSize: 17)),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 4),
                     ),

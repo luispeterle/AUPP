@@ -1,10 +1,14 @@
 import 'dart:core';
 
 import 'package:flutter/material.dart';
+import 'squircle.dart';
 
 class CategoryIconCircle extends StatelessWidget {
   final String? iconEmoji;
   final IconData? iconDataFromDefaultIconSet;
+
+  /// A logo filling the circle, in place of the icon.
+  final String? imageAsset;
   final Color? backgroundColor;
   final IconData? overlayIcon;
   final IconData? topOverlayIcon;
@@ -18,9 +22,13 @@ class CategoryIconCircle extends StatelessWidget {
   final double overlayIconSize;
   final double circleSize;
 
+  /// A squircle ([squirclePath]); false for a circle.
+  final bool squircle;
+
   CategoryIconCircle({
     this.iconEmoji,
     this.iconDataFromDefaultIconSet,
+    this.imageAsset,
     this.backgroundColor,
     this.overlayIcon = null,
     this.topOverlayIcon = null,
@@ -31,18 +39,35 @@ class CategoryIconCircle extends StatelessWidget {
     this.mainIconSize = 20.0,
     this.overlayIconSize = 15.0,
     this.circleSize = 40.0,
+    this.squircle = true,
   });
 
   // Helper function to build the main icon container
   Widget _buildMainIcon(
       BuildContext context, Color? iconColor, Color backgroundColor) {
-    return Container(
+    final icon = _buildIconCircle(context, iconColor, backgroundColor);
+    if (imageAsset == null) return icon;
+    final logo = Image.asset(
+      imageAsset!,
       width: circleSize,
       height: circleSize,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: backgroundColor,
-      ),
+      fit: BoxFit.cover,
+      // A logo that fails to load shows the category's icon.
+      errorBuilder: (_, _, _) => icon,
+    );
+    return squircle
+        ? ClipPath(clipper: const SquircleClipper(), child: logo)
+        : ClipOval(child: logo);
+  }
+
+  Widget _buildIconCircle(
+      BuildContext context, Color? iconColor, Color backgroundColor) {
+    final shape = Container(
+      width: circleSize,
+      height: circleSize,
+      decoration: squircle
+          ? BoxDecoration(color: backgroundColor)
+          : BoxDecoration(shape: BoxShape.circle, color: backgroundColor),
       child: iconEmoji != null
             ?
             Center(
@@ -59,6 +84,9 @@ class CategoryIconCircle extends StatelessWidget {
           color: iconColor ?? Theme.of(context).colorScheme.onSurface,
         ),
     );
+    return squircle
+        ? ClipPath(clipper: const SquircleClipper(), child: shape)
+        : shape;
   }
 
   // Helper function to build the bottom-right overlay icon container

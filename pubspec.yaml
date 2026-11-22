@@ -85,6 +85,7 @@ flutter:
     - assets/
     - assets/images/
     - assets/images/banks/
+    - assets/images/brands/
     - assets/images/stocks/
     - assets/images/stocks_us/
     - assets/images/sites/

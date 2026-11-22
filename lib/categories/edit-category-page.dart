@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:aupp/components/squircle.dart';
 import 'package:aupp/components/icon_color_picker_section.dart';
 import 'package:aupp/helpers/alert-dialog-builder.dart';
 import 'package:aupp/models/category-type.dart';
@@ -76,7 +77,8 @@ class EditCategoryPageState extends State<EditCategoryPage> {
   Widget _createCategoryCirclePreview() {
     return Container(
       margin: EdgeInsets.all(10),
-      child: ClipOval(
+      child: ClipPath(
+        clipper: const SquircleClipper(),
         child: Material(
           color: category!.color, // Button color
           child: InkWell(
