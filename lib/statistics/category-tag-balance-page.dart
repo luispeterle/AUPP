@@ -89,8 +89,6 @@ class _CategoryTagBalancePageState extends State<CategoryTagBalancePage> {
         showRecordsToggle: true,
         forceGroupByType: GroupByType.records,
         hideCategorySelection: widget.category != null,
-        hideTagsSelection: widget.category == null && widget.walletName == null,
-        hideWalletsSelection: widget.walletName != null,
         walletMap: _effectiveWalletMap,
         onListBackCallback: () {
           setState(() {});

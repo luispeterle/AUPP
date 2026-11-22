@@ -80,8 +80,6 @@ class _CategoryTagRecordsPageState extends State<CategoryTagRecordsPage> {
         forceGroupByType: GroupByType.records,
         showRecordsToggle: true,
         hideCategorySelection: widget.category != null,
-        hideTagsSelection: widget.category == null && widget.walletName == null,
-        hideWalletsSelection: widget.walletName != null,
         walletMap: _effectiveWalletMap,
         onListBackCallback: () => setState(() {}),
         onIntervalSelected: (newTitle, date, amount) {

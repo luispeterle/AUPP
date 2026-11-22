@@ -24,9 +24,7 @@ class StatisticsTabPage extends StatefulWidget {
   final Widget? footer;
   final GroupByType? forceGroupByType;
   final bool showRecordsToggle;
-  final bool hideTagsSelection;
   final bool hideCategorySelection;
-  final bool hideWalletsSelection;
   final Function? onListBackCallback;
 
   /// Opens on the pie chart instead of the bars.
@@ -40,9 +38,7 @@ class StatisticsTabPage extends StatefulWidget {
       this.footer,
       this.forceGroupByType,
       this.showRecordsToggle = false,
-      this.hideTagsSelection = false,
       this.hideCategorySelection = false,
-      this.hideWalletsSelection = false,
       this.onListBackCallback,
       this.startWithPieChart = false,
       this.walletMap = const {}})
@@ -269,10 +265,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
           topCategories: topCategories,
           groupByType: groupByType,
           showHeaders: true,
-          showRecordsToggle: widget.showRecordsToggle,
-          hideTagsSelection: widget.hideTagsSelection,
           hideCategorySelection: widget.hideCategorySelection,
-          hideWalletsSelection: widget.hideWalletsSelection,
           walletMap: widget.walletMap,
           onGroupByTypeChanged: (newType) {
             setState(() {

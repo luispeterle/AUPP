@@ -16,9 +16,7 @@ class BalanceTabPage extends StatefulWidget {
   final Function(String?, DateTime?)? onIntervalSelected;
   final DateTime? selectedDate;
   final Widget? footer;
-  final bool hideTagsSelection;
   final bool hideCategorySelection;
-  final bool hideWalletsSelection;
   final bool showRecordsToggle;
   final GroupByType? forceGroupByType;
   final Function? onListBackCallback;
@@ -29,9 +27,7 @@ class BalanceTabPage extends StatefulWidget {
       {this.onIntervalSelected,
       this.selectedDate,
       this.footer,
-      this.hideTagsSelection = false,
       this.hideCategorySelection = false,
-      this.hideWalletsSelection = false,
       this.showRecordsToggle = false,
       this.forceGroupByType,
       this.onListBackCallback,
@@ -143,10 +139,7 @@ class BalanceTabPageState extends State<BalanceTabPage> {
           groupByType: groupByType,
           showHeaders: true,
           isBalance: true,
-          showRecordsToggle: widget.showRecordsToggle,
-          hideTagsSelection: widget.hideTagsSelection,
           hideCategorySelection: widget.hideCategorySelection,
-          hideWalletsSelection: widget.hideWalletsSelection,
           walletMap: widget.walletMap,
           onGroupByTypeChanged: (newType) {
             setState(() {

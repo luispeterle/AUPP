@@ -32,10 +32,7 @@ class StatisticsSummaryCard extends StatefulWidget {
   final void Function(GroupByType) onGroupByTypeChanged;
   final bool showHeaders;
   final bool isBalance;
-  final bool hideTagsSelection;
   final bool hideCategorySelection;
-  final bool hideWalletsSelection;
-  final bool showRecordsToggle;
 
   final Map<int, Wallet> walletMap;
 
@@ -52,10 +49,7 @@ class StatisticsSummaryCard extends StatefulWidget {
     required this.onGroupByTypeChanged,
     this.showHeaders = true,
     this.isBalance = false,
-    this.hideTagsSelection = false,
     this.hideCategorySelection = false,
-    this.hideWalletsSelection = false,
-    this.showRecordsToggle = false,
     this.walletMap = const {},
   }) : super(key: key);
 
@@ -71,20 +65,14 @@ class _StatisticsSummaryCardState extends State<StatisticsSummaryCard> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        GroupByDropdown(
-          records: widget.records,
-          groupByType: widget.groupByType,
-          onGroupByTypeChanged: widget.onGroupByTypeChanged,
-          selectedDate: widget.selectedDate,
-          selectedCategoryOrTag: widget.selectedCategoryOrTag,
-          topCategories: widget.topCategories,
-          aggregationMethod: widget.aggregationMethod,
-          showRecordsToggle: widget.showRecordsToggle,
-          hideTagsSelection: widget.hideTagsSelection,
-          hideCategorySelection: widget.hideCategorySelection,
-          hideWalletsSelection: widget.hideWalletsSelection,
-        ),
-        Divider(),
+        // Inside a category the grouping is fixed: no pills.
+        if (!widget.hideCategorySelection) ...[
+          GroupByDropdown(
+            groupByType: widget.groupByType,
+            onGroupByTypeChanged: widget.onGroupByTypeChanged,
+          ),
+          Divider(),
+        ],
         _buildSummaryList(),
       ],
     );
