@@ -161,6 +161,34 @@ void main() {
     expect(usage.ratioOf(plan, 'fixos'), closeTo(300 / 3000, 1e-9));
   });
 
+  test('countedGroupOf: the group each Extrato row counts in', () {
+    final plan = BudgetPlan(
+      categories: {
+        'Luz': 'fixos',
+        'Restaurante': 'prazeres',
+        'Reembolso': outOfBudget,
+      },
+      wallets: {'Investir': 'liberdade', 'Caixinha Carro': 'metas'},
+    );
+    String? of(Record r) =>
+        plan.countedGroupOf(r, walletsById: wallets, defaultWalletId: 1);
+
+    expect(of(record(-300, expense('Luz'), 8)), 'fixos');
+    expect(of(record(-80, expense('Restaurante'), 10, wallet: 2)), 'prazeres');
+    expect(of(record(-120, expense('Restaurante'), 9)..budgetGroup = 'conforto'),
+        'conforto');
+    expect(of(record(-2000, null, 1, to: 3)), 'liberdade');
+    expect(of(record(-200, null, 11, wallet: 4, to: 1)), 'metas');
+    // None: income, no group yet, out of budget, base↔base, other wallets.
+    expect(of(record(10000, salario, 8)), isNull);
+    expect(of(record(-50, expense('Coisa nova'), 10)), isNull);
+    expect(of(record(-40, expense('Reembolso'), 10)), isNull);
+    expect(of(record(-50, expense('Luz'), 9)..tags = {outOfBudgetTag}), isNull);
+    expect(of(record(-1300, null, 2, wallet: 1, to: 2)), isNull);
+    expect(of(record(-100, null, 11, wallet: 3, to: 4)), isNull);
+    expect(of(record(-999, expense('Luz'), 12, wallet: 3)), isNull);
+  });
+
   test('a record\'s own group wins over its category\'s', () {
     final plan = BudgetPlan(categories: {'Restaurante': 'prazeres'});
     final restaurante = expense('Restaurante');

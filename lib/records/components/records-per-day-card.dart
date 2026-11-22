@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:auto_size_text/auto_size_text.dart';
+import 'package:aupp/budget_plan/budget-plan.dart';
 import 'package:aupp/components/squircle.dart';
 import 'package:aupp/components/known-tags.dart';
 import 'package:aupp/dashboard/dashboard-data.dart';
@@ -84,6 +86,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
   );
 
   Map<int, Wallet> _walletsById = {};
+  BudgetPlan? _plan;
   final DatabaseInterface _database = ServiceConfig.database;
 
   @override
@@ -104,6 +107,27 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
           if (w.id != null) w.id!: w
       };
     });
+  }
+
+  @override
+  void didUpdateWidget(RecordsPerDayCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The plan may have changed in the Orçamento meanwhile.
+    _plan = BudgetPlan.saved;
+  }
+
+  /// Color of the Orçamento group [record] counts in (left stripe).
+  Color? _groupColor(Record record) {
+    final plan = _plan ??= BudgetPlan.saved;
+    int? defaultWalletId;
+    for (final w in _walletsById.values) {
+      if (w.isDefault) defaultWalletId = w.id;
+    }
+    return budgetGroupById(plan.countedGroupOf(
+      record,
+      walletsById: _walletsById,
+      defaultWalletId: defaultWalletId,
+    ))?.color;
   }
 
   Color? _amountColor(Record record) =>
@@ -449,12 +473,15 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          // One line: a long name shrinks down to the minimum, then ends in "…".
+          AutoSizeText(
             movement.title == null || movement.title!.trim().isEmpty
                 ? movement.category?.name ?? 'Transferência'
                 : movement.title!,
             style: _titleFontStyle,
-            maxLines: 2,
+            maxLines: 1,
+            minFontSize: 11,
+            stepGranularity: 0.5,
             overflow: TextOverflow.ellipsis,
           ),
           if (movement.isHidden) _buildHiddenNote(),
@@ -566,7 +593,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 .primaryContainer
                 .withValues(alpha: 0.4)
             : Colors.transparent,
-        child: listTile,
+        child: _withGroupStripe(listTile, _groupColor(movement)),
       ),
     );
 
@@ -579,6 +606,22 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     }
 
     return result;
+  }
+
+  Widget _withGroupStripe(Widget row, Color? color) {
+    if (color == null) return row;
+    return Stack(
+      children: [
+        row,
+        Positioned(
+          left: 0,
+          top: 6,
+          bottom: 6,
+          width: 4,
+          child: CustomPaint(painter: _GroupStripePainter(color)),
+        ),
+      ],
+    );
   }
 
   /// "Oculto" under the title of a record hidden from the Extrato, listed
@@ -872,4 +915,28 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
       )),
     );
   }
+}
+
+/// The stripe as a "|)": the left edge straight and filled top to bottom,
+/// the right one at full width except for a short rounded taper at each end.
+class _GroupStripePainter extends CustomPainter {
+  final Color color;
+
+  const _GroupStripePainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final taper = Radius.elliptical(size.width, 12);
+    canvas.drawRRect(
+      RRect.fromRectAndCorners(
+        Offset.zero & size,
+        topRight: taper,
+        bottomRight: taper,
+      ),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroupStripePainter old) => old.color != color;
 }

@@ -36,7 +36,7 @@ const budgetGroups = <BudgetGroup>[
   BudgetGroup(
     'liberdade',
     'Liberdade Financeira',
-    Color(0xFF7B6CF6),
+    Color(0xFF16A34A),
     Icons.rocket_launch,
     25,
     isGoal: true,
@@ -44,25 +44,25 @@ const budgetGroups = <BudgetGroup>[
   BudgetGroup(
     'fixos',
     'Custos Fixos',
-    Color(0xFF1E88FF),
+    Color(0xFF0284C7),
     Icons.home,
     30,
     isGoal: true,
   ),
-  BudgetGroup('conforto', 'Conforto', Color(0xFFFF7EB3), Icons.weekend, 15),
+  BudgetGroup('conforto', 'Conforto', Color(0xFFF472B6), Icons.weekend, 15),
   BudgetGroup(
     'metas',
     'Metas',
-    Color(0xFF9C27B0),
+    Color(0xFFEAB308),
     Icons.flag,
     15,
     isGoal: true,
   ),
-  BudgetGroup('prazeres', 'Prazeres', Color(0xFFFF7A00), Icons.celebration, 10),
+  BudgetGroup('prazeres', 'Prazeres', Color(0xFFEA580C), Icons.celebration, 10),
   BudgetGroup(
     'conhecimento',
     'Conhecimento',
-    Color(0xFFFFC400),
+    Color(0xFF7C3AED),
     Icons.school,
     5,
     isGoal: true,
@@ -136,6 +136,40 @@ class BudgetPlan {
   /// The record's own group, else its category's.
   String? groupOfRecord(Record r) =>
       r.budgetGroup ?? groupOfCategory(r.category?.name);
+
+  /// The group [r] counts in, routed as [BudgetPlanUsage.compute] does, or
+  /// null when it counts in none: income, out of budget, no group yet, or
+  /// money that stays inside (or never touches) the base wallets. The
+  /// Extrato's stripe.
+  String? countedGroupOf(
+    Record r, {
+    required Map<int, Wallet> walletsById,
+    required int? defaultWalletId,
+  }) {
+    bool isBase(int? walletId) {
+      if (walletId == null) return true;
+      final w = walletsById[walletId];
+      return w != null && isBaseWallet(w, defaultWalletId);
+    }
+
+    if (r.tags.contains(outOfBudgetTag)) return null;
+    final String? group;
+    if (r.isTransfer) {
+      final fromBase = isBase(r.walletId);
+      if (fromBase == isBase(r.transferWalletId)) return null;
+      final other = walletsById[fromBase ? r.transferWalletId : r.walletId];
+      group = other == null ? null : groupOfWallet(other.name);
+    } else if (!isBase(r.walletId)) {
+      return null;
+    } else if (r.isInvestmentFlow) {
+      group = investedGroup;
+    } else if (r.category?.categoryType == CategoryType.expense) {
+      group = groupOfRecord(r);
+    } else {
+      return null;
+    }
+    return group == outOfBudget ? null : group;
+  }
 
   /// What picking [picked] for a record means: out of budget is the
   /// [outOfBudgetTag], and the category's own group is no group of its own.
