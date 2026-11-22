@@ -62,9 +62,9 @@ def get(url, headers=UA):
 
 
 def b3_file():
-    """The newest register the B3 has, from today back a week."""
+    """The newest register the B3 has, from today back two weeks."""
     day = datetime.date.today()
-    for _ in range(8):
+    for _ in range(15):
         try:
             token = json.loads(get(
                 f'{B3}/requestname?fileName=InstrumentsConsolidated'
@@ -75,7 +75,7 @@ def b3_file():
         except Exception as e:  # no file that day (weekend, holiday)
             print(f'  {day}: {e}', file=sys.stderr)
         day -= datetime.timedelta(days=1)
-    sys.exit('Cadastro da B3 não encontrado na última semana')
+    sys.exit('Cadastro da B3 não encontrado nas últimas duas semanas')
 
 
 def fund_type(name):

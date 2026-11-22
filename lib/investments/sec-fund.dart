@@ -504,7 +504,8 @@ class SecFundStore {
               'CIK': series,
               'type': 'NPORT-P',
               'owner': 'include',
-              'count': '8',
+              // The SEC takes only 10, 20, ... 100 or 500.
+              'count': '10',
               'output': 'atom',
             }),
             headers: secHeaders,

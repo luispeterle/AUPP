@@ -73,12 +73,15 @@ CVM_FII_COLUMNS = {
 }
 
 
-def last_weekday(today):
-    """The B3 publishes its register on business days."""
+def last_weekdays(today, count):
+    """The B3 publishes its register on business days, sometimes with gaps."""
+    days = []
     day = today - timedelta(days=1)
-    while day.weekday() >= 5:
+    while len(days) < count:
+        if day.weekday() < 5:
+            days.append(day.strftime("%Y-%m-%d"))
         day -= timedelta(days=1)
-    return day.strftime("%Y-%m-%d")
+    return days
 
 
 def last_bank_quarter(today):
@@ -218,8 +221,12 @@ def checks():
         ),
         (
             "B3: cadastro de instrumentos",
-            "https://arquivos.b3.com.br/api/download/requestname"
-            f"?fileName=InstrumentsConsolidated&date={last_weekday(today)}",
+            # A day without the file answers 400: back to the newest one.
+            [
+                "https://arquivos.b3.com.br/api/download/requestname"
+                f"?fileName=InstrumentsConsolidated&date={day}"
+                for day in last_weekdays(today, 10)
+            ],
             None,
             "",
             fields(("token",)),
@@ -254,7 +261,7 @@ def checks():
         ),
         (
             "SEC: N-PORT de um ETF (iShares Core S&P 500)",
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=S000004310&type=NPORT-P&owner=include&count=1&output=atom",
+            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=S000004310&type=NPORT-P&owner=include&count=10&output=atom",
             key("sec_contact"),
             "needs",
             lambda body: [] if b"<filing-href>" in body else ["filing-href"],
@@ -325,7 +332,11 @@ def run_check(name, url, token, mode, validate):
         post = None
         if isinstance(url, tuple):
             url, post = url
-        status, body = fetch(url, token, 4096 if mode == "limit" else None, post)
+        # A list is tried in order until one answers.
+        for url in url if isinstance(url, list) else [url]:
+            status, body = fetch(url, token, 4096 if mode == "limit" else None, post)
+            if status == 200:
+                break
         if status != 200:
             return f"FALHOU  {name}: HTTP {status}", True
         missing = validate(body)
