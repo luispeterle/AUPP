@@ -220,9 +220,9 @@ void main() {
           i.transaction!.id: i.desired!.title,
       };
       expect(titles, {
-        'out': 'Pix enviado',
-        'in': 'Pix recebido',
-        'tef': 'Transferência enviada',
+        'out': 'Pix Enviado',
+        'in': 'Pix Recebido',
+        'tef': 'Transferência Enviada',
       });
     });
 

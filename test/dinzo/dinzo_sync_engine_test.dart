@@ -494,6 +494,46 @@ void main() {
       );
     });
 
+    DinzoTransaction named(String description, String original) =>
+        DinzoTransaction(
+          id: 'n',
+          date: '2026-10-05',
+          type: 'DEBIT',
+          amount: 68,
+          description: description,
+          originalDescription: original,
+          accountId: 'card',
+        );
+    String titleOf(DinzoTransaction t) =>
+        plan([t]).ofKind(DinzoPlanKind.create).single.desired!.title;
+
+    test('titles come in title case', () {
+      expect(titleOf(named('PAÇOCA DE GOIABA', 'PACOCA')), 'Paçoca de Goiaba');
+      expect(titleOf(named('iof de compra internacional', 'IOF')),
+          'IOF de Compra Internacional');
+    });
+
+    test('the store leaves the title when the bank names it', () {
+      expect(titleOf(named('Shopee - Cabide', 'Shopee *Realcabides')),
+          'Cabide');
+      expect(
+        titleOf(named('Shopee - Fonte 650w',
+            'Pagamento com Pix MAREE INSTITUICAO DE PAGAMENTO LTDA')),
+        'Fonte 650w',
+      );
+      expect(titleOf(named('Mercado Livre - Maycom', 'MERCADOLIVRE*MAYCOM')),
+          'Maycom');
+      expect(titleOf(named('Reembolso Amazon', 'AMAZON BR')), 'Reembolso');
+    });
+
+    test('the store stays when the bank does not name it, or is all there is',
+        () {
+      expect(titleOf(named('Shopee Agulha', 'PIX FULANO DE TAL')),
+          'Shopee Agulha');
+      expect(titleOf(named('Mercado Livre', 'Mercadolivre*Mercadol')),
+          'Mercado Livre');
+    });
+
     test('Nubank "Kind|Counterparty" keeps the counterparty as title', () {
       expect(
         DinzoSyncEngine.cleanTitle(

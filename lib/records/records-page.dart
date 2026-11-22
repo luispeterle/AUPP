@@ -10,7 +10,6 @@ import 'package:aupp/models/record.dart';
 import 'dart:core';
 
 import 'package:flutter/material.dart';
-import 'package:aupp/helpers/title-case.dart';
 import 'package:aupp/services/home-widget-service.dart';
 import 'package:aupp/services/logger.dart';
 
@@ -345,47 +344,6 @@ class TabRecordsState extends State<TabRecords> {
     }
   }
 
-  /// Renames the selected records to title case ("Paçoca de Goiaba").
-  /// Dinzo imports are renamed there too, so the next sync doesn't undo it;
-  /// the app's own records keep their names.
-  Future<void> _batchTitleCase() async {
-    final ids = List<int>.from(_selectedRecordIds);
-    _logger.info('Batch title-casing ${ids.length} records');
-    if (mounted) _exitSelectMode();
-
-    var renamed = 0;
-    var dinzoFailed = 0;
-    for (final id in ids) {
-      final record = await ServiceConfig.database.getRecordById(id);
-      if (record == null || record.title == null) continue;
-      final title = titleCasePtBr(record.title!);
-      if (title == record.title) continue;
-      record.title = title;
-      await ServiceConfig.database.updateRecordById(id, record);
-      renamed++;
-      // Records the app makes itself are not in Dinzo: renamed only here.
-      if (record.dinzoId != null &&
-          !DinzoSyncService.isSynthetic(record.dinzoId)) {
-        try {
-          await DinzoSyncService.pushTitle(record);
-        } catch (e, st) {
-          _logger.handle(e, st, 'Failed to rename record $id in Dinzo');
-          dinzoFailed++;
-        }
-      }
-    }
-
-    if (!mounted) return;
-    await _controller.updateRecurrentRecordsAndFetchRecords();
-    if (!mounted) return;
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(dinzoFailed == 0
-          ? '$renamed renomeado(s)'
-          : '$renamed renomeado(s); $dinzoFailed não foram renomeados na Dinzo'),
-    ));
-  }
-
   /// Whether every selected record is hidden: the menu then offers to show
   /// them again instead of hiding.
   bool get _selectionAllHidden {
@@ -658,7 +616,6 @@ class TabRecordsState extends State<TabRecords> {
       onSelectAll: _selectAll,
       onDuplicate: _batchDuplicate,
       onMoveToWallet: _batchMoveToWallet,
-      onTitleCase: _batchTitleCase,
       onToggleHidden: _batchToggleHidden,
       selectionAllHidden: _selectionAllHidden,
     );
@@ -683,7 +640,6 @@ class TabRecordsState extends State<TabRecords> {
         onSelectAll: _selectAll,
         onDuplicate: _batchDuplicate,
         onMoveToWallet: _batchMoveToWallet,
-        onTitleCase: _batchTitleCase,
         onToggleHidden: _batchToggleHidden,
         selectionAllHidden: _selectionAllHidden,
       );

@@ -13,8 +13,13 @@ class MerchantBrand {
   /// Matched, ignoring case, against the bank's text and the titles.
   final RegExp pattern;
 
-  MerchantBrand(this.id, this.asset, RegExp pattern)
-    : pattern = RegExp(pattern.pattern, caseSensitive: false);
+  /// How the store is written in a title, to take it out when the logo
+  /// already says it ([MerchantBrands.withoutBrand]); null keeps titles.
+  final RegExp? name;
+
+  MerchantBrand(this.id, this.asset, RegExp pattern, {RegExp? name})
+    : pattern = RegExp(pattern.pattern, caseSensitive: false),
+      name = name == null ? null : RegExp(name.pattern, caseSensitive: false);
 }
 
 /// Which brand a record is from. What the bank or Dinzo wrote decides first,
@@ -28,10 +33,10 @@ class MerchantBrands {
   /// before Google, the stores before Mercado Pago, which also processes
   /// their payments).
   static final List<MerchantBrand> _all = [
-    MerchantBrand('shopee', '$_dir/shopee.png', RegExp(r'SHOPEE|\bSHPP\b|MAREE INSTITUICAO')),
-    MerchantBrand('mercadolivre', '$_dir/mercadolivre.png', RegExp(r'MERCADO ?LIVRE|MERCADO ?LIBRE|MELIMAIS|\bMELI\+')),
-    MerchantBrand('aliexpress', '$_dir/aliexpress.png', RegExp(r'ALIEXPRESS')),
-    MerchantBrand('amazon', '$_dir/amazon.png', RegExp(r'AMAZON')),
+    MerchantBrand('shopee', '$_dir/shopee.png', RegExp(r'SHOPEE|\bSHPP\b|MAREE INSTITUICAO'), name: RegExp(r'SHOPEE')),
+    MerchantBrand('mercadolivre', '$_dir/mercadolivre.png', RegExp(r'MERCADO ?LIVRE|MERCADO ?LIBRE|MELIMAIS|\bMELI\+'), name: RegExp(r'MERCADO ?LIVRE|MERCADO ?LIBRE')),
+    MerchantBrand('aliexpress', '$_dir/aliexpress.png', RegExp(r'ALIEXPRESS'), name: RegExp(r'ALIEXPRESS')),
+    MerchantBrand('amazon', '$_dir/amazon.png', RegExp(r'AMAZON'), name: RegExp(r'AMAZON')),
     MerchantBrand('uber', '$_dir/uber.png', RegExp(r'\bUBER')),
     MerchantBrand('youtube', '$_dir/youtube.png', RegExp(r'YOUTUB|\bYT PREMIUM')),
     MerchantBrand('google', '$_dir/google.png', RegExp(r'\bGOOGLE')),
@@ -78,9 +83,37 @@ class MerchantBrands {
       record.title,
     ]) {
       if (text == null || text.isEmpty) continue;
-      for (final brand in _all) {
-        if (brand.pattern.hasMatch(text)) return brand;
-      }
+      final brand = _brandOfText(text);
+      if (brand != null) return brand;
+    }
+    return null;
+  }
+
+  /// [title] without the store that [bankText] names: "Shopee - Cabide"
+  /// bought at "SHOPEE *REALCABIDES" is "Cabide", the logo says the rest.
+  /// Unchanged when the bank names no such store, so the logo never depends
+  /// on a title that lost it, or when nothing else would be left.
+  static String withoutBrand(String title, String? bankText) {
+    if (bankText == null) return title;
+    final name = _brandOfText(bankText)?.name;
+    if (name == null) return title;
+    final n = name.pattern;
+    final left = title
+        .replaceFirst(
+          RegExp('^\\s*(?:$n)\\b\\s*[-–:|*]?\\s*', caseSensitive: false),
+          '',
+        )
+        .replaceFirst(
+          RegExp('\\s*[-–]?\\s*\\b(?:$n)\\s*\$', caseSensitive: false),
+          '',
+        )
+        .trim();
+    return left.isEmpty ? title : left;
+  }
+
+  static MerchantBrand? _brandOfText(String text) {
+    for (final brand in _all) {
+      if (brand.pattern.hasMatch(text)) return brand;
     }
     return null;
   }

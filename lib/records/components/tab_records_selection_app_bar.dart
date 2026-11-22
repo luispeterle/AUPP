@@ -10,7 +10,6 @@ class TabRecordsSelectionAppBar extends StatelessWidget
   final VoidCallback? onMoveToWallet;
 
   /// Title-cases the selected records' names.
-  final VoidCallback onTitleCase;
 
   /// Hides the selected records from the Extrato, or shows them again when
   /// [selectionAllHidden].
@@ -25,7 +24,6 @@ class TabRecordsSelectionAppBar extends StatelessWidget
     required this.onSelectAll,
     required this.onDuplicate,
     this.onMoveToWallet,
-    required this.onTitleCase,
     required this.onToggleHidden,
     this.selectionAllHidden = false,
   }) : super(key: key);
@@ -60,8 +58,6 @@ class TabRecordsSelectionAppBar extends StatelessWidget
               onMoveToWallet?.call();
             } else if (value == 'toggle_hidden') {
               onToggleHidden();
-            } else if (value == 'title_case') {
-              onTitleCase();
             }
           },
           itemBuilder: (_) => [
@@ -78,10 +74,6 @@ class TabRecordsSelectionAppBar extends StatelessWidget
               child: Text(selectionAllHidden
                   ? 'Mostrar no Extrato'
                   : 'Ocultar do Extrato'),
-            ),
-            const PopupMenuItem(
-              value: 'title_case',
-              child: Text('Primeira Letra Maiúscula'),
             ),
             PopupMenuItem(
               value: 'move_wallet',

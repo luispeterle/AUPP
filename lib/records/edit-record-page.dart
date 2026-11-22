@@ -4,6 +4,7 @@ import 'package:aupp/budget_plan/budget-plan-groups.dart'
     show showBudgetGroupPicker;
 import 'package:aupp/budget_plan/budget-plan-page.dart';
 import 'package:aupp/components/known-tags.dart';
+import 'package:aupp/helpers/title-case.dart';
 import 'package:aupp/dinzo/split-payment.dart';
 import 'package:aupp/dinzo/dinzo-api.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
@@ -1378,6 +1379,9 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   addOrUpdateRecord() async {
     _resolvePendingAmountExpression();
+    // Titles are always kept in title case ("Paçoca de Goiaba").
+    final title = record!.title?.trim();
+    if (title != null && title.isNotEmpty) record!.title = titleCasePtBr(title);
 
     if (isTransferFlow &&
         (_selectedWallet?.id == null ||
@@ -2022,6 +2026,8 @@ class EditRecordPageState extends State<EditRecordPage> {
 
   addOrUpdateRecurrentPattern({id}) async {
     _resolvePendingAmountExpression();
+    final title = record!.title?.trim();
+    if (title != null && title.isNotEmpty) record!.title = titleCasePtBr(title);
 
     // Assign wallet and transfer fields before creating the pattern
     if (_sourceLocked) _selectedWallet = _lockedSource;

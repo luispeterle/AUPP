@@ -3,9 +3,11 @@ import 'package:aupp/components/known-tags.dart';
 
 import 'dart:convert';
 
+import 'package:aupp/helpers/title-case.dart';
 import 'package:aupp/models/category-type.dart';
 import 'package:aupp/models/category.dart';
 import 'package:aupp/models/record.dart';
+import 'package:aupp/records/merchant-brands.dart';
 
 import 'daily-money.dart';
 import 'dinzo-api.dart' show MoneyOnTheWay;
@@ -914,7 +916,14 @@ class DinzoSyncEngine {
   /// banks say more than "Pix to myself". A bank that sends only how the
   /// money moved ("Pix", "Tef") gets which way: "Pix enviado" (the bank is
   /// in the tag).
-  String titleFor(DinzoTransaction tx) {
+  String titleFor(DinzoTransaction tx) => tidyTitle(_rawTitle(tx), bankName(tx));
+
+  /// How every title from Dinzo is kept: title case ("Paçoca de Goiaba"),
+  /// and without the store the bank names, whose logo says it.
+  static String tidyTitle(String title, String? bankText) =>
+      titleCasePtBr(MerchantBrands.withoutBrand(title, bankText));
+
+  String _rawTitle(DinzoTransaction tx) {
     final own = accounts[tx.accountId];
     if (isAporte(tx) && own != null) {
       final here = _bankName(own);
