@@ -28,6 +28,7 @@ class PreferencesKeys {
 
   // The Extrato also lists records hidden with the "Oculto" tag.
   static const extratoShowHidden = 'extratoShowHidden';
+  static const extratoShowBudgetGroups = 'extratoShowBudgetGroups';
 
   // The Extrato shows a subcategory's record with its parent's icon.
   static const extratoParentIcon = 'extratoParentIcon';

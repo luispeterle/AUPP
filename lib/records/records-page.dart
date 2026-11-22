@@ -586,6 +586,7 @@ class TabRecordsState extends State<TabRecords> {
       syncPill: _syncPill(),
       onUpcomingPressed: () => _controller.toggleUpcoming(),
       onDatePickerPressed: () => _showDatePicker(),
+      onBudgetGroupsPressed: () => _controller.toggleBudgetGroups(),
       onPeriodTapped: () => TabRecordsDatePicker.pickSamePeriod(
           context, _controller, () => setState(() {})),
       onStatisticsPressed: () => _controller.navigateToStatisticsPage(context),

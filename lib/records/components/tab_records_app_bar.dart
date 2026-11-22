@@ -21,6 +21,9 @@ class TabRecordsAppBar extends StatelessWidget {
   final VoidCallback? onUpcomingPressed;
   final VoidCallback onDatePickerPressed;
 
+  /// Widens the rows' Orçamento stripe to show the group's icon.
+  final VoidCallback? onBudgetGroupsPressed;
+
   /// Tapping the period text opens the month/year picker.
   final VoidCallback? onPeriodTapped;
   final VoidCallback onStatisticsPressed;
@@ -57,6 +60,7 @@ class TabRecordsAppBar extends StatelessWidget {
     this.syncPill,
     this.onUpcomingPressed,
     required this.onDatePickerPressed,
+    this.onBudgetGroupsPressed,
     this.onPeriodTapped,
     required this.onStatisticsPressed,
     required this.onSearchPressed,
@@ -210,6 +214,18 @@ class TabRecordsAppBar extends StatelessWidget {
         semanticsId: 'select-date',
         scaleFactor: actionButtonScale,
       ),
+      if (onBudgetGroupsPressed != null)
+        StyledActionButton(
+          icon: TabRecordsController.showBudgetGroups
+              ? Icons.savings
+              : Icons.savings_outlined,
+          onPressed: onBudgetGroupsPressed!,
+          tooltip: TabRecordsController.showBudgetGroups
+              ? 'Esconder grupos do orçamento'
+              : 'Mostrar grupos do orçamento',
+          semanticsId: 'toggle-budget-groups',
+          scaleFactor: actionButtonScale,
+        ),
       StyledActionButton(
         icon: Icons.donut_small,
         onPressed: onStatisticsPressed,

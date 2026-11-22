@@ -21,6 +21,7 @@ import 'package:aupp/records/edit-record-page.dart';
 import 'package:aupp/records/refund-link-ui.dart';
 import 'package:aupp/records/merchant-brands.dart';
 import 'package:aupp/records/refund-link.dart';
+import 'package:aupp/records/controllers/tab_records_controller.dart';
 import 'package:aupp/services/category-hierarchy.dart';
 import 'package:aupp/services/service-config.dart';
 import 'package:aupp/services/transfer-icon-service.dart';
@@ -116,8 +117,8 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     _plan = BudgetPlan.saved;
   }
 
-  /// Color of the Orçamento group [record] counts in (left stripe).
-  Color? _groupColor(Record record) {
+  /// The Orçamento group [record] counts in (left stripe).
+  BudgetGroup? _groupOf(Record record) {
     final plan = _plan ??= BudgetPlan.saved;
     int? defaultWalletId;
     for (final w in _walletsById.values) {
@@ -127,8 +128,12 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
       record,
       walletsById: _walletsById,
       defaultWalletId: defaultWalletId,
-    ))?.color;
+    ));
   }
+
+  /// The Extrato's Orçamento button swaps the two: the icon is the group's
+  /// and the stripe the category's color.
+  bool get _groupFirst => TabRecordsController.showBudgetGroups;
 
   Color? _amountColor(Record record) =>
       getRecordAmountColor(record, Theme.of(context).brightness);
@@ -336,25 +341,36 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     );
   }
 
+  /// Color of [movement]'s category icon (the stripe when [_groupFirst]).
+  Color? _categoryColor(Record movement) =>
+      movement.isTransfer && movement.category == null
+          ? TransferIconService.color
+          : CategoryHierarchy.iconOf(movement.category)?.color;
+
   Widget _buildLeading(Record movement, bool isSelected, {Record? splitPart}) {
     final transferIcon = TransferIconService.icon;
     final transferEmoji = TransferIconService.iconEmoji;
     final isUncategorizedTransfer = movement.isTransfer && movement.category == null;
     final look = CategoryHierarchy.iconOf(movement.category);
+    final group = _groupFirst ? _groupOf(movement) : null;
     final base = CategoryIconCircle(
       circleSize: 36,
       mainIconSize: 18,
       overlayIconSize: 13,
-      imageAsset: MerchantBrands.of(movement)?.asset,
-      iconEmoji: isUncategorizedTransfer
+      imageAsset: group != null ? null : MerchantBrands.of(movement)?.asset,
+      iconEmoji: group != null
+          ? null
+          : isUncategorizedTransfer
           ? transferEmoji
           : look?.iconEmoji,
-      iconDataFromDefaultIconSet: isUncategorizedTransfer
-          ? transferIcon
-          : look?.icon ?? Icons.swap_horiz,
-      backgroundColor: isUncategorizedTransfer
-          ? TransferIconService.color
-          : look?.color,
+      iconDataFromDefaultIconSet: group?.icon ??
+          (isUncategorizedTransfer
+              ? transferIcon
+              : look?.icon ?? Icons.swap_horiz),
+      backgroundColor: group?.color ??
+          (isUncategorizedTransfer
+              ? TransferIconService.color
+              : look?.color),
       overlayIcon: movement.recurrencePatternId != null ? Icons.repeat : null,
       topOverlayIcon: splitPart != null
           ? Icons.savings
@@ -593,7 +609,7 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 .primaryContainer
                 .withValues(alpha: 0.4)
             : Colors.transparent,
-        child: _withGroupStripe(listTile, _groupColor(movement)),
+        child: _withStripe(listTile, movement),
       ),
     );
 
@@ -608,7 +624,12 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     return result;
   }
 
-  Widget _withGroupStripe(Widget row, Color? color) {
+  /// The left stripe: the group's color, or the category's when
+  /// [_groupFirst] (only on rows that count in a group).
+  Widget _withStripe(Widget row, Record movement) {
+    final group = _groupOf(movement);
+    if (group == null) return row;
+    final color = _groupFirst ? _categoryColor(movement) : group.color;
     if (color == null) return row;
     return Stack(
       children: [

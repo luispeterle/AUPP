@@ -78,6 +78,11 @@ class TabRecordsController {
   /// list: totals and statistics count them.
   static bool showUpcoming = false;
 
+  /// Whether each row's Orçamento stripe is wide, with the group's icon.
+  static bool showBudgetGroups = ServiceConfig.sharedPreferences
+          ?.getBool(PreferencesKeys.extratoShowBudgetGroups) ??
+      false;
+
   /// The list before hidden records are dropped: hiding only takes them off
   /// the list, the totals still count them.
   List<Record?> _listedWithHidden = [];
@@ -221,6 +226,13 @@ class TabRecordsController {
   void toggleUpcoming() {
     showUpcoming = !showUpcoming;
     _updateListed();
+    onStateChanged();
+  }
+
+  void toggleBudgetGroups() {
+    showBudgetGroups = !showBudgetGroups;
+    ServiceConfig.sharedPreferences
+        ?.setBool(PreferencesKeys.extratoShowBudgetGroups, showBudgetGroups);
     onStateChanged();
   }
 
