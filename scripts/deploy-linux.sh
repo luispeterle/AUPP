@@ -33,10 +33,17 @@ cp linux/assets/aupp.png "$stage/aupp.png"
 cp scripts/register-linux.sh "$stage/registrar.sh"
 chmod +x "$stage/registrar.sh" "$stage/aupp"
 mkdir -p "$(dirname "$app")"
-# Everything above runs with the app open; only replacing its files waits.
-if pgrep -x aupp >/dev/null; then
+# Everything above runs with the app open; only replacing its files waits, and
+# only for the installed app: a debug run from the repo doesn't block it.
+installed_running() {
+  for pid in $(pgrep -x aupp); do
+    [ "$(readlink -f "/proc/$pid/exe")" = "$(readlink -f "$app/aupp")" ] && return 0
+  done
+  return 1
+}
+if installed_running; then
   echo "Compilado. Feche o app para instalar."
-  while pgrep -x aupp >/dev/null; do sleep 2; done
+  while installed_running; do sleep 2; done
 fi
 rm -rf "$app"
 mv "$stage" "$app"
