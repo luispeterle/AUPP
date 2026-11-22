@@ -22,7 +22,7 @@ void main() {
     ServiceConfig.localTimezone = 'UTC';
   });
 
-  test('schema 35 gets the budget_group column, records untouched', () async {
+  test('a database from before the current schema is refused', () async {
     final dir = await Directory.systemTemp.createTemp('aupp_budget_group_');
     final path = '${dir.path}/movements.db';
     final old = await databaseFactoryFfi.openDatabase(
@@ -40,28 +40,18 @@ void main() {
         },
       ),
     );
-    await old.insert('records', {
-      'title': 'Mercado',
-      'value': -10.0,
-      'datetime': 0,
-      'category_name': 'Supermercado',
-      'category_type': CategoryType.expense.index,
-    });
     await old.close();
 
-    final db = await databaseFactoryFfi.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 36,
-        onUpgrade: SqliteMigrationService.onUpgrade,
+    await expectLater(
+      databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 36,
+          onUpgrade: SqliteMigrationService.onUpgrade,
+        ),
       ),
+      throwsStateError,
     );
-    final row = (await db.query('records')).single;
-    expect(row.containsKey('budget_group'), isTrue);
-    expect(row['budget_group'], isNull);
-    expect(row['title'], 'Mercado');
-    expect(row['category_name'], 'Supermercado');
-    await db.close();
   });
 
   test('a Dinzo-linked record keeps its own group through a sync update',

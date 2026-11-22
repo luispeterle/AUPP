@@ -240,7 +240,6 @@ class SqliteDatabase implements DatabaseInterface {
       if (await sidecar.exists()) await sidecar.delete();
     }
     await incoming.rename(target);
-    // Opening runs the migrations of a file from an older schema.
     await instance.database;
   }
 

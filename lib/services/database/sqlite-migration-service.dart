@@ -9,7 +9,7 @@ class SqliteMigrationService {
 
   /// A database older than this is not opened: every device was past it when
   /// the migrations before it were removed.
-  static const oldestSupported = 35;
+  static const oldestSupported = 36;
 
   static const _categoriesTable = """
     CREATE TABLE categories (
@@ -154,15 +154,11 @@ class SqliteMigrationService {
     'Transferência',
   ];
 
-  /// Only the step from [oldestSupported]: a database from before it is
+  /// Every device is on the current schema: a database from before it is
   /// not converted.
   static Future<void> onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    if (oldVersion != 35) {
-      throw StateError('Banco de dados antigo demais (versão $oldVersion)');
-    }
-    // 36: budget group of the record itself.
-    await db.execute('ALTER TABLE records ADD COLUMN budget_group TEXT');
+    throw StateError('Banco de dados antigo demais (versão $oldVersion)');
   }
 
   static Future<void> onCreate(Database db, int version) async {

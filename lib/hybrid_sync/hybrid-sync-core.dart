@@ -22,10 +22,10 @@ class SnapshotHeader {
 
   /// Version of the app that wrote it ("1.15.14"), to tell the user which one
   /// to install.
-  final String? appVersion;
+  final String appVersion;
 
   /// What the content is: [payloadDatabase].
-  final String? payload;
+  final String payload;
 
   const SnapshotHeader({
     required this.rev,
@@ -33,9 +33,9 @@ class SnapshotHeader {
     required this.device,
     required this.at,
     required this.dbVersion,
-    this.compat = 1,
-    this.appVersion,
-    this.payload,
+    required this.compat,
+    required this.appVersion,
+    this.payload = payloadDatabase,
   });
 
   Map<String, dynamic> toJson() => {
@@ -45,8 +45,8 @@ class SnapshotHeader {
     'at': at.toUtc().toIso8601String(),
     'dbVersion': dbVersion,
     'compat': compat,
-    'appVersion': ?appVersion,
-    'payload': ?payload,
+    'appVersion': appVersion,
+    'payload': payload,
   };
 
   factory SnapshotHeader.fromJson(Map<String, dynamic> json) => SnapshotHeader(
@@ -55,9 +55,9 @@ class SnapshotHeader {
     device: json['device'] as String,
     at: DateTime.parse(json['at'] as String).toLocal(),
     dbVersion: json['dbVersion'] as int,
-    compat: json['compat'] as int? ?? 1,
-    appVersion: json['appVersion'] as String?,
-    payload: json['payload'] as String?,
+    compat: json['compat'] as int,
+    appVersion: json['appVersion'] as String,
+    payload: json['payload'] as String,
   );
 }
 
@@ -269,10 +269,14 @@ class SealedSnapshot {
         throw const FormatException('Unknown snapshot format');
       }
       final headerText = json['header'] as String;
+      final header = SnapshotHeader.fromJson(
+        jsonDecode(headerText) as Map<String, dynamic>,
+      );
+      if (header.payload != payloadDatabase) {
+        throw const FormatException('Unknown snapshot payload');
+      }
       return SealedSnapshot._(
-        SnapshotHeader.fromJson(
-          jsonDecode(headerText) as Map<String, dynamic>,
-        ),
+        header,
         headerText,
         base64Decode(json['salt'] as String),
         base64Decode(json['nonce'] as String),

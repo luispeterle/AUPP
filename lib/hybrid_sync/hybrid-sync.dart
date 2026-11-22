@@ -530,7 +530,7 @@ class HybridSync {
           at: clock(),
           dbVersion: SqliteDatabase.version,
           compat: dataCompat,
-          appVersion: ServiceConfig.version,
+          appVersion: ServiceConfig.version ?? '?',
           payload: payloadDatabase,
         ),
         key: key,
@@ -555,7 +555,7 @@ class HybridSync {
     if (first) {
       await _event(
         'Somente leitura: os dados de ${describe(header)} vêm de um app mais '
-        'novo${header.appVersion == null ? '' : ' (${header.appVersion})'}',
+        'novo (${header.appVersion})',
       );
     }
   }
@@ -666,10 +666,6 @@ class HybridSync {
         'Dados de ${remote.header.device} vêm de um app mais novo: '
         'atualize este aparelho',
       );
-      return false;
-    }
-    if (remote.header.payload != payloadDatabase) {
-      await _event('Arquivo de um app antigo demais: nada foi alterado');
       return false;
     }
     final ({String preferences, Uint8List database}) unpacked;
@@ -871,7 +867,6 @@ class HybridSync {
   /// The latest revision both this device and [remote] descend from, among
   /// the ones with a base here.
   static Future<String?> _ancestorFor(SnapshotHeader remote) async {
-    if (remote.payload != payloadDatabase) return null;
     for (final rev in _chain.reversed) {
       if (rev != remote.rev && !remote.chain.contains(rev)) continue;
       if (await (await _baseFile(rev, '.db')).exists()) return rev;
@@ -895,7 +890,6 @@ class HybridSync {
   /// not open it.
   static Future<({String preferences, Uint8List database})?>
   _openDatabaseSnapshot(SealedSnapshot remote) async {
-    if (remote.header.payload != payloadDatabase) return null;
     try {
       final key = await _keyFor(remote.salt);
       final opened = await compute(openSnapshot, remote.openWith(key));

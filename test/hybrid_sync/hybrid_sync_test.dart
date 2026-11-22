@@ -22,7 +22,7 @@ SnapshotHeader _header(
   List<String> chain, {
   int? dbVersion,
   int? compat,
-  String? payload,
+  String payload = payloadDatabase,
 }) => SnapshotHeader(
   rev: rev,
   chain: chain,
@@ -134,16 +134,22 @@ void main() {
       expect(needs(_header('a', [], dbVersion: 11, compat: 2)), isTrue);
     });
 
-    test('a file from before the level existed is level 1', () {
-      final old = SnapshotHeader.fromJson({
-        'rev': 'a',
-        'chain': <String>[],
-        'device': 'Celular',
-        'at': '2026-10-30T12:00:00.000Z',
-        'dbVersion': 10,
-      });
-      expect(old.compat, 1);
-      expect(old.appVersion, isNull);
+    test('a file without the level, the app version or the payload is '
+        'unreadable', () {
+      for (final missing in ['compat', 'appVersion', 'payload']) {
+        final header = _header('a', [], compat: 4).toJson()..remove(missing);
+        final text = jsonEncode({
+          ...jsonDecode(sealSnapshot((
+            plain: Uint8List(1),
+            header: _header('a', []),
+            key: deriveKey((password: 'x', salt: Uint8List(16))),
+            salt: Uint8List(16),
+          ))) as Map<String, dynamic>,
+          'header': jsonEncode(header),
+        });
+        expect(() => SealedSnapshot.parse(text), throwsFormatException,
+            reason: missing);
+      }
       final again = SnapshotHeader.fromJson(
         jsonDecode(jsonEncode(_header('b', [], compat: 4).toJson()))
             as Map<String, dynamic>,
@@ -290,7 +296,7 @@ void main() {
             at: DateTime(2026, 10, 30, 12),
             dbVersion: SqliteDatabase.version,
             compat: HybridSync.dataCompat,
-            payload: payloadDatabase,
+            appVersion: '9.9.9',
           ),
           key: deriveKey((password: password, salt: salt)),
           salt: salt,

@@ -140,9 +140,7 @@ class ShellState extends State<Shell> {
     final remote = HybridSync.readOnly.value;
     if (remote == null) return null;
     final scheme = Theme.of(context).colorScheme;
-    final newer = remote.appVersion == null
-        ? 'um app mais novo'
-        : 'o app ${remote.appVersion}';
+    final newer = 'o app ${remote.appVersion}';
     return PreferredSize(
       preferredSize: Size.fromHeight(64 + MediaQuery.paddingOf(context).top),
       child: Material(
