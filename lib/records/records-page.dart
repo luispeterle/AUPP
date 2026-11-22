@@ -510,49 +510,30 @@ class TabRecordsState extends State<TabRecords> {
 
   Widget _buildBody() {
     if (isWideLayout(context)) return _buildWideBody();
-    return GestureDetector(
-      onHorizontalDragEnd: (DragEndDetails details) {
-        // Swipe left to right (positive velocity) = shift back (-1)
-        // Swipe right to left (negative velocity) = shift forward (+1)
-        if (details.primaryVelocity != null) {
-          if (details.primaryVelocity! > 500) {
-            // Swiped left to right - go back
-            if (_controller.canShiftBack()) {
-              _controller.shiftInterval(-1);
-            }
-          } else if (details.primaryVelocity! < -500) {
-            // Swiped right to left - go forward
-            if (_controller.canShiftForward()) {
-              _controller.shiftInterval(1);
-            }
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 600),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: NotificationListener<ScrollNotification>(
+        key: ValueKey(_controller.header),
+        onNotification: (scrollInfo) {
+          final isExpanded = scrollInfo.metrics.pixels < 100;
+          if (_isAppBarExpanded != isExpanded) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _isAppBarExpanded = isExpanded;
+                });
+              }
+            });
           }
-        }
-      },
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 600),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-        child: NotificationListener<ScrollNotification>(
-          key: ValueKey(_controller.header),
-          onNotification: (scrollInfo) {
-            final isExpanded = scrollInfo.metrics.pixels < 100;
-            if (_isAppBarExpanded != isExpanded) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  setState(() {
-                    _isAppBarExpanded = isExpanded;
-                  });
-                }
-              });
-            }
-            return true;
-          },
-          child: RefreshIndicator(
-            onRefresh: _pullToSync,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: _buildSlivers(),
-            ),
+          return true;
+        },
+        child: RefreshIndicator(
+          onRefresh: _pullToSync,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: _buildSlivers(),
           ),
         ),
       ),
