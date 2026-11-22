@@ -110,6 +110,21 @@ void main() {
     expect(report.conflicts, isEmpty);
   });
 
+  test('a column only the other device has is left out', () async {
+    for (final db in [base, remote]) {
+      await db.execute('ALTER TABLE records ADD COLUMN only_there INTEGER');
+    }
+    await remote.update('records', {'value': -1100, 'only_there': 1},
+        where: 'id = 1');
+    await addRecord(remote, 'internet', id: 3, value: -90);
+    final report = await merge();
+    final rows = await records();
+    expect(rows['aluguel']!['value'], -1100);
+    expect(rows['internet']!['value'], -90);
+    expect(rows['aluguel']!.containsKey('only_there'), isFalse);
+    expect(report.conflicts, isEmpty);
+  });
+
   test('different fields of the same record on each side join', () async {
     await remote.update('records', {'value': -1100}, where: 'id = 1');
     await local.update('records', {'description': 'pago'}, where: 'id = 1');

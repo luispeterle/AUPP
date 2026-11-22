@@ -168,11 +168,23 @@ Future<MergeReport> mergeDatabases({
   return report;
 }
 
+/// The rows of [table], keyed. With [columns], only those: a column the other
+/// device has and this one does not (from a schema this app never had) is
+/// left out.
 Future<Map<String, Map<String, Object?>>> _rows(
   DatabaseExecutor db,
-  _Table table,
-) async {
-  final rows = await db.query(table.name);
+  _Table table, [
+  Set<String>? columns,
+]) async {
+  final rows = [
+    for (final row in await db.query(table.name))
+      columns == null
+          ? row
+          : {
+              for (final e in row.entries)
+                if (columns.contains(e.key)) e.key: e.value,
+            },
+  ];
   final tags = <Object?, List<String>>{};
   if (table.name == 'records') {
     for (final tag in await db.query('records_tags')) {
@@ -217,8 +229,12 @@ Future<void> _mergeTable(
   bool remoteWins,
   MergeReport report,
 ) async {
-  final b = await _rows(base, table);
-  final r = await _rows(remote, table);
+  final columns = {
+    for (final c in await tx.rawQuery('PRAGMA table_info("${table.name}")'))
+      c['name'] as String,
+  };
+  final b = await _rows(base, table, columns);
+  final r = await _rows(remote, table, columns);
   if (table.autoId) await _alignIds(tx, table, b, r);
   final l = await _rows(tx, table);
   for (final key in {...b.keys, ...r.keys}) {
