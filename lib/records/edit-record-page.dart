@@ -1,5 +1,7 @@
 
 import 'package:aupp/budget_plan/budget-plan.dart';
+import 'package:aupp/budget_plan/budget-plan-groups.dart'
+    show showBudgetGroupPicker;
 import 'package:aupp/budget_plan/budget-plan-page.dart';
 import 'package:aupp/components/known-tags.dart';
 import 'package:aupp/dinzo/split-payment.dart';
@@ -684,16 +686,12 @@ class EditRecordPageState extends State<EditRecordPage> {
                   ),
                 ),
               ),
-              // Which budget group the category counts in.
+              // Which budget group the record counts in; tap to change it
+              // for this record only.
               if (category?.categoryType == CategoryType.expense)
-                BudgetGroupLabel(
-                  _selectedTags.contains(outOfBudgetTag)
-                      ? outOfBudget
-                      : BudgetPlan.decode(
-                          ServiceConfig.sharedPreferences?.getString(
-                            PreferencesKeys.budgetPlan,
-                          ),
-                        )?.groupOfCategory(category!.name),
+                InkWell(
+                  onTap: readOnly ? null : () => _pickBudgetGroup(category!),
+                  child: BudgetGroupLabel(_budgetGroupOf(category!)),
                 ),
             ],
           ),
@@ -1849,6 +1847,37 @@ class EditRecordPageState extends State<EditRecordPage> {
     );
   }
 
+  String? _categoryGroup(Category category) => BudgetPlan.decode(
+    ServiceConfig.sharedPreferences?.getString(PreferencesKeys.budgetPlan),
+  )?.groupOfCategory(category.name);
+
+  String? _budgetGroupOf(Category category) =>
+      _selectedTags.contains(outOfBudgetTag)
+      ? outOfBudget
+      : record!.budgetGroup ?? _categoryGroup(category);
+
+  /// The record's own budget group ([BudgetPlan.recordGroupChoice]).
+  Future<void> _pickBudgetGroup(Category category) async {
+    final picked = await showBudgetGroupPicker(
+      context,
+      title: record!.title?.isNotEmpty == true ? record!.title! : category.name!,
+      current: _budgetGroupOf(category),
+    );
+    if (picked == null || !mounted) return;
+    final choice = BudgetPlan.recordGroupChoice(
+      picked.group,
+      _categoryGroup(category),
+    );
+    setState(() {
+      record!.budgetGroup = choice.budgetGroup;
+      if (choice.outOfBudget) {
+        _selectedTags.add(outOfBudgetTag);
+      } else {
+        _selectedTags.remove(outOfBudgetTag);
+      }
+    });
+  }
+
   /// Leaves the record out of the budget ([outOfBudgetTag]): neither income
   /// for the 100% nor spending. Works on Dinzo records too: the sync keeps
   /// tags it did not write.
@@ -2221,7 +2250,12 @@ class EditRecordPageState extends State<EditRecordPage> {
                 Divider(height: 1),
               ],
             ],
-            if (!readOnly) ...[_createOutOfBudgetCard(), Divider(height: 1)],
+            // An expense picks "Fora do orçamento" from its group label.
+            if (!readOnly &&
+                record?.category?.categoryType != CategoryType.expense) ...[
+              _createOutOfBudgetCard(),
+              Divider(height: 1),
+            ],
             _createTagsSection(),
             Divider(height: 1),
             _createAddNoteCard(),

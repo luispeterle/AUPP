@@ -36,7 +36,7 @@ class SqliteDatabase implements DatabaseInterface {
 
   SqliteDatabase._privateConstructor();
   static final SqliteDatabase instance = SqliteDatabase._privateConstructor();
-  static int get version => 35;
+  static int get version => 36;
   static Database? _db;
 
   static const String databaseFileName = 'movements.db';
@@ -483,7 +483,7 @@ class SqliteDatabase implements DatabaseInterface {
   static const _insertColumns =
       'title, value, datetime, timezone, category_name, category_type, '
       'description, recurrence_id, wallet_id, transfer_wallet_id, dinzo_id, '
-      'dinzo_snapshot, estimate_link, refund_link';
+      'dinzo_snapshot, estimate_link, refund_link, budget_group';
 
   /// One "?" per column of [_insertColumns].
   static final _insertPlaceholders = List.filled(
@@ -506,6 +506,7 @@ class SqliteDatabase implements DatabaseInterface {
     record.dinzoSnapshot,
     record.estimateLink,
     record.refundLink,
+    record.budgetGroup,
   ];
 
   Future<int> _maxRecordId(Database db) async =>

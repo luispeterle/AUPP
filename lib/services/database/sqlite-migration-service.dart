@@ -42,7 +42,8 @@ class SqliteMigrationService {
         dinzo_id TEXT,
         dinzo_snapshot TEXT,
         estimate_link TEXT,
-        refund_link TEXT
+        refund_link TEXT,
+        budget_group TEXT
     )""";
 
   static const _walletsTable = """
@@ -153,11 +154,15 @@ class SqliteMigrationService {
     'Transferência',
   ];
 
-  /// Every device is on the current schema: a database from before it is
+  /// Only the step from [oldestSupported]: a database from before it is
   /// not converted.
   static Future<void> onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    throw StateError('Banco de dados antigo demais (versão $oldVersion)');
+    if (oldVersion != 35) {
+      throw StateError('Banco de dados antigo demais (versão $oldVersion)');
+    }
+    // 36: budget group of the record itself.
+    await db.execute('ALTER TABLE records ADD COLUMN budget_group TEXT');
   }
 
   static Future<void> onCreate(Database db, int version) async {

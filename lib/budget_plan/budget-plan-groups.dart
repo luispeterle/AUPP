@@ -161,3 +161,75 @@ class BudgetPlanGroups extends StatelessWidget {
     );
   }
 }
+
+/// The six groups plus "Fora do orçamento" in a bottom sheet; with
+/// [childrenCount], a switch to apply the choice to the subcategories too.
+Future<({String group, bool applyToChildren})?> showBudgetGroupPicker(
+  BuildContext context, {
+  required String title,
+  required String? current,
+  int childrenCount = 0,
+}) {
+  var applyToChildren = childrenCount > 0;
+  return showModalBottomSheet<({String group, bool applyToChildren})>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setSheet) {
+        Widget option(String id, String name, Widget leading) => ListTile(
+          leading: leading,
+          title: Text(name),
+          trailing: current == id ? const Icon(Icons.check) : null,
+          onTap: () => Navigator.pop(context, (
+            group: id,
+            applyToChildren: applyToChildren,
+          )),
+        );
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (childrenCount > 0)
+                  SwitchListTile(
+                    title: Text(
+                      'Aplicar também às $childrenCount subcategorias',
+                    ),
+                    value: applyToChildren,
+                    onChanged: (v) => setSheet(() => applyToChildren = v),
+                  ),
+                for (final g in budgetGroups)
+                  option(
+                    g.id,
+                    g.name,
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: g.color,
+                      child: Icon(g.icon, size: 16, color: Colors.white),
+                    ),
+                  ),
+                option(
+                  outOfBudget,
+                  'Fora do orçamento (não contar)',
+                  const CircleAvatar(
+                    radius: 16,
+                    child: Icon(Icons.block, size: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}

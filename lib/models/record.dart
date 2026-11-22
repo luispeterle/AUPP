@@ -38,6 +38,10 @@ class Record extends Model {
   /// that part off it.
   String? refundLink;
 
+  /// Budget group of this record only (BudgetPlan group id); null = the
+  /// category's group.
+  String? budgetGroup;
+
   /// Transient: on an income that looks like a refund, an expense of
   /// the same amount it may undo ([RefundLink.markSuggestions]).
   Record? refundSuggestion;
@@ -139,6 +143,7 @@ class Record extends Model {
     this.dinzoSnapshot,
     this.estimateLink,
     this.refundLink,
+    this.budgetGroup,
   }) {
     if (timeZoneName == null) {
       timeZoneName = ServiceConfig.localTimezone;
@@ -174,6 +179,7 @@ class Record extends Model {
       dinzoSnapshot: map['dinzo_snapshot'] as String?,
       estimateLink: map['estimate_link'] as String?,
       refundLink: map['refund_link'] as String?,
+      budgetGroup: map['budget_group'] as String?,
       tags:
           map['tags'] != null ? (map['tags'] as String).split(',').toSet() : {},
     );
@@ -198,6 +204,7 @@ class Record extends Model {
       'dinzo_snapshot': dinzoSnapshot,
       'estimate_link': estimateLink,
       'refund_link': refundLink,
+      'budget_group': budgetGroup,
     };
   }
 
@@ -323,6 +330,7 @@ class Record extends Model {
       dinzoSnapshot: this.dinzoSnapshot,
       estimateLink: this.estimateLink,
       refundLink: this.refundLink,
+      budgetGroup: this.budgetGroup,
     );
     copy.refundSuggestion = refundSuggestion;
     copy.isDestinationTransferView =

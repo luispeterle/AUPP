@@ -161,6 +161,61 @@ void main() {
     expect(usage.ratioOf(plan, 'fixos'), closeTo(300 / 3000, 1e-9));
   });
 
+  test('a record\'s own group wins over its category\'s', () {
+    final plan = BudgetPlan(categories: {'Restaurante': 'prazeres'});
+    final restaurante = expense('Restaurante');
+    final usage = BudgetPlanUsage.compute(
+      plan: plan,
+      records: [
+        record(-50, restaurante, 5)..budgetGroup = 'fixos',
+        record(-30, restaurante, 6),
+      ],
+      walletsById: wallets,
+      defaultWalletId: 1,
+      month: DateTime(2026, 10, 13),
+      now: DateTime(2026, 10, 13, 18),
+    );
+    expect(usage.usedOf('fixos'), 50);
+    expect(usage.usedOf('prazeres'), 30);
+    expect(
+      plan.groupOfRecord(record(-1, restaurante, 1)..budgetGroup = 'metas'),
+      'metas',
+    );
+    expect(plan.groupOfRecord(record(-1, restaurante, 1)), 'prazeres');
+  });
+
+  test('the caixinha part of a purchase comes off the purchase\'s own group',
+      () {
+    final plan = BudgetPlan(categories: {'Saúde': 'fixos'});
+    final usage = BudgetPlanUsage.compute(
+      plan: plan,
+      records: [
+        record(-1000, expense('Saúde'), 5, dinzoId: 'tx-bike')
+          ..budgetGroup = 'prazeres',
+        record(-600, null, 5, wallet: 4, to: 1,
+            dinzoId: '${Record.splitPrefix}tx-bike'),
+      ],
+      walletsById: wallets,
+      defaultWalletId: 1,
+      month: DateTime(2026, 10, 13),
+      now: DateTime(2026, 10, 13, 18),
+    );
+    expect(usage.usedOf('prazeres'), 400);
+    expect(usage.usedOf('fixos'), 0);
+  });
+
+  test('recordGroupChoice: out of budget is the tag, the category\'s group is null',
+      () {
+    expect(BudgetPlan.recordGroupChoice(outOfBudget, 'conforto'),
+        (budgetGroup: null, outOfBudget: true));
+    expect(BudgetPlan.recordGroupChoice('conforto', 'conforto'),
+        (budgetGroup: null, outOfBudget: false));
+    expect(BudgetPlan.recordGroupChoice('fixos', 'conforto'),
+        (budgetGroup: 'fixos', outOfBudget: false));
+    expect(BudgetPlan.recordGroupChoice('fixos', null),
+        (budgetGroup: 'fixos', outOfBudget: false));
+  });
+
   test('records tagged "Fora do orçamento" count neither as income nor spending', () {
     final plan = BudgetPlan(categories: {'Presentes/Doações': 'prazeres'});
     final presente = expense('Presentes/Doações');

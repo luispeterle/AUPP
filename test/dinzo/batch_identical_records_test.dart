@@ -60,6 +60,13 @@ void main() {
     });
   });
 
+  test('a restore keeps the record budget group', () async {
+    final r = tolls().first..budgetGroup = 'fixos';
+    await db().addRecordsInBatch([r]);
+    final back = (await db().getAllRecords()).whereType<Record>().single;
+    expect(back.budgetGroup, 'fixos');
+  });
+
   test('restoring the same records again adds nothing', () async {
     await db().addRecordsInBatch(tolls());
     await db().addRecordsInBatch(tolls());

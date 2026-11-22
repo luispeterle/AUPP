@@ -133,6 +133,22 @@ class BudgetPlan {
   String? groupOfCategory(String? name) =>
       name == null ? null : categories[name];
 
+  /// The record's own group, else its category's.
+  String? groupOfRecord(Record r) =>
+      r.budgetGroup ?? groupOfCategory(r.category?.name);
+
+  /// What picking [picked] for a record means: out of budget is the
+  /// [outOfBudgetTag], and the category's own group is no group of its own.
+  static ({String? budgetGroup, bool outOfBudget}) recordGroupChoice(
+    String picked,
+    String? categoryGroup,
+  ) => (
+    budgetGroup: picked == outOfBudget || picked == categoryGroup
+        ? null
+        : picked,
+    outOfBudget: picked == outOfBudget,
+  );
+
   String? groupOfWallet(String name) => wallets[walletKey(name)];
 
   static String walletKey(String name) => name.trim();
@@ -530,7 +546,7 @@ class BudgetPlanUsage {
           !isBase(r.walletId)) {
         final amount = value.abs();
         add(
-          plan.groupOfCategory(purchase.category?.name),
+          plan.groupOfRecord(purchase),
           -amount,
           _splitAsRefund(r, purchase, amount),
         );
@@ -561,7 +577,7 @@ class BudgetPlanUsage {
           income += value;
         }
       } else if (r.category?.categoryType == CategoryType.expense) {
-        add(plan.groupOfCategory(r.category?.name), -value, r);
+        add(plan.groupOfRecord(r), -value, r);
       }
     }
     return BudgetPlanUsage(
