@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:aupp/helpers/records-utility-functions.dart';
 import 'package:aupp/models/wallet.dart';
-import 'package:aupp/statistics/statistics-models.dart';
 import 'package:aupp/statistics/statistics-page.dart';
 
 import 'budget-plan-service.dart';
@@ -27,8 +26,7 @@ class BudgetPlanGroups extends StatelessWidget {
     this.onReturn,
   });
 
-  static String _money(double v) =>
-      getCurrencyValueString(v);
+  static String _money(double v) => getCurrencyValueString(v);
 
   void _openGroup(BuildContext context, BudgetGroup g) {
     final wallets = <int, Wallet>{
@@ -44,7 +42,7 @@ class BudgetPlanGroups extends StatelessWidget {
           snap.usage.recordsOf(g.id),
           walletMap: wallets,
           label: g.name,
-          groupByType: GroupByType.subcategory,
+          expensesOnly: true,
         ),
       ),
     ).then((_) => onReturn?.call());

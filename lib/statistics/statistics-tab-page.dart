@@ -25,6 +25,9 @@ class StatisticsTabPage extends StatefulWidget {
   final GroupByType? forceGroupByType;
   final bool showRecordsToggle;
   final bool hideCategorySelection;
+
+  /// Adds the "Itens" pill: the records listed as in the Extrato.
+  final bool showItems;
   final Function? onListBackCallback;
 
   /// Opens on the pie chart instead of the bars.
@@ -39,6 +42,7 @@ class StatisticsTabPage extends StatefulWidget {
       this.forceGroupByType,
       this.showRecordsToggle = false,
       this.hideCategorySelection = false,
+      this.showItems = false,
       this.onListBackCallback,
       this.startWithPieChart = false,
       this.walletMap = const {}})
@@ -266,6 +270,7 @@ class StatisticsTabPageState extends State<StatisticsTabPage> {
           groupByType: groupByType,
           showHeaders: true,
           hideCategorySelection: widget.hideCategorySelection,
+          showItems: widget.showItems,
           walletMap: widget.walletMap,
           onGroupByTypeChanged: (newType) {
             setState(() {

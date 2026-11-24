@@ -34,6 +34,9 @@ class StatisticsSummaryCard extends StatefulWidget {
   final bool isBalance;
   final bool hideCategorySelection;
 
+  /// Adds the "Itens" pill (the records list, shown by the parent).
+  final bool showItems;
+
   final Map<int, Wallet> walletMap;
 
   const StatisticsSummaryCard({
@@ -50,6 +53,7 @@ class StatisticsSummaryCard extends StatefulWidget {
     this.showHeaders = true,
     this.isBalance = false,
     this.hideCategorySelection = false,
+    this.showItems = false,
     this.walletMap = const {},
   }) : super(key: key);
 
@@ -70,6 +74,7 @@ class _StatisticsSummaryCardState extends State<StatisticsSummaryCard> {
           GroupByDropdown(
             groupByType: widget.groupByType,
             onGroupByTypeChanged: widget.onGroupByTypeChanged,
+            showItems: widget.showItems,
           ),
           Divider(),
         ],

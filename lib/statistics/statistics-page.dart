@@ -35,6 +35,10 @@ class StatisticsPage extends StatefulWidget {
   /// Tab shown first; null = the first one.
   final StatisticsTab? initialTab;
 
+  /// Only the expenses, without the tabs, opening on the "Itens" list
+  /// (a budget group).
+  final bool expensesOnly;
+
   StatisticsPage(
     this.from,
     this.to,
@@ -45,6 +49,7 @@ class StatisticsPage extends StatefulWidget {
     this.showBudget = false,
     this.navigation,
     this.initialTab,
+    this.expensesOnly = false,
   });
 
   @override
@@ -131,6 +136,35 @@ class _StatisticsPageState extends State<StatisticsPage>
     );
   }
 
+  Widget _expensesTab(String period) => KeyedSubtree(
+    key: ValueKey('expenses-$period'),
+    child: StatisticsTabPage(
+      _from,
+      _to,
+      _records
+          .where(
+            (element) =>
+                element?.category?.categoryType == CategoryType.expense &&
+                !element!.isOwnMove,
+          )
+          .toList(),
+      selectedDate: _selectedDate,
+      showRecordsToggle: true,
+      showItems: widget.expensesOnly,
+      startWithPieChart: true,
+      forceGroupByType: widget.expensesOnly
+          ? GroupByType.records
+          : widget.groupByType,
+      walletMap: widget.walletMap,
+      onIntervalSelected: (newTitle, date, amount) {
+        setState(() {
+          _selectedIntervalTitle = newTitle;
+          _selectedDate = date;
+        });
+      },
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     String title =
@@ -140,6 +174,20 @@ class _StatisticsPageState extends State<StatisticsPage>
     // New period → fresh tabs (they read the interval only when created).
     final period =
         '${_from?.millisecondsSinceEpoch}-${_to?.millisecondsSinceEpoch}';
+
+    if (widget.expensesOnly) {
+      return Scaffold(
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverAppBar(
+              title: _buildTitle(title),
+              forceElevated: innerBoxIsScrolled,
+            ),
+          ],
+          body: _expensesTab(period),
+        ),
+      );
+    }
 
     return Scaffold(
       body: NestedScrollView(
@@ -171,32 +219,7 @@ class _StatisticsPageState extends State<StatisticsPage>
                 key: ValueKey('budget-$period'),
                 child: BudgetPlanTab(from: _from!, to: _to!),
               ),
-            KeyedSubtree(
-              key: ValueKey('expenses-$period'),
-              child: StatisticsTabPage(
-                _from,
-                _to,
-                _records
-                    .where(
-                      (element) =>
-                          element?.category?.categoryType ==
-                              CategoryType.expense &&
-                          !element!.isOwnMove,
-                    )
-                    .toList(),
-                selectedDate: _selectedDate,
-                showRecordsToggle: true,
-                startWithPieChart: true,
-                forceGroupByType: widget.groupByType,
-                walletMap: widget.walletMap,
-                onIntervalSelected: (newTitle, date, amount) {
-                  setState(() {
-                    _selectedIntervalTitle = newTitle;
-                    _selectedDate = date;
-                  });
-                },
-              ),
-            ),
+            _expensesTab(period),
             KeyedSubtree(
               key: ValueKey('income-$period'),
               child: StatisticsTabPage(
