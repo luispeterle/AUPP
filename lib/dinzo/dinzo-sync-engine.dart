@@ -176,8 +176,8 @@ enum DinzoSkipReason {
   /// [MoneyAccounts.transferTag] and the Extrato decides when to show it.
   internalTransfer,
 
-  /// Investment moves and yield: they change net worth, which the free
-  /// wallet already tracks, so they never become records.
+  /// Investment moves and yield: the month's adjustment ([DailyMoney])
+  /// already holds them, so they never become records.
   investment,
 
   /// Installment 2..N: the purchase is recorded in full on installment 1.
@@ -187,7 +187,7 @@ enum DinzoSkipReason {
   ignoredByUser,
 
   /// Moves inside the banks outside the everyday ones (BTG Banking → BTG
-  /// Investimentos, a broker's own entries): the money stayed invested.
+  /// Investimentos, a broker's own entries): the money stayed there.
   /// Dinzo sometimes hides only one side of them.
   outsideDailyBanks,
 }
@@ -255,12 +255,11 @@ class DinzoSyncEngine {
   final Map<String, DinzoAccount> accounts;
   final Map<String, DinzoCategory> categories;
 
-  /// Wallet that receives imports with no merchant rule ("Livre").
+  /// Wallet that receives imports with no merchant rule (Conta corrente).
   final int? defaultWalletId;
 
-  /// The wallet to invest: money sent to a bank outside the everyday ones
-  /// leaves it ([isAporte]). Null before it exists: such transfers are
-  /// skipped like any other investment move.
+  /// The wallet to invest: orders leave it ([isAporte]). Null before it
+  /// exists: they are skipped like any other investment move.
   final int? toInvestWalletId;
 
   /// Whether an account is in an everyday bank ([DailyBanks]).
@@ -273,12 +272,10 @@ class DinzoSyncEngine {
   /// ([DailyBanks.holdsProduct]).
   final bool Function(String bank, String product) isDailyProduct;
 
-  /// Aportes whose other side Dinzo does not show (a Pix to a crypto
-  /// exchange, a TED to a broker that sends no entries) are recognised from
-  /// this day on. Before it, the wallets' starting balances already hold
-  /// them ([DailyMoney]): recognising them again would count them twice.
-  /// Null: from the start (the first sync).
-  final DateTime? unpairedAportesFrom;
+  /// Aportes are recognised from this day on. Before it, the wallets'
+  /// starting balances already hold them ([DailyMoney]): recognising them
+  /// again would count them twice. Null: from the start (the first sync).
+  final DateTime? aportesFrom;
 
   DinzoSyncEngine({
     required this.config,
@@ -289,7 +286,7 @@ class DinzoSyncEngine {
     this.isDailyAccount = DailyBanks.holdsAccount,
     this.isDailyBank = DailyBanks.isDaily,
     this.isDailyProduct = DailyBanks.holdsProduct,
-    this.unpairedAportesFrom,
+    this.aportesFrom,
   }) : accounts = {for (final a in accounts) a.id: a},
        categories = {for (final c in categories) c.id: c};
 
@@ -573,7 +570,7 @@ class DinzoSyncEngine {
       account != null && !account.isCreditCard;
 
   /// A bank account outside the everyday banks (a broker's): its money is
-  /// invested, not money of the wallets.
+  /// still the wallets', waiting for an order.
   bool isOutsideAccount(String? accountId) {
     final account = accounts[accountId];
     return _isBankAccount(account) && !isDailyAccount(account!);
@@ -623,7 +620,7 @@ class DinzoSyncEngine {
   ///   crypto exchange.
   /// Money between own accounts, a broker's too, is none: sent to a broker
   /// it is still money to invest until an order spends it. Both kinds count
-  /// from [unpairedAportesFrom] on, or when they are records already
+  /// from [aportesFrom] on, or when they are records already
   /// ([recorded]).
   void _findAportes(List<DinzoTransaction> transactions, Set<String> recorded) {
     _aportes.clear();
@@ -645,9 +642,11 @@ class DinzoSyncEngine {
       ..._refunded.keys,
       for (final debit in _refunded.values) debit.id,
     };
-    final from = unpairedAportesFrom == null ? null : day(unpairedAportesFrom!);
+    final from = aportesFrom == null ? null : day(aportesFrom!);
     bool counts(DinzoTransaction tx) =>
-        from == null || tx.date.compareTo(from) >= 0 || recorded.contains(tx.id);
+        from == null ||
+        tx.date.compareTo(from) >= 0 ||
+        recorded.contains(tx.id);
     for (final tx in real) {
       if (!_isBankAccount(accounts[tx.accountId]) ||
           isBillPayment(tx) ||

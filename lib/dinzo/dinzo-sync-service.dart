@@ -377,7 +377,7 @@ class DinzoSyncService {
         categories: categories,
         defaultWalletId: defaultWallet?.id,
         toInvestWalletId: await DailyMoney.toInvestWalletId(),
-        unpairedAportesFrom: await DailyMoney.adjustedSince(),
+        aportesFrom: await DailyMoney.adjustedSince(),
       );
       final linked = await linkedRecords();
       final plan = engine.plan(
@@ -437,7 +437,7 @@ class DinzoSyncService {
     }).toList();
   }
 
-  /// Applies the selected plan items, then reconciles the free wallet.
+  /// Applies the selected plan items, then reconciles the wallet to invest.
   /// The config (merchant rules, ignored ids...) is saved too, since the
   /// merge screen edits it.
   static Future<DinzoApplyResult> apply(

@@ -154,22 +154,23 @@ void main() {
     });
 
     test('a product chosen as everyday money there is no order', () {
-      final p = DinzoSyncEngine(
-        config: DinzoConfig(startDate: DateTime(2026, 10, 1)),
-        accounts: accounts,
-        categories: const [],
-        defaultWalletId: conta,
-        toInvestWalletId: investir,
-        isDailyAccount: (a) => !a.id.startsWith('btg'),
-        isDailyProduct: (bank, product) => product == 'Tesouro',
-      ).plan(
-        transactions: [
-          btg('td', 'DEBIT', 31.7, 'Compra de Tesouro Direto: NTN-B 2032'),
-        ],
-        linkedRecords: const [],
-        from: DateTime(2026, 10, 1),
-        to: DateTime(2026, 11, 30),
-      );
+      final p =
+          DinzoSyncEngine(
+            config: DinzoConfig(startDate: DateTime(2026, 10, 1)),
+            accounts: accounts,
+            categories: const [],
+            defaultWalletId: conta,
+            toInvestWalletId: investir,
+            isDailyAccount: (a) => !a.id.startsWith('btg'),
+            isDailyProduct: (bank, product) => product == 'Tesouro',
+          ).plan(
+            transactions: [
+              btg('td', 'DEBIT', 31.7, 'Compra de Tesouro Direto: NTN-B 2032'),
+            ],
+            linkedRecords: const [],
+            from: DateTime(2026, 10, 1),
+            to: DateTime(2026, 11, 30),
+          );
       expect(p.ofKind(DinzoPlanKind.create), isEmpty);
     });
   });
@@ -266,8 +267,7 @@ void main() {
     });
   });
 
-  test('renamed in Dinzo, an entry is still read by what the bank wrote',
-      () {
+  test('renamed in Dinzo, an entry is still read by what the bank wrote', () {
     DinzoTransaction renamed(
       String id,
       String account,
@@ -319,7 +319,7 @@ void main() {
           toInvestWalletId: investir,
           isDailyAccount: (a) => !a.id.startsWith('btg'),
           isDailyProduct: isDailyProduct ?? (_, _) => true,
-          unpairedAportesFrom: DateTime(2026, 11, 1),
+          aportesFrom: DateTime(2026, 11, 1),
         ).plan(
           transactions: txs,
           linkedRecords: linked,
