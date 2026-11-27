@@ -19,6 +19,7 @@ import 'package:aupp/models/records-per-day.dart';
 import 'package:aupp/models/wallet.dart';
 import 'package:aupp/records/edit-record-page.dart';
 import 'package:aupp/records/refund-link-ui.dart';
+import 'package:aupp/records/investment-look.dart';
 import 'package:aupp/records/merchant-brands.dart';
 import 'package:aupp/records/refund-link.dart';
 import 'package:aupp/records/controllers/tab_records_controller.dart';
@@ -235,7 +236,6 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
     final icon = r.markedPaid
         ? 32.0
         : _offersRefund(r) ||
-              r.investShortfall != null ||
               r.needsCategory ||
               r.needsPaymentCode ||
               r.paymentCode != null
@@ -357,7 +357,10 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
       circleSize: 36,
       mainIconSize: 18,
       overlayIconSize: 13,
-      imageAsset: group != null ? null : MerchantBrands.of(movement)?.asset,
+      imageAsset: group != null
+          ? null
+          : MerchantBrands.of(movement)?.asset ??
+                InvestmentLook.logoOf(movement),
       iconEmoji: group != null
           ? null
           : isUncategorizedTransfer
@@ -517,18 +520,6 @@ class _RecordsPerDayCardState extends State<RecordsPerDayCard>
                 const Tooltip(
                   message: 'Já pago, esperando chegar da Dinzo',
                   child: Icon(Icons.check_circle, color: Colors.green),
-                ),
-                const SizedBox(width: 8),
-                _buildRecordAmountWidget(movement),
-              ],
-            )
-          : movement.investShortfall != null
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const BlinkingAlertIcon(
-                  Icons.priority_high,
-                  message: 'O Investir não tinha todo o dinheiro do aporte',
                 ),
                 const SizedBox(width: 8),
                 _buildRecordAmountWidget(movement),

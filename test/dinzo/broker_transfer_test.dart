@@ -65,48 +65,32 @@ DinzoSyncPlan plan(List<DinzoTransaction> txs, {int? toInvest = investir}) =>
     );
 
 void main() {
-  test('Pix to a broker is an aporte from the wallet to invest', () {
+  test('a Pix to a broker is money changing banks: still to invest', () {
     final p = plan([
       tx('out', 'nu', 'DEBIT', 100),
       tx('in', 'btg', 'CREDIT', 100, description: 'TRANSFERÊNCIA VIA PIX'),
     ]);
-    final item = p.ofKind(DinzoPlanKind.create).single;
-    expect(item.transaction!.id, 'out');
-    expect(item.categoryType, CategoryType.investment);
-    expect(item.desired!.categoryName, Category.investmentName);
-    expect(item.desired!.walletId, investir);
-    expect(item.desired!.value, -100);
-    expect(item.desired!.title, 'Aporte do Nubank para o BTG');
-    expect(item.desired!.tags, isNot(contains('Entre contas')));
-    // The broker's side stays out.
-    expect(p.ofKind(DinzoPlanKind.skipped).map((i) => i.transaction!.id), [
-      'in',
-    ]);
+    expect(p.ofKind(DinzoPlanKind.create), isEmpty);
   });
 
-  test('money back from a broker is a withdrawal into it', () {
+  test('money back from a broker is none either', () {
     final p = plan([
       tx('out', 'btg', 'DEBIT', 0.5, description: 'Pix'),
       tx('in', 'c6', 'CREDIT', 0.5, description: 'Pix recebido Fulano de Tal'),
     ]);
-    final item = p.ofKind(DinzoPlanKind.create).single;
-    expect(item.desired!.categoryName, Category.withdrawalName);
-    expect(item.desired!.walletId, investir);
-    expect(item.desired!.value, 0.5);
-    expect(item.desired!.title, 'Resgate do BTG para o C6');
+    expect(p.ofKind(DinzoPlanKind.create), isEmpty);
   });
 
   test('between two everyday banks it stays hidden', () {
     final p = plan([
       tx('out', 'nu', 'DEBIT', 250),
       tx('in', 'c6', 'CREDIT', 250, description: 'Pix recebido Fulano de Tal'),
-      // Same amount reaching the broker the same day does not take it.
       tx('btg', 'btg', 'CREDIT', 250, description: 'TRANSFERÊNCIA VIA PIX'),
     ]);
     expect(p.ofKind(DinzoPlanKind.create), isEmpty);
   });
 
-  test('a purchase of the same amount is not an aporte', () {
+  test('a purchase of the same amount is an expense, nothing else', () {
     final p = plan([
       tx('loja', 'nu', 'DEBIT', 100, description: 'LOJA', hidden: false),
       tx('in', 'btg', 'CREDIT', 100, description: 'TRANSFERÊNCIA VIA PIX'),
@@ -116,23 +100,78 @@ void main() {
     expect(item.categoryType, CategoryType.expense);
   });
 
-  test('more than 3 days apart is not the same money', () {
-    final p = plan([
-      tx('out', 'nu', 'DEBIT', 100),
-      tx('in', 'btg', 'CREDIT', 100, date: '2026-11-06'),
-    ]);
-    // It still left the everyday banks, to somewhere unknown.
-    final item = p.ofKind(DinzoPlanKind.create).single;
-    expect(item.transaction!.id, 'out');
-    expect(item.desired!.title, 'Aporte do Nubank');
-  });
+  group('orders executed at a broker', () {
+    DinzoTransaction btg(
+      String id,
+      String type,
+      double amount,
+      String description, {
+      String date = '2026-11-06',
+    }) => tx(id, 'btg', type, amount, date: date, description: description);
 
-  test('without the wallet to invest yet, it stays hidden', () {
-    final p = plan([
-      tx('out', 'nu', 'DEBIT', 100),
-      tx('in', 'btg', 'CREDIT', 100),
-    ], toInvest: null);
-    expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    test('a stock bought is an aporte from the wallet to invest', () {
+      final item = plan([
+        btg(
+          'liq',
+          'DEBIT',
+          40.25,
+          'LIQ BOLSA - VISTA BRUTO - PREGÃO: 04/11/2026 - EXEC.: 85 - S 46780',
+        ),
+      ]).ofKind(DinzoPlanKind.create).single;
+      expect(item.categoryType, CategoryType.investment);
+      expect(item.desired!.categoryName, Category.investmentName);
+      expect(item.desired!.walletId, investir);
+      expect(item.desired!.value, -40.25);
+      expect(item.desired!.title, 'Compra de Ações no BTG');
+      // An order is paid with nothing: no "Débito".
+      expect(item.desired!.tags, ['BTG']);
+    });
+
+    test('a stock sold is a withdrawal into the wallet to invest', () {
+      final item = plan([
+        btg('liq', 'CREDIT', 70, 'LIQ BOLSA - VISTA BRUTO - PREGÃO: 05/11'),
+      ]).ofKind(DinzoPlanKind.create).single;
+      expect(item.desired!.categoryName, Category.withdrawalName);
+      expect(item.desired!.walletId, investir);
+      expect(item.desired!.value, 70);
+      expect(item.desired!.title, 'Venda de Ações no BTG');
+    });
+
+    test('Tesouro bought there, filed under no investment category', () {
+      final item = plan([
+        btg('td', 'DEBIT', 31.7, 'Compra de Tesouro Direto: NTN-B 15/08/2032'),
+      ]).ofKind(DinzoPlanKind.create).single;
+      expect(item.desired!.value, -31.7);
+      expect(item.desired!.title, 'Compra de Tesouro no BTG');
+    });
+
+    test("the account's own yield box is money staying in the account", () {
+      final p = plan([
+        btg('apl', 'DEBIT', 80.4, 'CONTA REMUNERADA - APLICAÇÃO AUTOMÁTICA'),
+        btg('res', 'CREDIT', 22.6, 'CONTA REMUNERADA - RESGATE APLICAÇÃO'),
+      ]);
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    });
+
+    test('a product chosen as everyday money there is no order', () {
+      final p = DinzoSyncEngine(
+        config: DinzoConfig(startDate: DateTime(2026, 10, 1)),
+        accounts: accounts,
+        categories: const [],
+        defaultWalletId: conta,
+        toInvestWalletId: investir,
+        isDailyAccount: (a) => !a.id.startsWith('btg'),
+        isDailyProduct: (bank, product) => product == 'Tesouro',
+      ).plan(
+        transactions: [
+          btg('td', 'DEBIT', 31.7, 'Compra de Tesouro Direto: NTN-B 2032'),
+        ],
+        linkedRecords: const [],
+        from: DateTime(2026, 10, 1),
+        to: DateTime(2026, 11, 30),
+      );
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
+    });
   });
 
   group('inside the banks outside the everyday ones', () {
@@ -156,7 +195,7 @@ void main() {
       });
     });
 
-    test("the broker's side of an aporte stays out even if visible", () {
+    test("the broker's side of a Pix to it stays out even if visible", () {
       final p = plan([
         tx('out', 'nu', 'DEBIT', 100),
         tx(
@@ -168,7 +207,7 @@ void main() {
           hidden: false,
         ),
       ]);
-      expect(p.ofKind(DinzoPlanKind.create).single.transaction!.id, 'out');
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
     });
 
     test("a broker's own entry stays out", () {
@@ -225,18 +264,31 @@ void main() {
         'tef': 'Transferência Enviada',
       });
     });
+  });
 
-    test('the bank name of an account outside the everyday ones', () {
-      final engine = DinzoSyncEngine(
-        config: DinzoConfig(startDate: DateTime(2026, 10, 1)),
-        accounts: accounts,
-        categories: const [],
-        defaultWalletId: conta,
-        isDailyAccount: (a) => !a.id.startsWith('btg'),
-      );
-      expect(engine.outsideBankOf('btgb'), 'BTG');
-      expect(engine.outsideBankOf('nu'), isNull);
-    });
+  test('renamed in Dinzo, an entry is still read by what the bank wrote',
+      () {
+    DinzoTransaction renamed(
+      String id,
+      String account,
+      String type,
+      String bankText,
+    ) => DinzoTransaction(
+      id: id,
+      date: '2026-11-10',
+      type: type,
+      amount: 50,
+      description: 'Nome que eu dei',
+      originalDescription: bankText,
+      accountId: account,
+    );
+    final p = plan([
+      renamed('fatura', 'nu', 'DEBIT', 'Pagamento de fatura'),
+      renamed('div', 'btg', 'CREDIT', 'DIVIDENDOS ITSA4'),
+    ]);
+    final reasons = {for (final i in p.items) i.transaction!.id: i.skipReason};
+    expect(reasons['fatura'], DinzoSkipReason.internalTransfer);
+    expect(reasons['div'], DinzoSkipReason.outsideDailyBanks);
   });
 
   group('aportes whose other side Dinzo does not show', () {
@@ -298,7 +350,8 @@ void main() {
       expect(item.desired!.title, 'Aporte do Nubank para o OKX');
     });
 
-    test('a transfer to myself that reached no everyday bank', () {
+    test('a transfer to myself whose other side Dinzo does not show is '
+        'money changing banks too', () {
       final p = unpaired([
         tx('ted', 'c6', 'DEBIT', 31.36, date: '2026-11-06'),
         tx(
@@ -310,14 +363,7 @@ void main() {
           description: 'Pix recebido de Fulano de Tal',
         ),
       ]);
-      final titles = {
-        for (final i in p.ofKind(DinzoPlanKind.create))
-          i.transaction!.id: (i.desired!.title, i.desired!.categoryName),
-      };
-      expect(titles, {
-        'ted': ('Aporte do C6', Category.investmentName),
-        'back': ('Resgate para o Nubank', Category.withdrawalName),
-      });
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
     });
 
     test('a transfer that failed and came back is none', () {
@@ -348,9 +394,7 @@ void main() {
           description: 'Transferência enviada Fulano de Tal',
         ),
       ]);
-      expect(p.ofKind(DinzoPlanKind.create).map((i) => i.transaction!.id), [
-        'sent',
-      ]);
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
     });
 
     test('money that stays in the bank and its yield are none', () {
@@ -399,7 +443,7 @@ void main() {
       );
       expect(
         chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.title),
-        unorderedEquals(['Aporte do C6', 'Resgate para o C6']),
+        unorderedEquals(['Compra de CDB no C6', 'Resgate de CDB no C6']),
       );
       expect(
         chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.walletId),
@@ -428,7 +472,8 @@ void main() {
       expect(p.ofKind(DinzoPlanKind.create), isEmpty);
     });
 
-    test('a Pix that names a product is still money sent away', () {
+    test('a Pix to a stock broker is money changing banks, even when Dinzo '
+        'files it under Investimentos', () {
       final p = unpaired([
         DinzoTransaction(
           id: 'pix',
@@ -440,7 +485,7 @@ void main() {
           categoryId: 'aplicacao',
         ),
       ]);
-      expect(p.ofKind(DinzoPlanKind.create).single.desired!.value, -300);
+      expect(p.ofKind(DinzoPlanKind.create), isEmpty);
     });
 
     test('Tesouro bought in an everyday bank follows the choice of the '
@@ -480,7 +525,7 @@ void main() {
             categoryId: 'aplicacao',
           );
       final txs = [
-        nu('ordem', 'DEBIT', 2600.99, 'Compra de Renda Variável'),
+        nu('ordem', 'DEBIT', 2500.4, 'Compra de Renda Variável'),
         nu('sobra', 'CREDIT', 20.24, 'Valor recebido de Investimentos'),
       ];
       expect(unpaired(txs).ofKind(DinzoPlanKind.create), isEmpty);
@@ -489,8 +534,52 @@ void main() {
         isDailyProduct: (bank, product) => product != 'Ações',
       );
       expect(chosen.ofKind(DinzoPlanKind.create).map((i) => i.desired!.value), [
-        -2600.99,
+        -2500.4,
       ]);
+    });
+
+    test('a Nubank stock order renamed by the user is still an aporte: '
+        'the rename goes to the Dinzo description, the bank text stays', () {
+      final order = DinzoTransaction(
+        id: 'bbas3',
+        date: '2026-11-24',
+        type: 'DEBIT',
+        amount: 1200.5,
+        description: 'BBAS3 X 100',
+        originalDescription: 'Compra de Renda Variável',
+        accountId: 'nu',
+      );
+      final item = unpaired(
+        [order],
+        isDailyProduct: (bank, product) => product != 'Ações',
+      ).ofKind(DinzoPlanKind.create).single;
+      expect(item.categoryType, CategoryType.investment);
+      expect(item.desired!.categoryName, Category.investmentName);
+      expect(item.desired!.walletId, investir);
+      expect(item.desired!.value, -1200.5);
+    });
+
+    test('an aporte renamed keeps the name after a sync from scratch: the '
+        'name is in Dinzo, the bank text says how it was made', () {
+      DinzoTransaction order(String description) => DinzoTransaction(
+        id: 'bbas3',
+        date: '2026-11-24',
+        type: 'DEBIT',
+        amount: 1200.5,
+        description: description,
+        originalDescription: 'Compra de Renda Variável',
+        accountId: 'nu',
+      );
+      String titleOf(DinzoTransaction t) => unpaired(
+        [t],
+        isDailyProduct: (bank, product) => product != 'Ações',
+      ).ofKind(DinzoPlanKind.create).single.desired!.title;
+      expect(titleOf(order('BBAS3 X 100')), 'BBAS3 X 100');
+      // Not renamed: Dinzo has the bank text in both.
+      expect(
+        titleOf(order('Compra de Renda Variável')),
+        'Compra de Ações no Nubank',
+      );
     });
 
     test('before the wallets explain each month, it is in their balances', () {

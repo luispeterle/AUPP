@@ -14,7 +14,7 @@ import 'package:aupp/services/service-config.dart';
 import 'package:aupp/settings/constants/preferences-keys.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-import 'broker-payment.dart';
+import 'broker-orders.dart';
 import 'dinzo-api.dart';
 import 'dinzo-config.dart';
 import 'dinzo-models.dart';
@@ -605,12 +605,7 @@ class DinzoSyncService {
       result.removed = toDelete.length;
     }
     await writeBankNames(prepared.plan);
-    result.items.addAll(
-      await BrokerPayment.sync(
-        await linkedRecords(),
-        prepared.engine.outsideBankOf,
-      ),
-    );
+    result.items.addAll(await _syncBrokerOrders(prepared));
 
     final balances = prepared.balances;
     // Without every balance the money is wrong: the wallet to invest keeps
@@ -636,7 +631,8 @@ class DinzoSyncService {
         items: [
           ...result.items,
           'Dinheiro ${balances.money.toStringAsFixed(2)} = bancos '
-              '${balances.bank.toStringAsFixed(2)} + aplicações '
+              '${balances.bank.toStringAsFixed(2)} + corretoras '
+              '${balances.atBrokers.toStringAsFixed(2)} + aplicações '
               '${balances.parked.toStringAsFixed(2)} − cartões '
               '${balances.cardDebt.toStringAsFixed(2)}'
               '${balances.inTransit > 0 ? ' (a caminho ${balances.inTransit.toStringAsFixed(2)}, fora da conta)' : ''}',
@@ -649,7 +645,7 @@ class DinzoSyncService {
           investments: prepared.investments,
           history: prepared.investmentHistory,
           income: prepared.investmentIncome,
-          bankBalance: balances.bank,
+          bankBalance: balances.bank + balances.atBrokers,
           cardDebt: balances.cardDebt,
           balancesComplete: balances.complete,
           fetchedAt: DateTime.now(),
@@ -731,6 +727,36 @@ class DinzoSyncService {
       SqliteDatabase.notifyChanged();
     });
     _logger.info('Bank names written in the notes of ${notes.length} records');
+  }
+
+  /// Orders of the banks that send no entries ([BrokerOrders]), from the
+  /// positions just fetched or, on a quick sync, the saved ones.
+  static Future<List<String>> _syncBrokerOrders(
+    DinzoPreparedSync prepared,
+  ) async {
+    final walletId = await DailyMoney.toInvestWalletId();
+    final since = await DailyMoney.adjustedSince();
+    if (walletId == null || since == null) return const [];
+    final investments = prepared.full
+        ? prepared.investments
+        : (await InvestmentsCache.load())?.investments;
+    if (investments == null || investments.isEmpty) return const [];
+    final engine = prepared.engine;
+    final banksWithEntries = {
+      for (final tx in prepared.transactions) ?engine.bankOfAccount(tx.accountId),
+      for (final r in await linkedRecords())
+        ?engine.bankOfAccount(
+          DinzoLink.fromJsonString(r.dinzoSnapshot)?.source.accountId,
+        ),
+    };
+    return BrokerOrders.sync(
+      BrokerOrders.of(
+        investments,
+        banksWithEntries: banksWithEntries,
+        since: since,
+      ),
+      walletId,
+    );
   }
 
   /// Renames the record's transaction in Dinzo, so its panel shows the same

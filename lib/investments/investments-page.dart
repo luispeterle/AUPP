@@ -245,7 +245,7 @@ class InvestmentsPageState extends State<InvestmentsPage> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
-              leading: _logo(p.institution, 32),
+              leading: _logo(Institution.badgeOf(p.inv), 32),
               title: Text(
                 '${p.product} ${p.rateLabel ?? ''} · ${_money(p.balance)}',
               ),
@@ -493,7 +493,7 @@ class InvestmentsPageState extends State<InvestmentsPage> {
     return ListTile(
       leading: InstitutionLogo(
         institution: ticker == null
-            ? p.institution
+            ? Institution.badgeOf(p.inv)
             : StockCompany.badgeOf(ticker),
       ),
       title: Text(

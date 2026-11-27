@@ -91,7 +91,7 @@ class _InvestmentDetailPageState extends State<InvestmentDetailPage> {
           ListTile(
             leading: InstitutionLogo(
               institution: ticker == null
-                  ? p.institution
+                  ? Institution.badgeOf(p.inv)
                   : StockCompany.badgeOf(ticker),
               size: 44,
             ),

@@ -22,6 +22,17 @@ class Institution {
   static final rico = Institution.fromTag(KnownTag.of('Rico')!);
   static final auvp = Institution.fromTag(KnownTag.of('AUVP')!);
   static final mercadoPago = Institution.fromTag(KnownTag.of('Mercado Pago')!);
+  static const tesouroDireto = Institution(
+    'Tesouro Direto',
+    'assets/images/brands/tesouro.png',
+    Color(0xFF008750),
+  );
+
+  /// The picture of a position with no ticker: Tesouro Direto's for a
+  /// Tesouro, in any bank; the bank's ([of]) for the rest. Only for showing:
+  /// the bank still holds it.
+  static Institution badgeOf(DinzoInvestment inv) =>
+      productOf(inv) == 'Tesouro' ? tesouroDireto : of(inv);
 
   /// Positions don't say which account holds them; the issuer and the name
   /// do, matched against the bank catalogue ([KnownTag.banks]). "Cofrinho"

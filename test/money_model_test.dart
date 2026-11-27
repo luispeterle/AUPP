@@ -259,7 +259,7 @@ void main() {
       );
     });
 
-    test('money at a broker is not in the balances', () async {
+    test("money in a broker's account is money to invest", () async {
       final balances = DailyMoney.balances(
         [
           DinzoAccount(id: '1', type: 'BANK', title: 'x', balance: 10, connectorName: 'Nubank'),
@@ -270,8 +270,10 @@ void main() {
         [position('FIXED_INCOME', 'Nubank', 100)],
       );
       expect(balances.bank, 15);
+      expect(balances.atBrokers, 99);
       expect(balances.cardDebt, 3);
-      expect(balances.money, 112);
+      expect(balances.money, 211);
+      // The first sync starts the Conta corrente at the everyday accounts.
       expect(balances.spendable, 12);
       expect(balances.complete, isTrue);
     });

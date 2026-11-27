@@ -603,7 +603,7 @@ class BudgetPlanUsage {
       if (!isBase(r.walletId)) continue;
       if (r.isInvestmentFlow) {
         // From a wallet set aside, it already counted when it went there; a
-        // withdrawal (BrokerPayment) lowers it.
+        // withdrawal into a base wallet lowers it.
         add(BudgetPlan.investedGroup, -value, r);
       } else if (r.category?.categoryType == CategoryType.income) {
         // Estimated income is already in [estimatedIncome].

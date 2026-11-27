@@ -316,7 +316,7 @@ class DinzoSyncEngine {
     (RegExp(r'\blca\b'), 'LCA'),
     (RegExp(r'tesouro'), 'Tesouro'),
     (RegExp(r'\bfundos?\b'), 'Fundo'),
-    (RegExp(r'renda vari[aá]vel|\ba[cç][oõ]es\b'), 'Ações'),
+    (RegExp(r'renda vari[aá]vel|\ba[cç][oõ]es\b|liq\.? bolsa'), 'Ações'),
     (
       RegExp(r'cofrinho|caixinha|dinheiro (reservado|retirado|guardado)'),
       'Cofrinho',
@@ -332,6 +332,26 @@ class DinzoSyncEngine {
   static final RegExp _appliedHere = RegExp(r'\baplic|\bresg');
 
   /// The product of a bank's own entry; null when it does not say.
+  /// What Dinzo shows and what the bank wrote: a rename by the user changes
+  /// only the first ("BBAS3 X 100" for "Compra de Renda Variável"), so an
+  /// entry is read by either.
+  static List<String> _texts(DinzoTransaction tx) => [
+    tx.description,
+    ?tx.originalDescription,
+  ];
+
+  static bool _readsAsInvestmentMove(DinzoTransaction tx) =>
+      _texts(tx).any(_investmentMove.hasMatch);
+
+  /// The product [tx] moves ([_productMoved]), by either of its texts.
+  static String? _productOf(DinzoTransaction tx) {
+    for (final text in _texts(tx)) {
+      final product = _productMoved(text);
+      if (product != null) return product;
+    }
+    return null;
+  }
+
   static String? _productMoved(String description) {
     final text = description.toLowerCase();
     for (final (pattern, product) in _products) {
@@ -345,10 +365,12 @@ class DinzoSyncEngine {
   /// an application, and no one it was sent to. Any bank, whatever its
   /// wording ("Aplicação RDB", "RESGATE DE CDB", "Guardado no Cofrinho").
   bool _inBank(DinzoTransaction tx) {
-    if (_investmentMove.hasMatch(tx.description)) return true;
-    final text = tx.description.toLowerCase();
-    if (_sentAway.hasMatch(text)) return false;
-    return _productMoved(text) != null || _appliedHere.hasMatch(text);
+    if (_readsAsInvestmentMove(tx)) return true;
+    final texts = [for (final t in _texts(tx)) t.toLowerCase()];
+    if (texts.any(_sentAway.hasMatch)) return false;
+    return texts.any(
+      (t) => _productMoved(t) != null || _appliedHere.hasMatch(t),
+    );
   }
 
   /// Money the bank moves between its account and what it holds itself,
@@ -357,7 +379,7 @@ class DinzoSyncEngine {
   bool _staysInBank(DinzoTransaction tx) {
     if (!_inBank(tx)) return false;
     final account = accounts[tx.accountId];
-    final product = _productMoved(tx.description);
+    final product = _productOf(tx);
     if (account == null || product == null) return true;
     return isDailyProduct(_bankName(account), product);
   }
@@ -373,11 +395,11 @@ class DinzoSyncEngine {
           isInvestment(tx) &&
           _isBankAccount(accounts[tx.accountId]) &&
           isDailyAccount(accounts[tx.accountId]!) &&
-          const {'Tesouro', 'Ações'}.contains(_productMoved(tx.description)) &&
+          const {'Tesouro', 'Ações'}.contains(_productOf(tx)) &&
           _staysInBank(tx))
         MoneyOnTheWay(
           _bankName(accounts[tx.accountId]!),
-          _productMoved(tx.description)!,
+          _productOf(tx)!,
           DateTime.parse(tx.date),
           tx.amount,
         ),
@@ -392,6 +414,10 @@ class DinzoSyncEngine {
   /// an investment, by the id of the everyday side → the other bank's short
   /// name ("BTG", "OKX"), null when unknown. Filled by [plan].
   final Map<String, String?> _aportes = {};
+
+  /// Orders executed (stocks, Tesouro, a CDB chosen as an investment), by
+  /// id → the product ([orderOf]). Filled by [plan].
+  final Map<String, String> _orders = {};
 
   /// Ids of transactions on a bank outside the everyday ones whose other
   /// side is on another own account (Dinzo hid one side only). Filled by
@@ -447,7 +473,7 @@ class DinzoSyncEngine {
   /// A card bill paid from a bank account (both sides).
   bool isBillPayment(DinzoTransaction tx) =>
       _billPaymentPairs.contains(tx.id) ||
-      _billPayment.hasMatch(tx.description);
+      _texts(tx).any(_billPayment.hasMatch);
 
   /// Money between the user's own accounts (PJ to PF...): the counterparty
   /// is one of [DinzoConfig.selfIdentifiers].
@@ -500,7 +526,7 @@ class DinzoSyncEngine {
     if (isOutsideDailyBanks(tx) &&
         (isOwnTransfer(tx) ||
             _movesOutside.contains(tx.id) ||
-            _brokerEntry.hasMatch(tx.description))) {
+            _texts(tx).any(_brokerEntry.hasMatch))) {
       return DinzoSkipReason.outsideDailyBanks;
     }
     if (tx.isInstallment && tx.installmentCurrent! > 1) {
@@ -516,7 +542,7 @@ class DinzoSyncEngine {
   bool isInvestment(DinzoTransaction tx) {
     // A card holds no investments: "Juros" there is interest charged.
     if (accounts[tx.accountId]?.isCreditCard ?? false) return false;
-    if (_investmentMove.hasMatch(tx.description)) return true;
+    if (_readsAsInvestmentMove(tx)) return true;
     String? id = tx.categoryId;
     while (id != null) {
       final category = categories[id];
@@ -531,10 +557,17 @@ class DinzoSyncEngine {
 
   /// Whether [tx] sent money from the everyday banks to be invested, or got
   /// it back: an aporte (or a withdrawal) of the wallet to invest.
-  bool isAporte(DinzoTransaction tx) => _aportes.containsKey(tx.id);
+  bool isAporte(DinzoTransaction tx) =>
+      _aportes.containsKey(tx.id) || _orders.containsKey(tx.id);
 
   /// The bank the money of an aporte went to (or came from), when known.
   String? aporteBankOf(DinzoTransaction tx) => _aportes[tx.id];
+
+  /// The short name of the bank ("BTG", "Nubank") an account is in.
+  String? bankOfAccount(String? accountId) {
+    final account = accounts[accountId];
+    return account == null ? null : _bankName(account);
+  }
 
   bool _isBankAccount(DinzoAccount? account) =>
       account != null && !account.isCreditCard;
@@ -548,15 +581,9 @@ class DinzoSyncEngine {
 
   /// Whatever is left of it after [skipReason] was paid to someone else, or
   /// came from someone else (a Pix from the BTG Banking): a record like any
-  /// other, plus the withdrawal (or aporte) that keeps the wallets as the
-  /// everyday banks are ([BrokerPayment]).
+  /// other. The broker's account holds money like any account.
   bool isOutsideDailyBanks(DinzoTransaction tx) =>
       isOutsideAccount(tx.accountId);
-
-  /// The bank's short name ("BTG") when [accountId] is outside the everyday
-  /// banks, else null.
-  String? outsideBankOf(String? accountId) =>
-      isOutsideAccount(accountId) ? _bankName(accounts[accountId]!) : null;
 
   /// Finds the transactions on a bank outside the everyday ones that Dinzo
   /// left visible but whose other side is on another own account: opposite
@@ -586,30 +613,23 @@ class DinzoSyncEngine {
     }
   }
 
-  /// Finds the aportes and withdrawals of the wallet to invest, on the
-  /// everyday side (the only one that becomes a record):
-  /// - a transfer between own accounts whose other side is on a bank
-  ///   outside the everyday ones: opposite direction, same amount, up to 3
-  ///   days apart (the closest), one to one. The other side stays hidden
-  ///   like everything that happens inside a broker;
-  /// - from [unpairedAportesFrom] on (or when it is a record already,
-  ///   [recorded]), one whose other side Dinzo does not show: money it files
-  ///   under Investimentos (a Pix to a crypto exchange), or a transfer
-  ///   between own accounts that reached no everyday bank (a TED to a broker
-  ///   that sends no entries).
-  /// Money that stays in the bank (an RDB, a cofrinho, stocks bought there,
-  /// when everyday money there: [_staysInBank]), its yield and a transfer
-  /// that failed and came back are none of these.
+  /// Finds the aportes and withdrawals of the wallet to invest:
+  /// - an order: an entry moving money into (or out of) a product the bank
+  ///   holds that is an investment there ([isDailyProduct]): "Compra de
+  ///   Renda Variável" in the Nubank, "LIQ BOLSA" or "Compra de Tesouro
+  ///   Direto" at the BTG ([orderOf]);
+  /// - money Dinzo files under Investimentos that leaves an everyday bank
+  ///   for a place it does not show, except a broker's account: a Pix to a
+  ///   crypto exchange.
+  /// Money between own accounts, a broker's too, is none: sent to a broker
+  /// it is still money to invest until an order spends it. Both kinds count
+  /// from [unpairedAportesFrom] on, or when they are records already
+  /// ([recorded]).
   void _findAportes(List<DinzoTransaction> transactions, Set<String> recorded) {
     _aportes.clear();
+    _orders.clear();
     if (toInvestWalletId == null) return;
     final real = transactions.where((t) => !t.projected).toList();
-    final elsewhere = [
-      for (final t in real)
-        if (_isBankAccount(accounts[t.accountId]) &&
-            !isDailyAccount(accounts[t.accountId]!))
-          t,
-    ];
     bool daily(DinzoTransaction t) =>
         _isBankAccount(accounts[t.accountId]) &&
         isDailyAccount(accounts[t.accountId]!);
@@ -626,52 +646,49 @@ class DinzoSyncEngine {
       for (final debit in _refunded.values) debit.id,
     };
     final from = unpairedAportesFrom == null ? null : day(unpairedAportesFrom!);
-    final used = <String>{};
+    bool counts(DinzoTransaction tx) =>
+        from == null || tx.date.compareTo(from) >= 0 || recorded.contains(tx.id);
     for (final tx in real) {
-      if (!daily(tx) || isBillPayment(tx) || cameBack.contains(tx.id)) {
+      if (!_isBankAccount(accounts[tx.accountId]) ||
+          isBillPayment(tx) ||
+          cameBack.contains(tx.id)) {
         continue;
       }
-      final investment = isInvestment(tx);
-      // A product chosen as an investment in the bank leaves the wallets,
-      // even when it reads like a broker's own entry ("Tesouro Direto").
-      final invested =
-          investment &&
-          !_staysInBank(tx) &&
-          (_investmentMove.hasMatch(tx.description) ||
-              !_brokerEntry.hasMatch(tx.description));
-      final own = !investment && (tx.hidden || isOwnTransfer(tx));
-      if (!invested && !own) continue;
-      // Its other side is in another everyday bank: the money stayed.
+      final product = orderOf(tx);
+      if (product != null) {
+        if (counts(tx)) _orders[tx.id] = product;
+        continue;
+      }
+      if (!daily(tx) ||
+          !isInvestment(tx) ||
+          _inBank(tx) ||
+          _texts(tx).any(_brokerEntry.hasMatch)) {
+        continue;
+      }
+      // Its other side is on another own account: the money changed banks.
       if (real.any(
-        (t) => t.accountId != tx.accountId && daily(t) && sameMoney(t, tx),
+        (t) =>
+            t.accountId != tx.accountId &&
+            _isBankAccount(accounts[t.accountId]) &&
+            sameMoney(t, tx),
       )) {
         continue;
       }
-      DinzoTransaction? best;
-      var bestGap = 4;
-      for (final other in elsewhere) {
-        if (used.contains(other.id) || other.isDebit == tx.isDebit) continue;
-        if ((other.amount - tx.amount).abs() >= 0.005) continue;
-        final gap = DateTime.parse(other.date)
-            .difference(DateTime.parse(tx.date))
-            .inDays
-            .abs();
-        if (gap >= bestGap) continue;
-        best = other;
-        bestGap = gap;
-      }
-      if (best != null) {
-        used.add(best.id);
-        _aportes[tx.id] = _bankName(accounts[best.accountId]!);
-        continue;
-      }
-      if (from != null &&
-          tx.date.compareTo(from) < 0 &&
-          !recorded.contains(tx.id)) {
-        continue;
-      }
-      _aportes[tx.id] = _outsideBankNamedIn(tx);
+      final there = _outsideBankNamedIn(tx);
+      if (there != null && !DailyBanks.exchanges.contains(there)) continue;
+      if (counts(tx)) _aportes[tx.id] = there;
     }
+  }
+
+  /// The product [tx] buys or sells, when it is an order: money moving
+  /// between a bank account and a product of that bank that is an
+  /// investment there. Null for anything else.
+  String? orderOf(DinzoTransaction tx) {
+    final account = accounts[tx.accountId];
+    if (!_isBankAccount(account) || !_inBank(tx)) return null;
+    final product = _productOf(tx);
+    if (product == null) return null;
+    return isDailyProduct(_bankName(account!), product) ? null : product;
   }
 
   /// The bank outside the everyday ones that [tx] names as the other side
@@ -895,7 +912,8 @@ class DinzoSyncEngine {
 
   List<String> syncedTagsFor(DinzoTransaction tx) => [
     bankTag(tx),
-    methodTag(tx),
+    // An order is paid with nothing: the bank reads it as a debit.
+    if (!_orders.containsKey(tx.id)) methodTag(tx),
     // An aporte has one side only: nothing to cancel it out.
     if (isOwnTransfer(tx) && !isAporte(tx)) MoneyAccounts.transferTag,
   ].whereType<String>().toList()..sort();
@@ -916,16 +934,31 @@ class DinzoSyncEngine {
   /// banks say more than "Pix to myself". A bank that sends only how the
   /// money moved ("Pix", "Tef") gets which way: "Pix enviado" (the bank is
   /// in the tag).
-  String titleFor(DinzoTransaction tx) => tidyTitle(_rawTitle(tx), bankName(tx));
+  String titleFor(DinzoTransaction tx) =>
+      tidyTitle(_rawTitle(tx), bankName(tx));
 
   /// How every title from Dinzo is kept: title case ("Paçoca de Goiaba"),
   /// and without the store the bank names, whose logo says it.
   static String tidyTitle(String title, String? bankText) =>
       titleCasePtBr(MerchantBrands.withoutBrand(title, bankText));
 
+  /// Renamed in Dinzo (by the user here, [DinzoSyncService.pushTitle], or
+  /// in Dinzo itself): Dinzo keeps the bank's text apart, and both are the
+  /// same until someone renames it.
+  static bool _renamed(DinzoTransaction tx) =>
+      tx.originalDescription != null &&
+      tx.originalDescription != tx.description;
+
   String _rawTitle(DinzoTransaction tx) {
     final own = accounts[tx.accountId];
-    if (isAporte(tx) && own != null) {
+    final product = _orders[tx.id];
+    if (product != null && own != null && !_renamed(tx)) {
+      final verb = tx.isDebit
+          ? 'Compra'
+          : (product == 'Ações' ? 'Venda' : 'Resgate');
+      return '$verb de $product no ${_bankName(own)}';
+    }
+    if (isAporte(tx) && own != null && !_renamed(tx)) {
       final here = _bankName(own);
       final there = aporteBankOf(tx);
       if (there == null) {

@@ -51,10 +51,6 @@ class Record extends Model {
   // Flag to indicate if this is a future record (not persisted to database)
   bool isFutureRecord = false;
 
-  /// Transient: on an aporte from the Dinzo, what the wallet to invest
-  /// did not have, so it came from the Conta corrente ([AporteShortfall]).
-  double? investShortfall;
-
   /// Transient: on an estimate occurrence, the real record of the same
   /// day and amount ([EstimateLink.markMatches]). Then only the real one counts.
   Record? estimateMatch;
@@ -262,7 +258,7 @@ class Record extends Model {
 
   /// Money that came back from an investment: the opposite of
   /// [isInvestmentBuy]. Into the wallet to invest it already counts there;
-  /// into another wallet ([BrokerPayment]) it lowers what was invested.
+  /// into another wallet it lowers what was invested.
   bool get isInvestmentSell =>
       !isTransfer &&
       category?.categoryType == CategoryType.investment &&

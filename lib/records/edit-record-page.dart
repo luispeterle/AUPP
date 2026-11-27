@@ -9,7 +9,6 @@ import 'package:aupp/dinzo/split-payment.dart';
 import 'package:aupp/dinzo/dinzo-api.dart';
 import 'package:aupp/dinzo/dinzo-sync-service.dart';
 import 'package:aupp/components/payment-code-sheet.dart';
-import 'package:aupp/dinzo/aporte-shortfall-tile.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
 import 'package:aupp/dinzo/pix-code.dart';
 import 'package:aupp/services/cash-wallet.dart';
@@ -2221,9 +2220,6 @@ class EditRecordPageState extends State<EditRecordPage> {
             // Part of a Dinzo purchase paid with a caixinha.
             if (!readOnly && SplitPayment.supports(record))
               SplitPaymentTile(purchase: record!),
-            // An aporte the wallet to invest could not pay alone.
-            if (!readOnly && record?.id != null && record!.isInvestmentBuy)
-              AporteShortfallTile(aporte: record!),
             Divider(height: 1),
             _createDateAndRepeatCard(),
             Divider(height: 1),

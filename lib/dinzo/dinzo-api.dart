@@ -61,6 +61,10 @@ class DinzoBalances {
   /// Sum of the accounts in the everyday banks (cards excluded).
   final double bank;
 
+  /// Sum of the accounts in the other banks (a broker's): money sent there
+  /// and not invested yet. Still the wallets' money.
+  final double atBrokers;
+
   /// Card used limit: open bills plus future installments.
   final double cardDebt;
 
@@ -79,6 +83,7 @@ class DinzoBalances {
 
   DinzoBalances({
     required this.bank,
+    this.atBrokers = 0,
     required this.cardDebt,
     required this.parked,
     this.unknown = const [],
@@ -90,7 +95,7 @@ class DinzoBalances {
   double get inTransit => onTheWay.fold(0.0, (sum, m) => sum + m.amount);
 
   /// What the wallets divide, see [DailyMoney].
-  double get money => bank + parked - cardDebt;
+  double get money => bank + atBrokers + parked - cardDebt;
 
   /// What the default wallet starts at on the first sync.
   double get spendable => bank - cardDebt;

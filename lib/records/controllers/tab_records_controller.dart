@@ -23,7 +23,6 @@ import '../../settings/constants/preferences-keys.dart';
 import '../components/filter_modal_content.dart';
 import '../components/tab_records_date_picker.dart' show shownPeriodOf;
 import 'package:aupp/dashboard/dashboard-data.dart';
-import 'package:aupp/dinzo/aporte-shortfall.dart';
 import 'package:aupp/dinzo/estimate-link.dart';
 
 class TabRecordsController {
@@ -430,8 +429,6 @@ class TabRecordsController {
     // Money in that may be the refund of an expense: only a suggestion.
     await RefundLink.loadAccount();
     RefundLink.markSuggestions(newRecords);
-    // Aportes the wallet to invest could not pay alone.
-    await AporteShortfall.mark(newRecords);
 
     // Merge future records with database records.
     // Only the accounts switched on (person button).

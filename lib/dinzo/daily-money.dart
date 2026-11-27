@@ -42,6 +42,9 @@ class DailyBanks {
     'OKX',
   };
 
+  /// Brokers of crypto: money sent there buys it, with no order to show.
+  static const exchanges = {'Binance', 'OKX'};
+
   static Map<String, bool> get _choices {
     final raw = ServiceConfig.sharedPreferences?.getString(
       PreferencesKeys.dailyBanks,
@@ -129,13 +132,14 @@ class DailyBanks {
   }
 }
 
-/// Money is what the user keeps for the everyday: the accounts and what the
-/// everyday banks hold ([DailyBanks]), minus the cards. All
-/// of it sits together in the banks, whatever it is for: the wallets say what
-/// it is for, and the wallet to invest is what they leave. So interest raises
-/// it, and money sent to a broker lowers it, without any step in between. A
-/// stock chosen as everyday money brings its price along: what it moves goes
-/// in the month's adjustment, like interest.
+/// Money is what is not invested yet: every account, a broker's too, and
+/// what the everyday banks hold as everyday money ([DailyBanks]), minus the
+/// cards. All of it sits together in the banks, whatever it is for: the
+/// wallets say what it is for, and the wallet to invest is what they leave.
+/// So interest raises it, and an order executed (stocks, a Tesouro at a
+/// broker) lowers it; sending money to a broker changes nothing. A stock
+/// chosen as everyday money brings its price along: what it moves goes in
+/// the month's adjustment, like interest.
 class DailyMoney {
   static final _logger = Logger.withClass(DailyMoney);
 
@@ -381,7 +385,7 @@ class DailyMoney {
         walletId: wallet.id,
         dinzoId: id,
         description:
-            'Diferença entre o dinheiro nos bancos do dia a dia e as carteiras: '
+            'Diferença entre o dinheiro nos bancos e as carteiras: '
             'juros, e o que faltou lançar.',
       ),
     );
@@ -410,23 +414,28 @@ class DailyMoney {
     List<DinzoAccount> accounts,
     List<DinzoInvestment> investments,
   ) {
-    double bank = 0, cardDebt = 0;
+    double bank = 0, atBrokers = 0, cardDebt = 0;
     final unknown = <String>[];
     for (final a in accounts) {
       if (a.archived || a.excludeFromTotals) continue;
-      final counts = a.isCreditCard || DailyBanks.holdsAccount(a);
+      final daily = a.isCreditCard || DailyBanks.holdsAccount(a);
       if (a.balance == null) {
-        if (counts) unknown.add(a.connectorName ?? a.title);
+        // A broker's account rarely holds much: without its balance the
+        // totals are still worth having.
+        if (daily) unknown.add(a.connectorName ?? a.title);
         continue;
       }
       if (a.isCreditCard) {
         cardDebt += a.balance!;
-      } else if (DailyBanks.holdsAccount(a)) {
+      } else if (daily) {
         bank += a.balance!;
+      } else {
+        atBrokers += a.balance!;
       }
     }
     return DinzoBalances(
       bank: bank,
+      atBrokers: atBrokers,
       cardDebt: cardDebt,
       parked: parkedIn(investments),
       unknown: unknown,
